@@ -1,4 +1,4 @@
-package edu.xjtlu.cpt202.group01;
+package edu.xjtlu.cpt202.backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

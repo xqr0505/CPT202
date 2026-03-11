@@ -1,4 +1,4 @@
-package edu.xjtlu.cpt202.group01;
+package edu.xjtlu.cpt202.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

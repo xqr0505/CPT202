@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS cpt202_consultancy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE cpt202_consultancy;
+
 CREATE TABLE IF NOT EXISTS `users` (
 	`id` BIGINT AUTO_INCREMENT,
 	`email` VARCHAR(255) NOT NULL UNIQUE,

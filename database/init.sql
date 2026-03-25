@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS `availability_recurring_rules` (
 CREATE TABLE IF NOT EXISTS `time_slots` (
 	`id` BIGINT AUTO_INCREMENT,
 	`specialist_id` BIGINT NOT NULL,
-	`recurring_rule_id` BIGINT NOT NULL,
+	`recurring_rule_id` BIGINT NULL,
 	`slot_date` DATE NOT NULL,
 	`start_time` TIME NOT NULL,
 	`end_time` TIME NOT NULL,

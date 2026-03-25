@@ -4,9 +4,9 @@ spring:
   profiles:
     active: dev
 
+
 server:
   port: 8081
-
 # MyBatis Plus
 mybatis-plus:
   configuration:

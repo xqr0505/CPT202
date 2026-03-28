@@ -184,17 +184,15 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   justify-content: center;
   background: transparent;
 
-  /* Override Element Plus menu colors to match primary theme */
   --el-menu-bg-color: transparent;
-  --el-menu-text-color: rgba(255, 255, 255, 0.7);
-  --el-menu-hover-text-color: #ffffff;
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.1);
-  --el-menu-active-color: #ffffff;
+  --el-menu-text-color: var(--color-text-inverse-muted);
+  --el-menu-hover-text-color: var(--color-text-inverse);
+  --el-menu-hover-bg-color: var(--color-overlay-inverse);
+  --el-menu-active-color: var(--color-text-inverse);
 }
 
-/* Ensure submenus inside el-menu override the menu bottom border highlight correctly */
 :deep(.el-menu-item.is-active) {
-  border-bottom-color: #ffffff !important;
+  border-bottom-color: var(--color-text-inverse) !important;
 }
 
 .navbar-right {
@@ -237,7 +235,7 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   border-right: none;
 }
 
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 900px) {
   .desktop-only {
     display: none !important;

@@ -19,6 +19,11 @@
   --color-text-secondary: #5f566f;
   --color-text-tertiary: #8a819a;
   --color-text-inverse: #ffffff;
+  --color-text-inverse-muted: rgba(255, 255, 255, 0.7);
+
+  /* Overlays */
+  --color-overlay-inverse: rgba(255, 255, 255, 0.1);
+
 
   /* Borders & shadow */
   --color-border: #e4dcf3;
@@ -82,6 +87,11 @@
   --color-text-secondary: #c9c0d8;
   --color-text-tertiary: #a192b8;
   --color-text-inverse: #17131f;
+  --color-text-inverse-muted: rgba(23, 19, 31, 0.7);
+
+  /* Overlays */
+  --color-overlay-inverse: rgba(23, 19, 31, 0.1);
+
 
   /* Borders & shadow */
   --color-border: #3a314a;

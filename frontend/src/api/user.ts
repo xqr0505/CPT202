@@ -1,3 +1,4 @@
+import { USER_ROLES } from '@/constants/roles';
 
 // TODO: Implement user data fetching logic and assign the correct role here.
 export const fetchUserProfile = async () => {
@@ -6,6 +7,6 @@ export const fetchUserProfile = async () => {
     id: 1,
     username: 'test_user',
     nickname: 'Test User',
-    role: 'customer' // 'specialist' / 'admin' / 'customer'
+    role: USER_ROLES.CUSTOMER // USER_ROLES.SPECIALIST / USER_ROLES.ADMIN / USER_ROLES.CUSTOMER
   });
 };

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { logout as apiLogout } from '@/api/auth'
+import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
 export interface UserInfo {
   id: number
@@ -9,7 +10,7 @@ export interface UserInfo {
   avatar?: string
 }
 
-export type UserRole = 'customer' | 'specialist' | 'admin' | null
+export type UserRole = UserRoleType | null
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string | null>(localStorage.getItem('token') || null)
@@ -17,8 +18,8 @@ export const useUserStore = defineStore('user', () => {
   const userRole = ref<UserRole>(null)
 
   const isLoggedIn = computed(() => !!token.value)
-  const isCustomer = computed(() => userRole.value === 'customer')
-  const isSpecialist = computed(() => userRole.value === 'specialist')
+  const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)
+  const isSpecialist = computed(() => userRole.value === USER_ROLES.SPECIALIST)
 
   const setToken = (newToken: string) => {
     token.value = newToken

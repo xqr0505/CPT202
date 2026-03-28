@@ -67,6 +67,7 @@
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { USER_ROLES } from '@/constants/roles'
 
 type DropdownCommand = 'profile' | 'logout'
 
@@ -77,31 +78,30 @@ const userStore = useUserStore()
 const isMobileMenuOpen = ref(false)
 
 const ROLE_MENUS = {
-  customer: [
+  [USER_ROLES.CUSTOMER]: [
     { name: 'Find Specialists', path: '/customer/specialists' },
     { name: 'Dashboard', path: '/customer/dashboard' },
     { name: 'My Bookings', path: '/customer/bookings' }
   ],
-  specialist: [
+  [USER_ROLES.SPECIALIST]: [
     { name: 'Dashboard', path: '/specialist/dashboard' },
     { name: 'Schedule Management', path: '/specialist/schedule' },
     { name: 'Appointment Approval', path: '/specialist/requests' }
   ],
-  admin: [
+  [USER_ROLES.ADMIN]: [
     { name: 'Specialist Management', path: '/admin/specialists' },
     { name: 'Category Settings', path: '/admin/categories' }
   ]
 }
 
 const currentMenus = computed(() => {
-  // Use customer as default wrapper if no userRole is present
-  const role = userStore.userRole || 'customer'
-  return ROLE_MENUS[role as keyof typeof ROLE_MENUS] || ROLE_MENUS.customer
+  // Use customer as default
+  const role = userStore.userRole || USER_ROLES.CUSTOMER
+  return ROLE_MENUS[role as keyof typeof ROLE_MENUS] || ROLE_MENUS[USER_ROLES.CUSTOMER]
 })
 
 const activeMenu = computed<string>(() => {
   const path: string = route.path
-  // Match path exactly to a menu item, otherwise fallback to first menu item dynamically
   const isMatch = currentMenus.value.some(m => path.startsWith(m.path))
   if (isMatch) {
     const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))

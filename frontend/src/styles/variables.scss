@@ -3,9 +3,9 @@
   color-scheme: light;
 
   /* Brand */
-  --color-primary: #8f79d8;
-  --color-primary-hover: #7a62cf;
-  --color-primary-active: #6950bf;
+  --color-primary: #5a5176;
+  --color-primary-hover: #9a8c99;
+  --color-primary-active: #9a8c99;
   --color-primary-soft: #efe9fb;
 
   /* Backgrounds */
@@ -19,6 +19,11 @@
   --color-text-secondary: #5f566f;
   --color-text-tertiary: #8a819a;
   --color-text-inverse: #ffffff;
+  --color-text-inverse-muted: rgba(255, 255, 255, 0.7);
+
+  /* Overlays */
+  --color-overlay-inverse: rgba(255, 255, 255, 0.1);
+
 
   /* Borders & shadow */
   --color-border: #e4dcf3;
@@ -33,6 +38,8 @@
 
   /* Layout */
   --header-height: 64px;
+  --navbar-height: 64px;
+  --footer-height: 56px;
   --sidebar-width: 240px;
   --content-max-width: 1440px;
 
@@ -63,10 +70,11 @@
   color-scheme: dark;
 
   /* Brand */
-  --color-primary: #b59cff;
-  --color-primary-hover: #c3adff;
-  --color-primary-active: #9f82ff;
-  --color-primary-soft: rgba(181, 156, 255, 0.18);
+  --color-primary: #7a6e9b;
+  --color-primary-hover: #a89cb5;
+  --color-primary-active: #9484a1;
+  --color-primary-soft: #3c3258;
+
 
   /* Backgrounds */
   --color-bg-page: #17131f;
@@ -79,6 +87,11 @@
   --color-text-secondary: #c9c0d8;
   --color-text-tertiary: #a192b8;
   --color-text-inverse: #17131f;
+  --color-text-inverse-muted: rgba(23, 19, 31, 0.7);
+
+  /* Overlays */
+  --color-overlay-inverse: rgba(23, 19, 31, 0.1);
+
 
   /* Borders & shadow */
   --color-border: #3a314a;
@@ -119,4 +132,3 @@ a:hover {
 * {
   box-sizing: border-box;
 }
-

@@ -6,3 +6,7 @@
   </section>
 </template>
 
+<script setup lang="ts">
+// Add component name to satisfy lint rule
+defineOptions({ name: 'AuthLogin' })
+</script>

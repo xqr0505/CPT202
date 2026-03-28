@@ -17,13 +17,22 @@ const routes = [
     ]
   },
   {
-    path: '/',
+    path: '/customer',
     component: () => import('../layout/DefaultLayout.vue'),
     children: [
-      { path: 'search', component: () => import('../views/customer/SpecialistSearch.vue') }
+      { path: 'search', component: () => import('../views/customer/SpecialistSearch.vue') },
+      { path: 'specialists', component: () => import('../views/customer/SpecialistSearch.vue') },
+      { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
+      { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
+      { path: 'profile', component: () => import('../views/customer/Profile.vue') }
     ]
+  },
+  // Keep root redirect to customer search for convenience
+  {
+    path: '/',
+    redirect: '/customer/search'
   }
-];
+]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

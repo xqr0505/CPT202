@@ -1,64 +1,121 @@
 # ExpertLink Consult System
 
-A full-stack consulting system built with Spring Boot (backend) and Vue.js (frontend).
+A full-stack consulting system built with Spring Boot (backend) and Vue 3 + Vite (frontend).
+
+## Project Structure
+
+- `backend/` — Spring Boot API, MySQL, Flyway, MyBatis-Plus
+- `frontend/` — Vue 3 application
+- `docs/` — project notes and structure docs
 
 ## Prerequisites
 
+Make sure the following are installed locally:
+
 - Java 17
-- Node.js 20.19.0 or >=22.12.0
-- MySQL 8.0 or higher
-- Maven
+- Maven 3.9+ or the included Maven Wrapper
+- Node.js 20.19.0+ or 22.12.0+
+- npm
+- MySQL 8.0+
 
-## Installation
+## Required Local Setup
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/xqr0505/CPT202.git
-   ```
+### 1) Create the database
 
-2. Set up the database:
-   - **Manually create a MySQL database named `cpt202_consultancy` before starting the backend.**
-   - You can use the following SQL command in your MySQL client:
-     ```sql
-     CREATE DATABASE IF NOT EXISTS cpt202_consultancy DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-     ```
-   - The database password is configured in the backend configuration file (`application-dev.yml`). 
+The backend uses MySQL database `cpt202_consultancy`.
 
-## Running the Application
+Run the following SQL in your local MySQL client:
+
+```sql
+CREATE DATABASE IF NOT EXISTS cpt202_consultancy
+DEFAULT CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+```
+
+### 2) Check backend database credentials
+
+Backend dev config is in:
+
+- `backend/src/main/resources/application-dev.yml`
+
+Current defaults:
+
+- host: `127.0.0.1`
+- port: `3306`
+- database: `cpt202_consultancy`
+- username: `root`
+- password: `12345`
+
+If your local MySQL settings are different, update that file before running the backend.
+
+## Run the Backend
+
+Open a terminal in the repository root and run:
+
+```powershell
+cd backend
+./mvnw spring-boot:run
+```
+
+If you prefer system Maven, use:
+
+```powershell
+cd backend
+mvn spring-boot:run
+```
+
+Backend defaults:
+
+- URL: `http://localhost:8081`
+- API docs: `http://localhost:8081/swagger-ui/index.html`
+
+## Run the Frontend
+
+Open another terminal in the repository root and run:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend defaults:
+
+- URL: `http://localhost:5173`
+
+## Quick Start Checklist
+
+1. Start MySQL.
+2. Create the `cpt202_consultancy` database.
+3. Confirm `backend/src/main/resources/application-dev.yml` matches your MySQL credentials.
+4. Start the backend.
+5. Start the frontend.
+6. Open the frontend in your browser.
+7. Open Swagger UI if you want to test APIs directly.
+
+## Validation Commands
+
+Run these if you want to verify the project after setup:
 
 ### Backend
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-
-2. Run the Spring Boot application:
-   ```bash
-   mvn spring-boot:run
-   ```
-
-The backend will start at `http://localhost:8081` by default.
+```powershell
+cd backend
+./mvnw test
+./mvnw -DskipTests package
+```
 
 ### Frontend
 
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
+```powershell
+cd frontend
+npm run type-check
+npm run build
+npm run lint
+```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Troubleshooting
 
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-
-The frontend will start at `http://localhost:5173` by default.
-
-## API Documentation
-
-Once both services are running, visit `http://localhost:8081/swagger-ui.html` for API documentation.
+- If the backend fails to start, check MySQL is running and the database credentials in `application-dev.yml` are correct.
+- If the frontend cannot reach the backend, confirm the backend is running on `http://localhost:8081`.
+- If dependencies are missing, run `npm install` again in `frontend/` and rerun the backend Maven command.

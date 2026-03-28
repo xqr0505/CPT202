@@ -1,0 +1,15 @@
+@use './variables.scss';
+
+.page-shell {
+  min-height: 100vh;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+}
+
+.card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px var(--color-shadow);
+}
+

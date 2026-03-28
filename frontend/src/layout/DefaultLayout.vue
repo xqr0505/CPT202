@@ -1,6 +1,6 @@
 <template>
   <div class="page-shell">
-    <slot />
+    <router-view />
   </div>
 </template>
 

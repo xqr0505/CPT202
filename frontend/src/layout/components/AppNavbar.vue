@@ -17,9 +17,9 @@
         @select="handleMenuSelect"
         :ellipsis="false"
       >
-        <el-menu-item index="/customer/specialists">Find Specialists</el-menu-item>
-        <el-menu-item index="/customer/dashboard">Dashboard</el-menu-item>
-        <el-menu-item index="/customer/bookings">My Bookings</el-menu-item>
+        <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
+          {{ item.name }}
+        </el-menu-item>
       </el-menu>
 
       <div class="navbar-right">
@@ -55,9 +55,9 @@
         class="mobile-menu"
         @select="handleMobileMenuSelect"
       >
-        <el-menu-item index="/customer/specialists">Find Specialists</el-menu-item>
-        <el-menu-item index="/customer/dashboard">Dashboard</el-menu-item>
-        <el-menu-item index="/customer/bookings">My Bookings</el-menu-item>
+        <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
+          {{ item.name }}
+        </el-menu-item>
       </el-menu>
     </el-drawer>
   </header>
@@ -68,7 +68,6 @@ import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
-type NavbarMenuPath = '/customer/specialists' | '/customer/dashboard' | '/customer/bookings'
 type DropdownCommand = 'profile' | 'logout'
 
 const router = useRouter()
@@ -77,11 +76,38 @@ const userStore = useUserStore()
 
 const isMobileMenuOpen = ref(false)
 
-const activeMenu = computed<NavbarMenuPath>(() => {
+const ROLE_MENUS = {
+  customer: [
+    { name: 'Find Specialists', path: '/customer/specialists' },
+    { name: 'Dashboard', path: '/customer/dashboard' },
+    { name: 'My Bookings', path: '/customer/bookings' }
+  ],
+  specialist: [
+    { name: 'Dashboard', path: '/specialist/dashboard' },
+    { name: 'Schedule Management', path: '/specialist/schedule' },
+    { name: 'Appointment Approval', path: '/specialist/requests' }
+  ],
+  admin: [
+    { name: 'Specialist Management', path: '/admin/specialists' },
+    { name: 'Category Settings', path: '/admin/categories' }
+  ]
+}
+
+const currentMenus = computed(() => {
+  // Use customer as default wrapper if no userRole is present
+  const role = userStore.userRole || 'customer'
+  return ROLE_MENUS[role as keyof typeof ROLE_MENUS] || ROLE_MENUS.customer
+})
+
+const activeMenu = computed<string>(() => {
   const path: string = route.path
-  if (path.startsWith('/customer/dashboard')) return '/customer/dashboard'
-  if (path.startsWith('/customer/bookings')) return '/customer/bookings'
-  return '/customer/specialists'
+  // Match path exactly to a menu item, otherwise fallback to first menu item dynamically
+  const isMatch = currentMenus.value.some(m => path.startsWith(m.path))
+  if (isMatch) {
+    const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
+    return matchedMenu ? matchedMenu.path : currentMenus.value[0].path
+  }
+  return currentMenus.value[0]?.path || '/'
 })
 
 const displayName = computed<string>(() => {
@@ -105,7 +131,7 @@ const handleMobileMenuSelect = (path: string): void => {
 
 const goHome = (): void => {
   isMobileMenuOpen.value = false
-  router.push('/customer/specialists')
+  router.push(currentMenus.value[0]?.path || '/')
 }
 
 const handleDropdownCommand = async (command: DropdownCommand): Promise<void> => {

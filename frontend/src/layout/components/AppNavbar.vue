@@ -1,6 +1,10 @@
 <template>
   <header class="app-navbar">
     <div class="navbar-inner">
+      <button class="mobile-toggler" @click="isMobileMenuOpen = true" aria-label="Menu">
+        <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
+
       <div class="navbar-left" @click="goHome">
         <div class="logo-mark" aria-hidden="true">EL</div>
         <span class="system-name">ExpertLink</span>
@@ -9,7 +13,7 @@
       <el-menu
         :default-active="activeMenu"
         mode="horizontal"
-        class="navbar-menu"
+        class="navbar-menu desktop-only"
         @select="handleMenuSelect"
         :ellipsis="false"
       >
@@ -22,7 +26,7 @@
         <el-dropdown trigger="click" @command="handleDropdownCommand">
           <span class="user-trigger">
             <el-avatar :src="avatarSrc" :size="34">{{ userInitial }}</el-avatar>
-            <span class="user-name">{{ displayName }}</span>
+            <span class="user-name desktop-only">{{ displayName }}</span>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
@@ -33,11 +37,34 @@
         </el-dropdown>
       </div>
     </div>
+
+    <!-- Mobile Drawer -->
+    <el-drawer
+      v-model="isMobileMenuOpen"
+      direction="ltr"
+      size="240px"
+      append-to-body
+      :with-header="false"
+    >
+      <div class="drawer-header" @click="goHome">
+        <div class="logo-mark" aria-hidden="true">EL</div>
+        <span class="system-name-dark">ExpertLink</span>
+      </div>
+      <el-menu
+        :default-active="activeMenu"
+        class="mobile-menu"
+        @select="handleMobileMenuSelect"
+      >
+        <el-menu-item index="/customer/specialists">Find Specialists</el-menu-item>
+        <el-menu-item index="/customer/dashboard">Dashboard</el-menu-item>
+        <el-menu-item index="/customer/bookings">My Bookings</el-menu-item>
+      </el-menu>
+    </el-drawer>
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
@@ -47,6 +74,8 @@ type DropdownCommand = 'profile' | 'logout'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+
+const isMobileMenuOpen = ref(false)
 
 const activeMenu = computed<NavbarMenuPath>(() => {
   const path: string = route.path
@@ -69,7 +98,13 @@ const handleMenuSelect = (path: string): void => {
   router.push(path)
 }
 
+const handleMobileMenuSelect = (path: string): void => {
+  isMobileMenuOpen.value = false
+  router.push(path)
+}
+
 const goHome = (): void => {
+  isMobileMenuOpen.value = false
   router.push('/customer/specialists')
 }
 
@@ -103,6 +138,16 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+.mobile-toggler {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  padding: 8px;
+  margin-left: -8px;
 }
 
 .navbar-left {
@@ -171,5 +216,44 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+}
+
+.system-name-dark {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.mobile-menu {
+  border-right: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-toggler {
+    display: inline-block;
+  }
+
+  .navbar-left {
+    flex: 1;
+    min-width: auto;
+  }
+
+  .navbar-right {
+    min-width: auto;
+  }
 }
 </style>

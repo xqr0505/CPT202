@@ -36,6 +36,10 @@ const routes = [
     ]
   },
   {
+    path: '/dev',
+    component: () => import('../views/dev/DevDemo.vue')
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/error/404'
   },

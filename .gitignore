@@ -51,3 +51,5 @@ Thumbs.db
 .mvn/
 mvnw.cmd
 mvnw
+
+node_modules/

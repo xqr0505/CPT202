@@ -5,11 +5,18 @@
       <h2 class="error-subtitle">Access Denied</h2>
       <p class="error-desc">You do not have permission to view this page or perform this action.</p>
       <div class="error-actions">
-        <router-link to="/" class="btn-primary">Return Home</router-link>
+        <CustomButton type="primary" @click="router.push('/')">Return Home</CustomButton>
       </div>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { useRouter } from 'vue-router'
+import CustomButton from '@/components/common/CustomButton.vue'
+
+const router = useRouter()
+</script>
 
 <style scoped lang="scss">
 .error-page {
@@ -58,21 +65,4 @@
   justify-content: center;
   gap: var(--space-4);
 }
-
-.btn-primary {
-  display: inline-block;
-  padding: var(--space-3) var(--space-6);
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  font-weight: 500;
-  transition: background-color var(--transition-fast);
-
-  &:hover {
-    background-color: var(--color-primary-hover);
-    color: var(--color-text-inverse);
-  }
-}
 </style>
-

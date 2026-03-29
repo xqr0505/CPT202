@@ -1,22 +1,25 @@
+<script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router'
+import CustomButton from '@/components/common/CustomButton.vue'
+
+const route = useRoute()
+const router = useRouter()
+const errorMsg = route.query.message || 'An unexpected error occurred. Please try again later.'
+const errorCode = route.query.code || 'Error'
+</script>
+
 <template>
   <div class="error-page">
     <div class="error-container">
-      <h1 class="error-title">404</h1>
-      <h2 class="error-subtitle">Page Not Found</h2>
-      <p class="error-desc">The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.</p>
+      <h1 class="error-title">{{ errorCode }}</h1>
+      <h2 class="error-subtitle">Application Error</h2>
+      <p class="error-desc">{{ errorMsg }}</p>
       <div class="error-actions">
         <CustomButton type="primary" @click="router.push('/')">Return Home</CustomButton>
       </div>
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { useRouter } from 'vue-router'
-import CustomButton from '@/components/common/CustomButton.vue'
-
-const router = useRouter()
-</script>
 
 <style scoped lang="scss">
 .error-page {
@@ -41,7 +44,7 @@ const router = useRouter()
 .error-title {
   font-size: 72px;
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-danger);
   margin: 0;
   line-height: 1.2;
 }
@@ -56,8 +59,8 @@ const router = useRouter()
 .error-desc {
   font-size: 16px;
   color: var(--color-text-secondary);
-  line-height: 1.6;
   margin-bottom: var(--space-8);
+  line-height: 1.6;
 }
 
 .error-actions {

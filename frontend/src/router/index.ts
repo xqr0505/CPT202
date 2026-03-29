@@ -32,7 +32,8 @@ const routes = [
     children: [
       { path: '403', component: () => import('../views/error/Forbidden.vue') },
       { path: '404', component: () => import('../views/error/NotFound.vue') },
-      { path: '500', component: () => import('../views/error/ServerError.vue') }
+      { path: '500', component: () => import('../views/error/ServerError.vue') },
+      { path: 'global', component: () => import('../views/error/GlobalError.vue') }
     ]
   },
   {
@@ -43,7 +44,6 @@ const routes = [
     path: '/:pathMatch(.*)*',
     redirect: '/error/404'
   },
-  // Keep root redirect to customer search for convenience
   {
     path: '/',
     redirect: '/customer/search'

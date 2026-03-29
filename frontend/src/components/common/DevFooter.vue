@@ -75,6 +75,7 @@ const handleCommand = (command: string) => {
             <el-dropdown-item command="/error/403">View 403 Forbidden</el-dropdown-item>
             <el-dropdown-item command="/error/404">View 404 Not Found</el-dropdown-item>
             <el-dropdown-item command="/error/500">View 500 Server Error</el-dropdown-item>
+            <el-dropdown-item command="/error/global?code=Error&message=This+is+a+test+global+error">View Global Error</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import DebugErrorFooter from '@/components/common/DebugErrorFooter.vue'
+import DevFooter from '@/components/common/DevFooter.vue'
 
 const router = useRouter()
 const isDev = Boolean(import.meta.env.DEV)
@@ -47,5 +47,5 @@ function reloadApp() {
 
 <template>
   <router-view />
-  <DebugErrorFooter v-if="isDev" />
+  <DevFooter v-if="isDev" />
 </template>

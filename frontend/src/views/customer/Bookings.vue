@@ -14,8 +14,19 @@
     <div class="empty-demo">
       <h2>Empty State Demo</h2>
       <EmptyPlaceholder description="No reservation records found for this period.">
-        <el-button type="primary" size="large">Book a Consultation Now</el-button>
+        <CustomButton type="primary" size="large">Book a Consultation Now</CustomButton>
       </EmptyPlaceholder>
+    </div>
+
+    <div class="button-demo">
+      <h2>Styled Buttons Demo</h2>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <CustomButton type="primary">Primary Button</CustomButton>
+        <CustomButton>Default Button</CustomButton>
+        <CustomButton type="success">Success Button</CustomButton>
+        <CustomButton type="warning">Warning Button</CustomButton>
+        <CustomButton type="danger">Danger Button</CustomButton>
+      </div>
     </div>
 
     <div class="table-demo">
@@ -37,6 +48,7 @@ import { BookingStatus } from '@/constants/booking'
 import BookingStatusTag from '@/components/common/BookingStatusTag.vue'
 import EmptyPlaceholder from '@/components/common/EmptyPlaceholder.vue'
 import PaginationTable from '@/components/common/PaginationTable.vue'
+import CustomButton from '@/components/common/CustomButton.vue'
 import type { TableColumn, FetchDataParams, FetchDataResult } from '@/components/common/PaginationTable.vue'
 
 defineOptions({ name: 'CustomerBookings' })
@@ -81,6 +93,7 @@ const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResu
 
 .statuses-demo { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .empty-demo { margin-top: 40px; }
+.button-demo { margin-top: 40px; }
 .table-demo { margin-top: 40px; padding-bottom: 40px; }
 .status-row { display: flex; align-items: center; gap: 12px; }
 .status-label { width: 160px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; }

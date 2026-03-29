@@ -2,9 +2,9 @@
 :root {
   color-scheme: light;
 
-  --color-primary: #2563EB;
-  --color-primary-hover: #1E40AF;
-  --color-primary-active: #1E40AF;
+  --color-primary: #3390fb;
+  --color-primary-hover: #2a4cba;
+  --color-primary-active: #2e439e;
   --color-primary-soft: #60A5FA;
 
   --color-bg-page: #f3f9ff;
@@ -64,10 +64,10 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --color-primary: #2945a8;
-  --color-primary-hover: #3756c5;
-  --color-primary-active: #4769d8;
-  --color-primary-soft: #5c87ff;
+  --color-primary: #7087ec;
+  --color-primary-hover: #8ca5f4;
+  --color-primary-active: #95b2fa;
+  --color-primary-soft: #7db9f6;
 
 
   --color-bg-page: #2A2D2C;

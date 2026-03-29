@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowDown, Rank, Expand, Fold } from '@element-plus/icons-vue'
+import { ArrowDown, Rank, Expand, Fold, Sunny, Moon } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
 const isCollapsed = ref(false)
+const isDark = ref(false)
 const position = ref({ x: 0, y: 0 })
 const isDragging = ref(false)
 const dragStart = { x: 0, y: 0 }
 const initialPosition = { x: 0, y: 0 }
+
+onMounted(() => {
+  const theme = document.documentElement.getAttribute('data-theme')
+  isDark.value = theme === 'dark' || document.documentElement.classList.contains('dark')
+})
 
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value
@@ -51,6 +57,20 @@ const handleCommand = (command: string) => {
     router.push(command)
   }
 }
+
+const toggleTheme = () => {
+  const html = document.documentElement
+  isDark.value = !isDark.value
+  const theme = isDark.value ? 'dark' : 'light'
+
+  html.setAttribute('data-theme', theme)
+
+  if (isDark.value) {
+    html.classList.add('dark')
+  } else {
+    html.classList.remove('dark')
+  }
+}
 </script>
 
 <template>
@@ -87,6 +107,13 @@ const handleCommand = (command: string) => {
       <el-button type="info" size="small" @click="router.push('/')">
         Home
       </el-button>
+
+      <div class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+        <el-icon>
+          <Moon v-if="!isDark" />
+          <Sunny v-else />
+        </el-icon>
+      </div>
     </div>
 
     <div class="toggle-btn" @click="toggleCollapse" :title="isCollapsed ? 'Expand' : 'Collapse'">
@@ -141,6 +168,21 @@ const handleCommand = (command: string) => {
 }
 
 .toggle-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+}
+
+.theme-toggle {
   cursor: pointer;
   display: flex;
   align-items: center;

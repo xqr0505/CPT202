@@ -105,9 +105,9 @@ const activeMenu = computed<string>(() => {
   const isMatch = currentMenus.value.some(m => path.startsWith(m.path))
   if (isMatch) {
     const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
-    return matchedMenu ? matchedMenu.path : currentMenus.value[0].path
+    return matchedMenu ? matchedMenu.path : (currentMenus.value[0] ? currentMenus.value[0].path : '/')
   }
-  return currentMenus.value[0]?.path || '/'
+  return currentMenus.value[0] ? currentMenus.value[0].path : '/'
 })
 
 const displayName = computed<string>(() => {
@@ -131,7 +131,8 @@ const handleMobileMenuSelect = (path: string): void => {
 
 const goHome = (): void => {
   isMobileMenuOpen.value = false
-  router.push(currentMenus.value[0]?.path || '/')
+  const fallback = (currentMenus.value && currentMenus.value[0] && currentMenus.value[0].path) ? currentMenus.value[0].path : '/'
+  router.push(fallback)
 }
 
 const handleDropdownCommand = async (command: DropdownCommand): Promise<void> => {

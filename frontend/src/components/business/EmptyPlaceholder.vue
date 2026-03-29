@@ -33,7 +33,7 @@ const $slots = useSlots()
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables.scss';
+@use '@/styles/variables';
 
 .empty-placeholder {
   padding: var(--space-12);

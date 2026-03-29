@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BookingStatus } from '@/constants/booking'
+import { BookingStatus } from '@/constants/booking.ts'
 
 interface Props {
   status: BookingStatus | string
@@ -31,7 +31,7 @@ const tagType = computed(() => {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables.scss';
+@use '@/styles/variables';
 
 .booking-status-tag {
   font-weight: 600;

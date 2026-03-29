@@ -1,8 +1,13 @@
 <template>
   <footer class="app-footer">
     <div class="footer-inner">
-      <span>ExpertLink Consult System</span>
-      <span>© {{ currentYear }}</span>
+      <div class="footer-content">
+        <img src="@/assets/images/ELicon.png" class="footer-logo" alt="Logo" />
+        <span class="footer-brand">ExpertLink Consult System</span>
+      </div>
+      <div class="footer-copyright">
+        © {{ currentYear }} All rights reserved.
+      </div>
     </div>
   </footer>
 </template>
@@ -13,22 +18,46 @@ const currentYear: number = new Date().getFullYear()
 
 <style scoped lang="scss">
 .app-footer {
-  height: var(--footer-height);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
+  padding: var(--space-6) 0;
+  background: transparent;
 }
 
 .footer-inner {
   max-width: var(--content-max-width);
-  height: 100%;
   margin: 0 auto;
   padding: 0 var(--space-4);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  color: inherit;
-  font-size: 14px;
+  gap: var(--space-3);
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.footer-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  opacity: 0.8;
+  transition: opacity var(--transition-fast);
+}
+
+.footer-content:hover .footer-logo {
+  opacity: 1;
+}
+
+.footer-brand {
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--color-text-secondary);
+}
+
+.footer-copyright {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
 }
 </style>

@@ -26,6 +26,7 @@ This package contains reusable infrastructure and utility code:
 - `handler/` — MyBatis-Plus and other framework handlers.
 - `properties/` — configuration property classes.
 - `result/` — standard API response wrappers.
+- `security/` — authentication filtering verification and exception response.
 - `utils/` — helper classes and common utilities.
 - `validation/` — validation groups and related validation support.
 

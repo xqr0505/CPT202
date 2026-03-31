@@ -131,6 +131,7 @@ import CustomButton from '@/components/common/CustomButton.vue'
 defineOptions({ name: 'CustomerProfile' })
 
 type ViewState = 'loading' | 'ready' | 'error'
+type UserThemePreference = 'light' | 'dark'
 
 interface ProfileUser {
   fullName: string
@@ -138,13 +139,43 @@ interface ProfileUser {
   phoneNumber: string
 }
 
+const USER_PROFILE_STORAGE_KEY = 'mock-user-profile'
+const USER_THEME_STORAGE_KEY = 'mock-user-theme-preference'
+
 const mockUser: ProfileUser = {
   fullName: 'Emma Chen',
   email: 'emma.chen@example.com',
   phoneNumber: '+86 138 0013 8000'
 }
 
-const mockPageStylePreference = 'Light Mode (default page style option)'
+const wait = async (delay = 250): Promise<void> => {
+  await new Promise(resolve => window.setTimeout(resolve, delay))
+}
+
+const readStoredProfile = (): ProfileUser => {
+  const storedProfile = localStorage.getItem(USER_PROFILE_STORAGE_KEY)
+
+  if (!storedProfile) {
+    return { ...mockUser }
+  }
+
+  try {
+    const parsedProfile = JSON.parse(storedProfile) as Partial<ProfileUser>
+    return {
+      ...mockUser,
+      ...parsedProfile
+    }
+  } catch {
+    return { ...mockUser }
+  }
+}
+
+const readStoredThemePreference = (): UserThemePreference | null => {
+  const storedPreference = localStorage.getItem(USER_THEME_STORAGE_KEY)
+  return storedPreference === 'dark' || storedPreference === 'light'
+    ? storedPreference
+    : null
+}
 
 const router = useRouter()
 
@@ -167,14 +198,23 @@ const profileDetails = computed(() => [
   }
 ])
 
-const currentPageStyleText = mockPageStylePreference
+const currentPageStyleText = computed(() => {
+  const savedThemePreference = readStoredThemePreference()
+
+  return savedThemePreference === 'dark'
+    ? 'Dark Mode (saved preference)'
+    : savedThemePreference === 'light'
+      ? 'Light Mode (saved preference)'
+      : 'Light Mode (default page style option)'
+})
 
 const loadProfile = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load your profile details.'
 
   try {
-    const currentProfile = mockUser
+    await wait()
+    const currentProfile = readStoredProfile()
     profile.value = currentProfile
     viewState.value = 'ready'
   } catch (error) {

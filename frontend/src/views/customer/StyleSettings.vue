@@ -100,17 +100,39 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
-import {
-  fetchUserStyleSettings,
-  isUserAccountDeactivatedError,
-  isUserProfileAuthError,
-  updateUserStyleSettings,
-  type UserThemePreference
-} from '@/api/user'
 
 defineOptions({ name: 'CustomerStyleSettings' })
 
 type ViewState = 'loading' | 'ready' | 'error'
+type UserThemePreference = 'light' | 'dark'
+
+const USER_THEME_STORAGE_KEY = 'mock-user-theme-preference'
+
+const wait = async (delay = 250): Promise<void> => {
+  await new Promise(resolve => window.setTimeout(resolve, delay))
+}
+
+const readStoredThemePreference = (): UserThemePreference | null => {
+  const storedPreference = localStorage.getItem(USER_THEME_STORAGE_KEY)
+  return storedPreference === 'dark' || storedPreference === 'light'
+    ? storedPreference
+    : null
+}
+
+const writeStoredThemePreference = (preference: UserThemePreference): void => {
+  localStorage.setItem(USER_THEME_STORAGE_KEY, preference)
+}
+
+const applyThemePreference = (preference: UserThemePreference): void => {
+  const html = document.documentElement
+  html.setAttribute('data-theme', preference)
+
+  if (preference === 'dark') {
+    html.classList.add('dark')
+  } else {
+    html.classList.remove('dark')
+  }
+}
 
 const router = useRouter()
 
@@ -138,36 +160,20 @@ const selectedPreferenceLabel = computed(() => {
   return selectedPreference.value === 'dark' ? 'Dark Mode' : 'Light Mode'
 })
 
-const redirectToLogin = (reason?: 'deactivated'): void => {
-  void router.replace({
-    path: '/auth/login',
-    query: reason
-      ? { reason }
-      : undefined
-  })
-}
-
 const loadSettings = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load style settings.'
   saveErrorMessage.value = ''
 
   try {
-    const settings = await fetchUserStyleSettings()
-    savedPreference.value = settings.savedPreference
-    selectedPreference.value = settings.effectivePreference
+    await wait()
+
+    const preference = readStoredThemePreference()
+    savedPreference.value = preference
+    selectedPreference.value = preference || 'light'
+    applyThemePreference(selectedPreference.value)
     viewState.value = 'ready'
   } catch (error) {
-    if (isUserAccountDeactivatedError(error)) {
-      redirectToLogin('deactivated')
-      return
-    }
-
-    if (isUserProfileAuthError(error)) {
-      redirectToLogin()
-      return
-    }
-
     loadErrorMessage.value =
       error instanceof Error && error.message
         ? error.message
@@ -181,21 +187,12 @@ const saveSettings = async (): Promise<void> => {
   isSaving.value = true
 
   try {
-    const settings = await updateUserStyleSettings(selectedPreference.value)
-    savedPreference.value = settings.savedPreference
-    selectedPreference.value = settings.effectivePreference
+    await wait(250)
+    writeStoredThemePreference(selectedPreference.value)
+    applyThemePreference(selectedPreference.value)
+    savedPreference.value = selectedPreference.value
     ElMessage.success('Page style preference updated successfully.')
   } catch (error) {
-    if (isUserAccountDeactivatedError(error)) {
-      redirectToLogin('deactivated')
-      return
-    }
-
-    if (isUserProfileAuthError(error)) {
-      redirectToLogin()
-      return
-    }
-
     saveErrorMessage.value =
       error instanceof Error && error.message
         ? error.message

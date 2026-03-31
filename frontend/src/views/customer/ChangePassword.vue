@@ -113,21 +113,66 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
-import {
-  changeUserPassword,
-  fetchUserProfile,
-  isUserAccountDeactivatedError,
-  isUserPasswordValidationError,
-  isUserProfileAuthError,
-  validateChangePasswordPayload,
-  type ChangePasswordField,
-  type ChangePasswordFieldErrors,
-  type ChangePasswordPayload
-} from '@/api/user'
 
 defineOptions({ name: 'CustomerChangePassword' })
 
 type ViewState = 'loading' | 'ready' | 'error'
+type ChangePasswordField = keyof ChangePasswordPayload
+type ChangePasswordFieldErrors = Partial<Record<ChangePasswordField, string>>
+
+interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+  confirmationPassword: string
+}
+
+const USER_PASSWORD_STORAGE_KEY = 'mock-user-password'
+const DEFAULT_PASSWORD = 'Password123'
+const MIN_PASSWORD_LENGTH = 8
+
+const wait = async (delay = 250): Promise<void> => {
+  await new Promise(resolve => window.setTimeout(resolve, delay))
+}
+
+const readStoredPassword = (): string => {
+  return localStorage.getItem(USER_PASSWORD_STORAGE_KEY) || DEFAULT_PASSWORD
+}
+
+const writeStoredPassword = (password: string): void => {
+  localStorage.setItem(USER_PASSWORD_STORAGE_KEY, password)
+}
+
+const validateChangePasswordPayload = (
+  payload: ChangePasswordPayload
+): ChangePasswordFieldErrors => {
+  const normalizedPayload = {
+    currentPassword: payload.currentPassword.trim(),
+    newPassword: payload.newPassword.trim(),
+    confirmationPassword: payload.confirmationPassword.trim()
+  }
+  const fieldErrors: ChangePasswordFieldErrors = {}
+
+  if (!normalizedPayload.currentPassword) {
+    fieldErrors.currentPassword = 'Current password is required.'
+  }
+
+  if (!normalizedPayload.newPassword) {
+    fieldErrors.newPassword = 'New password is required.'
+  } else if (normalizedPayload.newPassword.length < MIN_PASSWORD_LENGTH) {
+    fieldErrors.newPassword = `New password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
+  }
+
+  if (!normalizedPayload.confirmationPassword) {
+    fieldErrors.confirmationPassword = 'Confirmation password is required.'
+  } else if (
+    normalizedPayload.newPassword &&
+    normalizedPayload.confirmationPassword !== normalizedPayload.newPassword
+  ) {
+    fieldErrors.confirmationPassword = 'Confirmation password must match the new password.'
+  }
+
+  return fieldErrors
+}
 
 const router = useRouter()
 
@@ -162,33 +207,14 @@ const resetForm = (): void => {
   saveErrorMessage.value = ''
 }
 
-const redirectToLogin = (reason?: 'deactivated'): void => {
-  void router.replace({
-    path: '/auth/login',
-    query: reason
-      ? { reason }
-      : undefined
-  })
-}
-
 const loadPage = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load password settings.'
 
   try {
-    await fetchUserProfile()
+    await wait()
     viewState.value = 'ready'
   } catch (error) {
-    if (isUserAccountDeactivatedError(error)) {
-      redirectToLogin('deactivated')
-      return
-    }
-
-    if (isUserProfileAuthError(error)) {
-      redirectToLogin()
-      return
-    }
-
     loadErrorMessage.value =
       error instanceof Error && error.message
         ? error.message
@@ -225,31 +251,28 @@ const savePassword = async (): Promise<void> => {
   isSaving.value = true
 
   try {
-    await changeUserPassword({
+    await wait(250)
+
+    const fieldErrors = validateChangePasswordPayload({
       currentPassword: form.currentPassword,
       newPassword: form.newPassword,
       confirmationPassword: form.confirmationPassword
     })
 
+    if (form.currentPassword.trim() && form.currentPassword.trim() !== readStoredPassword()) {
+      fieldErrors.currentPassword = 'Current password is incorrect.'
+    }
+
+    if (Object.values(fieldErrors).some(Boolean)) {
+      applyFieldErrors(fieldErrors)
+      saveErrorMessage.value = 'Please correct the highlighted fields and try again.'
+      return
+    }
+
+    writeStoredPassword(form.newPassword.trim())
     resetForm()
     ElMessage.success('The password has been changed successfully.')
   } catch (error) {
-    if (isUserAccountDeactivatedError(error)) {
-      redirectToLogin('deactivated')
-      return
-    }
-
-    if (isUserProfileAuthError(error)) {
-      redirectToLogin()
-      return
-    }
-
-    if (isUserPasswordValidationError(error)) {
-      applyFieldErrors(error.fieldErrors)
-      saveErrorMessage.value = error.message
-      return
-    }
-
     saveErrorMessage.value =
       error instanceof Error && error.message
         ? error.message

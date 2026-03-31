@@ -103,24 +103,86 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
-import {
-  isUserProfileAuthError,
-  isUserProfileValidationError,
-  updateUserProfile,
-  validateUserProfilePayload,
-  type UpdateUserProfilePayload,
-  type UserProfile,
-  type UserProfileField,
-  type UserProfileFieldErrors
-} from '@/api/user'
-import { useUserStore } from '@/stores/user'
 
 defineOptions({ name: 'CustomerProfileEdit' })
 
 type ViewState = 'loading' | 'ready' | 'error'
+type UserProfileField = keyof UpdateUserProfilePayload
+type UserProfileFieldErrors = Partial<Record<UserProfileField, string>>
+
+interface UpdateUserProfilePayload {
+  fullName: string
+  email: string
+  phoneNumber: string
+}
+
+const USER_PROFILE_STORAGE_KEY = 'mock-user-profile'
+
+const DEFAULT_PROFILE: UpdateUserProfilePayload = {
+  fullName: 'Emma Chen',
+  email: 'emma.chen@example.com',
+  phoneNumber: '+86 138 0013 8000'
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const phonePattern = /^\+?[0-9][0-9()\-\s]{6,19}$/
+
+const wait = async (delay = 250): Promise<void> => {
+  await new Promise(resolve => window.setTimeout(resolve, delay))
+}
+
+const readStoredProfile = (): UpdateUserProfilePayload => {
+  const storedProfile = localStorage.getItem(USER_PROFILE_STORAGE_KEY)
+
+  if (!storedProfile) {
+    return { ...DEFAULT_PROFILE }
+  }
+
+  try {
+    const parsedProfile = JSON.parse(storedProfile) as Partial<UpdateUserProfilePayload>
+    return {
+      ...DEFAULT_PROFILE,
+      ...parsedProfile
+    }
+  } catch {
+    return { ...DEFAULT_PROFILE }
+  }
+}
+
+const writeStoredProfile = (profile: UpdateUserProfilePayload): void => {
+  localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(profile))
+}
+
+const validateUserProfilePayload = (
+  payload: UpdateUserProfilePayload
+): UserProfileFieldErrors => {
+  const normalizedPayload = {
+    fullName: payload.fullName.trim(),
+    email: payload.email.trim(),
+    phoneNumber: payload.phoneNumber.trim()
+  }
+  const fieldErrors: UserProfileFieldErrors = {}
+
+  if (!normalizedPayload.fullName) {
+    fieldErrors.fullName = 'Name is required.'
+  }
+
+  if (!normalizedPayload.email) {
+    fieldErrors.email = 'Email is required.'
+  } else if (!emailPattern.test(normalizedPayload.email)) {
+    fieldErrors.email = 'Enter a valid email address.'
+  }
+
+  if (!normalizedPayload.phoneNumber) {
+    fieldErrors.phoneNumber = 'Phone number is required.'
+  } else if (!phonePattern.test(normalizedPayload.phoneNumber)) {
+    fieldErrors.phoneNumber = 'Enter a valid phone number.'
+  }
+
+  return fieldErrors
+}
 
 const router = useRouter()
-const userStore = useUserStore()
 
 const viewState = ref<ViewState>('loading')
 const isSaving = ref(false)
@@ -145,7 +207,7 @@ const applyFieldErrors = (fieldErrors: UserProfileFieldErrors = {}): void => {
   formErrors.phoneNumber = fieldErrors.phoneNumber || ''
 }
 
-const resetForm = (profile: UserProfile): void => {
+const resetForm = (profile: UpdateUserProfilePayload): void => {
   form.fullName = profile.fullName
   form.email = profile.email
   form.phoneNumber = profile.phoneNumber
@@ -159,15 +221,11 @@ const loadProfile = async (): Promise<void> => {
   saveErrorMessage.value = ''
 
   try {
-    const profile = await userStore.fetchAndSetUserProfile()
+    await wait()
+    const profile = readStoredProfile()
     resetForm(profile)
     viewState.value = 'ready'
   } catch (error) {
-    if (isUserProfileAuthError(error)) {
-      void router.replace('/auth/login')
-      return
-    }
-
     loadErrorMessage.value =
       error instanceof Error && error.message
         ? error.message
@@ -204,27 +262,22 @@ const saveProfile = async (): Promise<void> => {
   isSaving.value = true
 
   try {
-    const updatedProfile = await updateUserProfile({
+    await wait(250)
+
+    const updatedProfile: UpdateUserProfilePayload = {
       fullName: form.fullName,
       email: form.email,
       phoneNumber: form.phoneNumber
-    })
+    }
 
-    userStore.syncUserProfile(updatedProfile)
+    writeStoredProfile({
+      fullName: updatedProfile.fullName.trim(),
+      email: updatedProfile.email.trim(),
+      phoneNumber: updatedProfile.phoneNumber.trim()
+    })
     ElMessage.success('Personal information updated successfully.')
     await router.push('/customer/profile')
   } catch (error) {
-    if (isUserProfileAuthError(error)) {
-      void router.replace('/auth/login')
-      return
-    }
-
-    if (isUserProfileValidationError(error)) {
-      applyFieldErrors(error.fieldErrors)
-      saveErrorMessage.value = error.message
-      return
-    }
-
     saveErrorMessage.value =
       error instanceof Error && error.message
         ? error.message

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 
@@ -17,4 +18,6 @@ public interface BookingService extends IService<Booking> {
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);
 
     PageResult<BookingHistoryListVO> listBookings(Long customerId, BookingHistoryQueryDTO queryDTO);
+
+    BookingDetailVO getBookingDetail(Long bookingId, Long customerId);
 }

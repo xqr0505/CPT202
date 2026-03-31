@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import org.apache.ibatis.annotations.Mapper;
@@ -22,4 +23,6 @@ public interface BookingMapper extends BaseMapper<Booking> {
     List<UpcomingBookingVO> selectUpcomingBookings(@Param("customerId") Long customerId, @Param("status") String status, @Param("currentTime") LocalDateTime currentTime, @Param("limit") int limit);
 
     IPage<BookingHistoryListVO> listBookings(Page<BookingHistoryListVO> page, @Param("query") BookingHistoryQueryDTO query, @Param("customerId") Long customerId);
+
+    BookingDetailVO getBookingDetail(@Param("bookingId") Long bookingId, @Param("customerId") Long customerId);
 }

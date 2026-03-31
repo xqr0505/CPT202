@@ -1,7 +1,7 @@
 package edu.xjtlu.cpt202.backend.common.exception;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
-import edu.xjtlu.cpt202.backend.common.result.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -28,9 +28,9 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining("; "));
         if (message == null || message.isBlank()) {
-            message = ResultCodeEnum.BAD_REQUEST.getMessage();
+            message = ResultCodeEnum.PARAM_ERROR.getMessage();
         }
-        return Result.fail(ResultCodeEnum.BAD_REQUEST.getCode(), message);
+        return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), message);
     }
 
     @ExceptionHandler(Exception.class)

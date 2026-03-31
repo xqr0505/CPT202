@@ -44,11 +44,11 @@
 
 <script setup lang="ts">
 import { BookingStatus } from '@/constants/booking.ts'
-import BookingStatusTag from '@/components/common/BookingStatusTag.vue'
+import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
-import EmptyPlaceholder from '@/components/common/EmptyPlaceholder.vue'
-import PaginationTable from '@/components/common/PaginationTable.vue'
-import type { TableColumn, FetchDataParams, FetchDataResult } from '@/components/common/PaginationTable.vue'
+import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
+import PaginationTable from '@/components/business/PaginationTable.vue'
+import type { TableColumn, FetchDataParams, FetchDataResult } from '@/components/business/PaginationTable.vue'
 
 defineOptions({ name: 'DevDemo' })
 

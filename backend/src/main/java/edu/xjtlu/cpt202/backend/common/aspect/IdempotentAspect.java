@@ -3,7 +3,7 @@ package edu.xjtlu.cpt202.backend.common.aspect;
 import edu.xjtlu.cpt202.backend.common.annotation.Idempotent;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
-import edu.xjtlu.cpt202.backend.common.result.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;

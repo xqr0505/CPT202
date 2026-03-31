@@ -1,6 +1,6 @@
 package edu.xjtlu.cpt202.backend.common.exception;
 
-import edu.xjtlu.cpt202.backend.common.result.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 
 /**
  * @author QiranXiao

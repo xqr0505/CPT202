@@ -107,7 +107,7 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables.scss';
+@use '@/styles/variables';
 
 .pagination-table {
   background-color: var(--color-bg-surface);

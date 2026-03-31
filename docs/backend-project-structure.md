@@ -54,7 +54,7 @@ Typical subpackages inside a module may include:
 - `service/` — business logic layer.
 - `mapper/` — MyBatis-Plus data access layer.
 - `entity/` — database entity classes.
-- `model/` — DTO and VO classes.
+- `model/` — entity DTO and VO classes.
 - `enums/` — module-specific enums.
 
 ## 4. Resources Folder

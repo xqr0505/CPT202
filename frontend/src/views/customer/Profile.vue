@@ -127,26 +127,30 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
-import {
-  deactivateUserAccount,
-  getSavedUserThemePreference,
-  isUserAccountDeactivatedError,
-  isUserProfileAuthError,
-  type UserProfile
-} from '@/api/user'
-import { useUserStore } from '@/stores/user'
 
 defineOptions({ name: 'CustomerProfile' })
 
 type ViewState = 'loading' | 'ready' | 'error'
 
+interface ProfileUser {
+  fullName: string
+  email: string
+  phoneNumber: string
+}
+
+const mockUser: ProfileUser = {
+  fullName: 'Emma Chen',
+  email: 'emma.chen@example.com',
+  phoneNumber: '+86 138 0013 8000'
+}
+
+const mockPageStylePreference = 'Light Mode (default page style option)'
+
 const router = useRouter()
-const userStore = useUserStore()
 
 const viewState = ref<ViewState>('loading')
-const profile = ref<UserProfile | null>(null)
+const profile = ref<ProfileUser | null>(null)
 const loadErrorMessage = ref('We could not load your profile details.')
-const savedThemePreference = getSavedUserThemePreference()
 
 const profileDetails = computed(() => [
   {
@@ -163,27 +167,17 @@ const profileDetails = computed(() => [
   }
 ])
 
-const currentPageStyleText =
-  savedThemePreference === 'dark'
-    ? 'Dark Mode (saved preference)'
-    : savedThemePreference === 'light'
-      ? 'Light Mode (saved preference)'
-      : 'Light Mode (default page style option)'
+const currentPageStyleText = mockPageStylePreference
 
 const loadProfile = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load your profile details.'
 
   try {
-    const currentProfile = await userStore.fetchAndSetUserProfile()
+    const currentProfile = mockUser
     profile.value = currentProfile
     viewState.value = 'ready'
   } catch (error) {
-    if (isUserProfileAuthError(error)) {
-      void router.replace('/auth/login')
-      return
-    }
-
     loadErrorMessage.value =
       error instanceof Error && error.message
         ? error.message
@@ -220,31 +214,8 @@ const confirmDeactivateAccount = async (): Promise<void> => {
   }
 
   try {
-    await deactivateUserAccount()
-    await userStore.logout()
-    await router.push({
-      path: '/auth/login',
-      query: {
-        reason: 'deactivated'
-      }
-    })
+    ElMessage.success('Mock mode: no real account changes were made.')
   } catch (error) {
-    if (isUserAccountDeactivatedError(error)) {
-      await userStore.logout()
-      await router.push({
-        path: '/auth/login',
-        query: {
-          reason: 'deactivated'
-        }
-      })
-      return
-    }
-
-    if (isUserProfileAuthError(error)) {
-      void router.replace('/auth/login')
-      return
-    }
-
     ElMessage.error(
       error instanceof Error && error.message
         ? error.message

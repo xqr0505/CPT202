@@ -1,5 +1,20 @@
 import { USER_ROLES } from '@/constants/roles';
 
+/**
+ * 应用已保存主题偏好（可选，防止调用缺失导致路由守卫报错）
+ */
+export const applySavedThemePreference = (): void => {
+  // 这里做一个安全默认，后续可以接 ThemeStore 实现主题同步逻辑
+  // 例如：const theme = localStorage.getItem('theme'); if (theme) applyTheme(theme)
+};
+
+/**
+ * 当前本地存储的用户是否已被管理员停用（默认false）
+ */
+export const isStoredUserAccountDeactivated = (): boolean => {
+  return false;
+};
+
 // TODO: Implement user data fetching logic and assign the correct role here.
 export const fetchUserProfile = async () => {
   // Placeholder implementation

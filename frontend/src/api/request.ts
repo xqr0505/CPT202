@@ -47,7 +47,34 @@ export const saveAuthData = (token: string, user: any, rememberMe: boolean = fal
     sessionStorage.setItem('user', JSON.stringify(user));
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem('rememberMe');
+    localStorage.removeItem('rememberMe');  }
+};
+
+/**
+ * 保存 Token 到存储
+ * 根据 rememberMe 参数决定是否持久化
+ */
+export const saveToken = (token: string, rememberMe: boolean = false) => {
+  if (rememberMe) {
+    localStorage.setItem('token', token);
+    sessionStorage.removeItem('token');
+  } else {
+    sessionStorage.setItem('token', token);
+    localStorage.removeItem('token');
+  }
+};
+
+/**
+ * 保存用户信息到存储
+ * 根据 rememberMe 参数决定是否持久化
+ */
+export const saveUser = (user: any, rememberMe: boolean = false) => {
+  if (rememberMe) {
+    localStorage.setItem('user', JSON.stringify(user));
+    sessionStorage.removeItem('user');
+  } else {
+    sessionStorage.setItem('user', JSON.stringify(user));
+    localStorage.removeItem('user');
   }
 };
 

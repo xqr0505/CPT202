@@ -64,12 +64,12 @@ const routes = [
     component: () => import('../views/dev/DevDemo.vue')
   },
   {
-    path: '/:pathMatch(.*)*',
-    redirect: '/error/404'
-  },
-  {
     path: '/',
     redirect: '/customer/search'
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/error/404'
   }
 ]
 

@@ -45,7 +45,7 @@ public class SecurityConfig {
                                 "/auth/reset-password"   
                         ).permitAll()
 
-                        .anyRequest().authenticated()
+                        .anyRequest().permitAll()
                 )
 
                 // add JWT filter

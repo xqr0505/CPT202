@@ -46,15 +46,12 @@
         <div>
           <h2 class="style-panel__title">Page Style Preference</h2>
           <p class="style-panel__subtitle">
-            Select your preferred page style option and save the changes.
+            Select your preferred page style option. Changes are applied and saved automatically.
           </p>
         </div>
 
         <div class="style-panel__actions">
           <CustomButton @click="goToProfile">Back to Profile</CustomButton>
-          <CustomButton type="primary" :loading="isSaving" @click="saveSettings">
-            Save Changes
-          </CustomButton>
         </div>
       </div>
 
@@ -73,7 +70,11 @@
           </p>
         </div>
 
-        <el-radio-group v-model="selectedPreference" class="style-options">
+        <el-radio-group
+          v-model="selectedPreference"
+          class="style-options"
+          @change="handlePreferenceChange"
+        >
           <label
             v-for="option in options"
             :key="option.value"
@@ -137,7 +138,6 @@ const applyThemePreference = (preference: UserThemePreference): void => {
 const router = useRouter()
 
 const viewState = ref<ViewState>('loading')
-const isSaving = ref(false)
 const loadErrorMessage = ref('We could not load style settings.')
 const saveErrorMessage = ref('')
 const savedPreference = ref<UserThemePreference | null>(null)
@@ -182,24 +182,19 @@ const loadSettings = async (): Promise<void> => {
   }
 }
 
-const saveSettings = async (): Promise<void> => {
+const handlePreferenceChange = (preference: UserThemePreference): void => {
   saveErrorMessage.value = ''
-  isSaving.value = true
 
   try {
-    await wait(250)
-    writeStoredThemePreference(selectedPreference.value)
-    applyThemePreference(selectedPreference.value)
-    savedPreference.value = selectedPreference.value
-    ElMessage.success('Page style preference updated successfully.')
+    writeStoredThemePreference(preference)
+    applyThemePreference(preference)
+    savedPreference.value = preference
   } catch (error) {
     saveErrorMessage.value =
       error instanceof Error && error.message
         ? error.message
         : 'Unable to update page style settings right now.'
     ElMessage.error(saveErrorMessage.value)
-  } finally {
-    isSaving.value = false
   }
 }
 

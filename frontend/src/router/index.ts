@@ -33,7 +33,10 @@ const routes = [
       },
       { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
       { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
-      { path: 'profile', component: () => import('../views/customer/Profile.vue') }
+      { path: 'profile', component: () => import('../views/customer/Profile.vue') },
+      { path: 'profile/edit', component: () => import('../views/customer/ProfileEdit.vue') },
+      { path: 'profile/password', component: () => import('../views/customer/ChangePassword.vue') },
+      { path: 'profile/style-settings', component: () => import('../views/customer/StyleSettings.vue') }
     ]
   },
   {

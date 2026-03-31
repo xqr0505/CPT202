@@ -27,12 +27,8 @@ public class JwtUtils {
     private static SecretKey KEY;
     private static final long EXPIRATION = 1000 * 60 * 30; // 30 minutes
 
-    /**
-     * 初始化秘钥（由 Spring 配置类调用）
-     */
     public static void initSecret(String key) {
         secretKey = key;
-        // 秘钥必须至少 32 字节（256 位）
         if (key.getBytes().length < 32) {
             throw new IllegalArgumentException("Secret key must be at least 32 characters long");
         }
@@ -41,9 +37,6 @@ public class JwtUtils {
 
     /**
      * 生成 JWT Token
-     * @param userId 用户 ID
-     * @param role 用户角色 (CUSTOMER, SPECIALIST, ADMIN)
-     * @return JWT Token 字符串
      */
     public static String generateToken(Long userId, String role) {
         if (KEY == null) {
@@ -61,10 +54,6 @@ public class JwtUtils {
 
     /**
      * 解析 JWT Token
-     * @param token JWT Token 字符串
-     * @return Claims 对象
-     * @throws ExpiredJwtException Token 已过期
-     * @throws Exception 解析失败
      */
     public static Claims parseToken(String token) {
         if (KEY == null) {
@@ -79,23 +68,18 @@ public class JwtUtils {
 
     /**
      * 验证 Token 是否有效
-     * @param token JWT Token 字符串
-     * @return true 如果有效，false 如果无效或过期
      */
     public static boolean validateToken(String token) {
         try {
             parseToken(token);
             return true;
         } catch (ExpiredJwtException e) {
-            return false; // Token 已过期
+            return false; 
         } catch (Exception e) {
-            return false; // Token 无效
+            return false; 
         }
     }
 
-    /**
-     * 获取 Token 过期时间戳（用于前端倒计时）
-     */
     public static Long getExpirationTime(String token) {
         try {
             Claims claims = parseToken(token);

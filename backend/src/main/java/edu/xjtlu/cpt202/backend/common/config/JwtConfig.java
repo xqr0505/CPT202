@@ -1,11 +1,12 @@
 package edu.xjtlu.cpt202.backend.common.config;
 
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * JWT 秘钥配置类 - 在应用启动时初始化 JWT 秘钥
+ * 读取配置文件中的秘钥，并把它交给 JwtUtils 完成初始化
  * 
  * 秘钥配置方式：
  * 1. application-dev.yml:  jwt.secret: your-dev-secret-key-with-32-characters
@@ -24,10 +25,7 @@ public class JwtConfig {
     public JwtConfig() {
     }
 
-    /**
-     * 初始化后处理 - 在构造函数之后执行
-     */
-    @javax.annotation.PostConstruct
+    @PostConstruct
     public void init() {
         JwtUtils.initSecret(secret);
     }

@@ -1,14 +1,11 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
 import { ElMessage } from 'element-plus';
 import router from '@/router';
 
 /**
- * API 请求类型定义
+ * 定义后端返回数据的通用结构
+ * @template T - 返回数据 data 的类型
  */
-interface RequestConfig extends InternalAxiosRequestConfig {
-  skipErrorMessage?: boolean; // 是否跳过默认错误提示
-}
-
 interface ApiResponse<T = any> {
   code: number;
   message: string;
@@ -16,9 +13,66 @@ interface ApiResponse<T = any> {
 }
 
 /**
- * 创建 Axios 实例
+ * 获取当前的认证令牌 (Token)
+ * 优先检查持久化 LocalStorage，其次检查会话级SessionStorage
  */
-const service: AxiosInstance = axios.create({
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('token') || sessionStorage.getItem('token');
+};
+
+/**
+ * 清除所有认证相关的数据
+ */
+const clearAuthData = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('rememberMe');
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('user');
+};
+
+/**
+ * 保存认证数据
+ * 根据用户是否选择“记住我”，决定存储位置
+ */
+export const saveAuthData = (token: string, user: any, rememberMe: boolean = false) => {
+  if (rememberMe) {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('rememberMe', 'true');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+  } else {
+    sessionStorage.setItem('token', token);
+    sessionStorage.setItem('user', JSON.stringify(user));
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('rememberMe');
+  }
+};
+
+/**
+ * 获取当前登录的用户信息
+ */
+export const getUser = (): any => {
+  const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * 用户登出操作
+ * 清除本地数据并强制跳转到登录页
+ */
+export const logout = () => {
+  clearAuthData();
+  router.push({ name: 'Login' }).catch(() => null);
+};
+
+const service = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: {
@@ -27,168 +81,68 @@ const service: AxiosInstance = axios.create({
 });
 
 /**
- * ==================== 请求拦截器 ====================
- * 功能：
- * 1. 添加 JWT Token 到请求头
- * 2. 处理请求配置
+ * 请求拦截器
+ * 在请求发送之前执行：主要用于给请求头添加 Token
  */
 service.interceptors.request.use(
-  (config: RequestConfig) => {
-    // 从 localStorage 或 sessionStorage 获取 Token
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
-    // 如果存在 Token，添加到请求头
+  config => {
+    const token = getAuthToken();
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers = config.headers || {};
+      (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
     }
-
     return config;
   },
-  (error: AxiosError) => {
-    console.error('Request error:', error);
+  error => {
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
-/**
- * ==================== 响应拦截器 ====================
- * 功能：
- * 1. 统一处理业务状态码
- * 2. 处理 401/403 异常
- * 3. 处理全局错误提示
- * 4. Token 过期自动退出登录
- */
 service.interceptors.response.use(
-  (response: AxiosResponse<ApiResponse>) => {
-    const { code, message, data } = response.data;
+  response => {
+    const res = response.data as ApiResponse;
 
-    // 状态码 200 - 正常响应
-    if (code === 200) {
-      return data;
+    if (res.code === 200) {
+      return res.data;
     }
 
-    // 状态码 401 - 未认证（Token 无效或过期）
-    if (code === 401) {
-      ElMessage.error(message || 'Token expired or invalid, please login again');
-      
-      // 清除本地存储的 Token 和用户信息
+    if (res.code === 401) {
       clearAuthData();
-      
-      // 延迟重定向到登录页，避免多次弹窗
-      setTimeout(() => {
-        router.push({
-          name: 'Login',
-          query: { redirect: router.currentRoute.value.fullPath }
-        });
-      }, 500);
-      
-      return Promise.reject(new Error(message || 'Unauthorized'));
+      ElMessage.error(res.message || 'Unauthorized, please login again');
+      router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
+      return Promise.reject(new Error(res.message || 'Unauthorized'));
     }
 
-    // 状态码 403 - 无权限访问
-    if (code === 403) {
-      ElMessage.error(message || 'You do not have permission to access this resource');
-      return Promise.reject(new Error(message || 'Forbidden'));
+    if (res.code === 403) {
+      ElMessage.error(res.message || 'Forbidden');
+      return Promise.reject(new Error(res.message || 'Forbidden'));
     }
 
-    // 其他错误状态码
-    ElMessage.error(message || 'An error occurred');
-    return Promise.reject(new Error(message || 'Request failed'));
+    ElMessage.error(res.message || 'Error');
+    return Promise.reject(new Error(res.message || 'Error'));
   },
-
-  (error: AxiosError<ApiResponse>) => {
-    // HTTP 状态码错误处理
+  error => {
     const status = error.response?.status;
-    const message = error.response?.data?.message;
 
     if (status === 401) {
-      // 服务器返回 401
-      ElMessage.error(message || 'Unauthorized');
       clearAuthData();
-
-      setTimeout(() => {
-        router.push({
-          name: 'Login',
-          query: { redirect: router.currentRoute.value.fullPath }
-        });
-      }, 500);
+      ElMessage.error('Unauthorized, please login again');
+      router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
     } else if (status === 403) {
-      // 服务器返回 403
-      ElMessage.error(message || 'Forbidden');
+      ElMessage.error('Forbidden');
     } else if (status === 500) {
-      // 服务器错误
       ElMessage.error('Server error, please try again later');
     } else if (error.code === 'ECONNABORTED') {
-      // 请求超时
       ElMessage.error('Request timeout');
-    } else if (error.message === 'Network Error') {
-      // 网络错误
+    } else if (error.message?.includes('Network Error')) {
       ElMessage.error('Network error, please check your connection');
     }
 
-    console.error('Response error:', error);
     return Promise.reject(error);
   }
 );
 
-/**
- * 清除认证数据
- * 用于登出或 Token 过期时清除本地存储的信息
- */
-function clearAuthData(): void {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  localStorage.removeItem('rememberMe');
-  
-  sessionStorage.removeItem('token');
-  sessionStorage.removeItem('user');
-}
-
-/**
- * 获取当前 Token
- */
-export function getToken(): string | null {
-  return localStorage.getItem('token') || sessionStorage.getItem('token');
-}
-
-/**
- * 保存 Token 到存储
- * @param token JWT Token
- * @param rememberMe 是否记住我（保存到 localStorage）
- */
-export function saveToken(token: string, rememberMe: boolean = false): void {
-  if (rememberMe) {
-    localStorage.setItem('token', token);
-    localStorage.setItem('rememberMe', 'true');
-  } else {
-    sessionStorage.setItem('token', token);
-  }
-}
-
-/**
- * 保存用户信息
- * @param user 用户对象
- * @param rememberMe 是否记住我
- */
-export function saveUser(user: any, rememberMe: boolean = false): void {
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem('user', JSON.stringify(user));
-}
-
-/**
- * 获取保存的用户信息
- */
-export function getUser(): any {
-  const user = localStorage.getItem('user') || sessionStorage.getItem('user');
-  return user ? JSON.parse(user) : null;
-}
-
-/**
- * 清除所有认证数据
- */
-export function logout(): void {
-  clearAuthData();
-}
-
 export default service;
+
 

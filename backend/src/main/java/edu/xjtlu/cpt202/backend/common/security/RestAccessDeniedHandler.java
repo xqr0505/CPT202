@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * 访问拒绝处理器 - 返回 403 Forbidden
  * 当用户已认证但无权限访问资源时触发
- * @author QiranXiao
+ * @author DanyiHuang
  * @date 2026/3/29
  */
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
@@ -30,7 +30,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        Result<?> result = Result.error(ResultCodeEnum.FORBIDDEN.getCode(), "Access Denied: " + accessDeniedException.getMessage());
+        Result<?> result = Result.fail(ResultCodeEnum.FORBIDDEN.getCode(), "Access Denied: " + accessDeniedException.getMessage());
         
         ObjectMapper mapper = new ObjectMapper();
         response.getWriter().write(mapper.writeValueAsString(result));

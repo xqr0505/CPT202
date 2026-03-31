@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * 未认证请求入口 - 返回 401 Unauthorized
  * 当用户未登录或 Token 无效时触发
- * @author QiranXiao
+ * @author DanyiHuang
  * @date 2026/3/29
  */
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
@@ -30,7 +30,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        Result<?> result = Result.error(ResultCodeEnum.UNAUTHORIZED.getCode(), "Unauthorized: " + authException.getMessage());
+        Result<?> result = Result.fail(ResultCodeEnum.UNAUTHORIZED.getCode(), "Unauthorized: " + authException.getMessage());
         
         ObjectMapper mapper = new ObjectMapper();
         response.getWriter().write(mapper.writeValueAsString(result));

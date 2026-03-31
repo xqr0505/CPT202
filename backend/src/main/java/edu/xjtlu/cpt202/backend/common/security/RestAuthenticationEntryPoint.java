@@ -2,7 +2,7 @@ package edu.xjtlu.cpt202.backend.common.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.xjtlu.cpt202.backend.common.result.Result;
-import edu.xjtlu.cpt202.backend.common.result.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

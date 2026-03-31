@@ -1,5 +1,7 @@
 package edu.xjtlu.cpt202.backend.common.result;
 
+import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
+
 import java.time.LocalDateTime;
 
 /**

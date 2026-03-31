@@ -5,6 +5,18 @@
 
 **Rule:** EVERY method in your `Controller` MUST return a `Result<T>` object. Do not return raw Entities, Strings, or Maps.
 
+### Unified Response Codes (`ResultCodeEnum`)
+**Path:** `common/enums/ResultCodeEnum`
+
+All response codes are centralized in `ResultCodeEnum`. Use them when returning errors or throwing `BusinessException`.
+
+| Category | Code Range | Description |
+| :--- | :--- | :--- |
+| **System** | 200 - 500 | Success, Param Error, Unauthorized, Forbidden, System Error |
+| **Auth** | 1000 - 1099 | e.g., 1001: Invalid Verification Code |
+| **User** | 2000 - 2099 | e.g., 2001: Account Locked |
+| **Booking** | 6000 - 6099 | e.g., 6001: Time slot already booked |
+
 ### Single Object or List
 ```java
 // [Good Practice]
@@ -14,7 +26,6 @@ public Result<UserVO> getUser(@PathVariable Long id) {
     return Result.success(user); // Returns standard JSON with code 200
 }
 ```
-
 ### Pagination (For Search/History Modules)
 When returning paginated data, wrap your data in `PageResult<T>`.
 ```java
@@ -104,7 +115,50 @@ List<UserVO> voList = BeanCopyUtils.copyBeanList(entityList, UserVO.class);
 
 ---
 
-## 5. Security & Current User (`SecurityUtils`)
+## 5. Domain Enums (`BaseEnum`)
+**Path:** `common/enums/*`
+
+**Rule:** All domain-specific enums must implement the `BaseEnum<T>` interface to ensure a consistent structure for `code` and `desc`.
+
+### Available Enums:
+*   **`UserRoleEnum`**: Defines system roles (`ADMIN`, `SPECIALIST`, `CUSTOMER`).
+*   **`AccountStatusEnum`**: Defines account states (`ACTIVE`, `LOCKED`, `DEACTIVATED`).
+*   **`SpecialistLevelEnum`**: Defines specialist seniority (`JUNIOR`, `INTERMEDIATE`, `SENIOR`, `CHIEF`).
+
+### Usage Example:
+```java
+// Get code or description from enum
+Integer code = UserRoleEnum.ADMIN.getCode(); // 1
+String desc = UserRoleEnum.ADMIN.getDesc();   // "Administrator"
+```
+
+---
+
+## 6. Global Constants
+**Path:** `common/constant/*`
+
+**Rule:** Use these constants instead of hard-coding strings or numbers in your logic.
+
+### `SystemConstant`
+General application settings.
+*   `DEFAULT_PAGE_SIZE`: 10
+*   `MAX_PAGE_SIZE`: 100
+*   `TRUE_FLAG` / `FALSE_FLAG`: 1 / 0 (for database boolean fields)
+
+### `SecurityConstant`
+JWT and Security-related settings.
+*   `JWT_TOKEN_HEADER`: "Authorization"
+*   `JWT_TOKEN_PREFIX`: "Bearer "
+*   `VERIFICATION_CODE_LENGTH`: 6
+
+### `TimeFormatConstant`
+Standard date and time patterns.
+*   `DEFAULT_DATE_TIME_FORMAT`: "yyyy-MM-dd HH:mm:ss"
+*   `DEFAULT_TIMEZONE`: "GMT+8"
+
+---
+
+## 7. Security & Current User (`SecurityUtils`)
 **Path:** `common/utils/SecurityUtils` (and `common/security/*`)
 
 **Rule:** You no longer need to parse HttpServletRequest to find out who is calling your API. The system automatically verifies the JWT Token.
@@ -138,7 +192,7 @@ public Result<ScheduleVO> getSchedule() {  }
 
 ---
 
-## 6. Database Auto-Fill (MyBatis-Plus)
+## 8. Database Auto-Fill (MyBatis-Plus)
 **Path:** `common/handler/MyMetaObjectHandler`
 
 **Rule:** **DO NOT** manually set `createdAt` or `updatedAt` in your code
@@ -149,7 +203,7 @@ The system is configured to automatically intercept `INSERT` and `UPDATE` SQL st
 
 ---
 
-## 7. Preventing Duplicate Submissions (`@Idempotent`)
+## 9. Preventing Duplicate Submissions (`@Idempotent`)
 **Path:** `common/annotation/Idempotent`
 
 **Rule:** For critical actions (like booking an appointment or creating a schedule), users might double-click the submit button, causing duplicate database records.
@@ -167,7 +221,7 @@ public Result<Void> bookAppointment(@RequestBody BookingDTO dto) {
 
 ---
 
-## 8. Time Utilities (`DateTimeUtils`)
+## 10. Time Utilities (`DateTimeUtils`)
 **Path:** `common/utils/DateTimeUtils`
 
 For Modules 4, 5, 6, 7, 8, 9 (Scheduling & Booking), time conflict calculation is extremely common. Please use the unified utility methods to avoid time zone issues or calculation bugs.

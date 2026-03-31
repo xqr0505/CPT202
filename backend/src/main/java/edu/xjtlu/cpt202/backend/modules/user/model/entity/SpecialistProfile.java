@@ -13,6 +13,10 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author QiranXiao
+ * @date 2026/4/1
+ */
 @Data
 @Builder
 @NoArgsConstructor

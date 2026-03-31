@@ -26,7 +26,9 @@ public class BookingHistoryQueryDTO {
     @Builder.Default
     private Integer pageSize = 10;
 
+    @Schema(description = "Time scope (UPCOMING or HISTORY) to filter bookings by time", example = "UPCOMING")
+    private String timeScope;
+
     @Schema(description = "Booking status filter (e.g., COMPLETED, CANCELLED)", example = "COMPLETED")
     private String status;
 }
-

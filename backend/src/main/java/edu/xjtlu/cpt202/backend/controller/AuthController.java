@@ -4,8 +4,9 @@ import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
 import edu.xjtlu.cpt202.backend.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.dto.LoginResponse;
-import edu.xjtlu.cpt202.backend.dto.RegisterRequest;
-import lombok.extern.slf4j.Slf4j;
+import edu.xjtlu.cpt202.backend.dto.RegisterRequest;import edu.xjtlu.cpt202.backend.dto.SendVerificationCodeRequest;
+import edu.xjtlu.cpt202.backend.service.AuthService;
+import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -24,7 +25,10 @@ import jakarta.validation.Valid;
 @Slf4j
 @RestController
 @RequestMapping("/auth")
+@RequiredArgsConstructor
 public class AuthController {
+
+    private final AuthService authService;
 
     /**
      * 用户登录
@@ -53,30 +57,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        log.info("User login attempt - Email: {}, Role: {}", request.getEmail(), request.getRole());
-
-        // TODO: 这里需要实现真实的登录逻辑
-        // 1. 根据 email 和 role 从数据库查询用户
-        // 2. 验证密码是否正确
-        // 3. 检查账户是否被锁定（登错密码5次15分钟内锁定）
-        // 4. 如果通过验证，生成 Token
-
-        // 示例响应（实际需要从数据库获取）
-        Long userId = 1L;
-        String role = "CUSTOMER";
-
-        // 生成 JWT Token
-        String token = JwtUtils.generateToken(userId, role);
-
-        LoginResponse response = new LoginResponse();
-        response.setToken(token);
-        response.setUserId(userId);
-        response.setRole(role);
-        response.setEmail(request.getEmail());
-        response.setDisplayName("User");
-        response.setExpiresIn(30 * 60L); // 30 minutes
-
-        return Result.success(response);
+        return authService.login(request);
     }
 
     /**
@@ -108,35 +89,7 @@ public class AuthController {
      */
     @PostMapping("/register")
     public Result<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
-        log.info("User registration attempt - Email: {}, Role: {}", request.getEmail(), request.getRole());
-
-        // 验证两次密码是否一致
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return Result.error(400, "Passwords do not match");
-        }
-
-        // TODO: 这里需要实现真实的注册逻辑
-        // 1. 验证验证码是否正确且未过期
-        // 2. 检查邮箱是否已注册
-        // 3. 对密码进行加密（使用 BCryptPasswordEncoder）
-        // 4. 保存用户到数据库
-        // 5. 生成 Token 并自动登录
-
-        // 示例响应
-        Long userId = 2L;
-
-        // 生成 JWT Token
-        String token = JwtUtils.generateToken(userId, request.getRole());
-
-        LoginResponse response = new LoginResponse();
-        response.setToken(token);
-        response.setUserId(userId);
-        response.setRole(request.getRole());
-        response.setEmail(request.getEmail());
-        response.setDisplayName("New User");
-        response.setExpiresIn(30 * 60L);
-
-        return Result.success(response);
+        return authService.register(request);
     }
 
     /**
@@ -163,22 +116,8 @@ public class AuthController {
      * }
      */
     @PostMapping("/verify-email")
-    public Result<Void> sendVerificationCode(
-            @RequestParam String email,
-            @RequestParam(required = false) String role,
-            @RequestParam(defaultValue = "REGISTER") String type) {
-
-        log.info("Verification code request - Email: {}, Type: {}", email, type);
-
-        // TODO: 这里需要实现真实的验证码发送逻辑
-        // 1. 检查邮箱格式是否正确
-        // 2. 如果是注册类型，需要检查是否已注册
-        // 3. 检查请求频率（60秒内不能重复发送）
-        // 4. 生成 6 位数字验证码
-        // 5. 保存验证码到 Redis（10分钟过期）
-        // 6. 通过 Email Service 发送验证码
-
-        return Result.success();
+    public Result<Void> sendVerificationCode(@Valid @RequestBody SendVerificationCodeRequest request) {
+        return authService.sendVerificationCode(request);
     }
 
     /**
@@ -232,15 +171,9 @@ public class AuthController {
 
         // 验证两次密码是否一致
         if (!newPassword.equals(confirmPassword)) {
-            return Result.error(400, "Passwords do not match");
+            return Result.fail(400, "Passwords do not match");
         }
 
-        // TODO: 实现真实的密码重置逻辑
-        // 1. 验证验证码是否正确且未过期
-        // 2. 对新密码进行加密
-        // 3. 更新数据库中的用户密码
-        // 4. 清除该用户保存的 "记住我" 信息
-
-        return Result.success();
+        return authService.resetPassword(email, verificationCode, newPassword);
     }
 }

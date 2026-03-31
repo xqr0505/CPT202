@@ -14,8 +14,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 访问拒绝处理器 - 返回 403 Forbidden
- * 当用户已认证但无权限访问资源时触发
  * @author DanyiHuang
  * @date 2026/3/29
  */

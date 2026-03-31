@@ -182,13 +182,152 @@ Use Spring Security's `@PreAuthorize` annotation directly on your Controller met
 public Result<ScheduleVO> getSchedule() {  }
 ```
 
-> **// TODO: [Module 1] Please complete the documentation below once implemented:**
->
-> ### Security Infrastructure Details (For internal reference)
-> *   **JWT Generation & Parsing:** Detailed logic is implemented in `common/utils/JwtUtils.java`. (Add note on expiration time and secret key location).
-> *   **Authentication Filter:** `common/security/JwtAuthenticationFilter.java` is responsible for intercepting requests, extracting the token from the `Authorization` header, validating it, and injecting the user details into the `SecurityContextHolder`.
-> *   **Security Configuration:** `common/config/SecurityConfig.java` defines public endpoints (e.g., Swagger, `/auth/login`) and configures the password encoder (`BCrypt`).
-> *   **Exception Handlers:** `EntryPoint` and `AccessDeniedHandler` are configured to catch 401/403 errors and return our standard `Result` JSON format.
+### Security Infrastructure Details (For internal reference)
+
+#### 1. JWT Generation & Parsing (`JwtUtils`)
+*   Uses **JJWT** to generate and parse JWT tokens.
+*   **Claims:**  
+    * `userId` (Long)  
+    * `role` (String)
+*   **Signing Algorithm:** HMAC-SHA with a secret key.
+*   **Expiration:** 30 minutes (`1000 * 60 * 30` ms).
+*   **Secret Key:**
+    * Configured via `jwt.secret` in `application-dev*.yml`
+    * Must be **≥ 32 characters**
+    * Initialized in `JwtConfig` via `@PostConstruct`
+
+**Core Methods:**
+*   `parseToken()` → validates signature & extracts claims  
+*   `validateToken()` → checks validity & expiration  
+*   `getExpirationTime()` → returns expiry timestamp  
+
+**Example Usage:**
+```java
+// Generate token (in AuthService after login)
+String token = JwtUtils.generateToken(userId, role);
+
+// Parse token (in filter)
+Claims claims = JwtUtils.parseToken(token);
+Long userId = claims.get("userId", Long.class);
+String role = claims.get("role", String.class);
+```
+
+---
+
+#### 2. Authentication Filter (`JwtAuthenticationFilter`)
+Handles request-level authentication.
+
+**Workflow:**
+1. Extracts token from `Authorization` header (`Bearer <token>`)
+2. Parses token via `JwtUtils`
+3. Retrieves `userId` and `role`
+4. Creates `UsernamePasswordAuthenticationToken`
+5. Stores authentication in `SecurityContextHolder`
+6. Stores user context in `UserContextHolder` (for service access)
+7. Clears context after request (prevents leakage)
+
+**Error Handling:**
+* Invalid/expired token → treated as unauthenticated
+* Exceptions are caught and logged (debug level)
+
+**Key Code Snippet:**
+```java
+// In doFilterInternal()
+String authHeader = request.getHeader("Authorization");
+if (authHeader != null && authHeader.startsWith("Bearer ")) {
+    String token = authHeader.substring(7);
+    Claims claims = JwtUtils.parseToken(token);
+    Long userId = claims.get("userId", Long.class);
+    String role = claims.get("role", String.class);
+    
+    UsernamePasswordAuthenticationToken auth = 
+        new UsernamePasswordAuthenticationToken(userId, null, null);
+    SecurityContextHolder.getContext().setAuthentication(auth);
+    
+    UserContextHolder.setUserId(userId);
+    UserContextHolder.setRole(role);
+}
+```
+
+---
+
+#### 3. Security Configuration (`SecurityConfig`)
+Defines global security behavior.
+
+*   **Stateless Session:** `SessionCreationPolicy.STATELESS`
+*   **Disabled:**
+    * CSRF
+    * Form Login
+    * HTTP Basic
+*   **Filter Chain:**
+    * `JwtAuthenticationFilter` runs **before** `UsernamePasswordAuthenticationFilter`
+
+**Public Endpoints (permitAll):**
+* Swagger (`/doc.html`, `/v3/api-docs/**`, etc.)
+* Auth APIs:
+    * `/auth/login`
+    * `/auth/register`
+    * `/auth/logout`
+    * `/auth/verify-email`
+    * `/auth/reset-password`
+
+All other endpoints require authentication.
+
+**Configuration Example:**
+```java
+// In SecurityConfig.securityFilterChain()
+http
+    .csrf(csrf -> csrf.disable())
+    .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+    .authorizeHttpRequests(auth -> auth
+        .requestMatchers("/doc.html", "/v3/api-docs/**", "/auth/**").permitAll()
+        .anyRequest().authenticated()
+    )
+    .addFilterBefore(new JwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+    .exceptionHandling(exception -> exception
+        .authenticationEntryPoint(new RestAuthenticationEntryPoint())
+        .accessDeniedHandler(new RestAccessDeniedHandler())
+    );
+```
+
+---
+
+#### 4. Exception Handling (401 / 403)
+
+**AuthenticationEntryPoint (`RestAuthenticationEntryPoint`)**
+* Handles **401 Unauthorized**
+* Triggered when:
+    * Token missing
+    * Token invalid/expired
+* Returns standard `Result` JSON
+
+**AccessDeniedHandler (`RestAccessDeniedHandler`)**
+* Handles **403 Forbidden**
+* Triggered when:
+    * Authenticated but insufficient role/permission
+* Returns standard `Result` JSON
+
+**Response Format:**
+* Serialized via `ObjectMapper`
+* Unified structure: `Result<T>`
+* Correct HTTP status + `application/json`
+
+**Example Response:**
+```json
+// 401 Unauthorized
+{
+  "code": 401,
+  "message": "Unauthorized: Invalid token",
+  "data": null
+}
+
+// 403 Forbidden
+{
+  "code": 403,
+  "message": "Access Denied: Insufficient permissions",
+  "data": null
+}
+```
 
 ---
 

@@ -14,13 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * JWT 认证过滤器 - 在每个请求前执行
- * 
- * 工作流程：
- * 1. 从请求头获取 Authorization Token
- * 2. 验证并解析 Token
- * 3. 将用户信息放入 SecurityContext 和 UserContextHolder
- * 4. 放行请求到下一个过滤器
+ * JWT Authentication Filter - Executes before each request
  * 
  * @author DanyiHuang
  * @date 2026/3/29

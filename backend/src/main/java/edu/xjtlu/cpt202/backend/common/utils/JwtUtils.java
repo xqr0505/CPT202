@@ -8,15 +8,7 @@ import io.jsonwebtoken.security.Keys;
 import javax.crypto.SecretKey;
 import java.util.Date;
 /**
- * JWT 工具类 - 负责 Token 的生成和解析
- * 
- * 秘钥配置：
- * - 开发环境：application-dev.yml 中配置
- * - 生产环境：application-prod.yml 中配置（秘钥最少 32 字符）
- * - 本地开发：application-local.yml 中配置（不上传 Git）
- * 
- * 秘钥生成建议：
- * String key = Base64.getEncoder().encodeToString(new byte[32]); // 256-bit key
+ * JWT - generation and parsing of Tokens
  * 
  * @author DanyiHuang
  * @date 2026/3/29
@@ -36,7 +28,7 @@ public class JwtUtils {
     }
 
     /**
-     * 生成 JWT Token
+     * generate JWT Token
      */
     public static String generateToken(Long userId, String role) {
         if (KEY == null) {
@@ -53,7 +45,7 @@ public class JwtUtils {
     }
 
     /**
-     * 解析 JWT Token
+     * parsing JWT Token
      */
     public static Claims parseToken(String token) {
         if (KEY == null) {
@@ -67,7 +59,7 @@ public class JwtUtils {
     }
 
     /**
-     * 验证 Token 是否有效
+     * validate Token is valid
      */
     public static boolean validateToken(String token) {
         try {

@@ -14,8 +14,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 未认证请求入口 - 返回 401 Unauthorized
- * 当用户未登录或 Token 无效时触发
  * @author DanyiHuang
  * @date 2026/3/29
  */

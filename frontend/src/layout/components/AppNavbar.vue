@@ -6,7 +6,7 @@
       </button>
 
       <div class="navbar-left" @click="goHome">
-        <div class="logo-mark" aria-hidden="true">EL</div>
+        <img src="@/assets/images/ELicon.png" class="logo-mark" alt="Logo" />
         <span class="system-name">ExpertLink</span>
       </div>
 
@@ -47,7 +47,7 @@
       :with-header="false"
     >
       <div class="drawer-header" @click="goHome">
-        <div class="logo-mark" aria-hidden="true">EL</div>
+        <img src="@/assets/images/ELicon.png" class="logo-mark" alt="Logo" />
         <span class="system-name-dark">ExpertLink</span>
       </div>
       <el-menu
@@ -105,9 +105,9 @@ const activeMenu = computed<string>(() => {
   const isMatch = currentMenus.value.some(m => path.startsWith(m.path))
   if (isMatch) {
     const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
-    return matchedMenu ? matchedMenu.path : currentMenus.value[0].path
+    return matchedMenu ? matchedMenu.path : (currentMenus.value[0] ? currentMenus.value[0].path : '/')
   }
-  return currentMenus.value[0]?.path || '/'
+  return currentMenus.value[0] ? currentMenus.value[0].path : '/'
 })
 
 const displayName = computed<string>(() => {
@@ -131,7 +131,8 @@ const handleMobileMenuSelect = (path: string): void => {
 
 const goHome = (): void => {
   isMobileMenuOpen.value = false
-  router.push(currentMenus.value[0]?.path || '/')
+  const fallback = (currentMenus.value && currentMenus.value[0] && currentMenus.value[0].path) ? currentMenus.value[0].path : '/'
+  router.push(fallback)
 }
 
 const handleDropdownCommand = async (command: DropdownCommand): Promise<void> => {
@@ -148,32 +149,49 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
 <style scoped lang="scss">
 .app-navbar {
   position: sticky;
-  top: 0;
+  top: var(--space-4);
   z-index: 100;
-  height: var(--navbar-height);
-  background: var(--color-primary);
-  border-bottom: none;
+  height: auto;
+  padding: 0 var(--space-4);
+  margin-bottom: var(--space-4);
+  background: transparent;
 }
 
 .navbar-inner {
   max-width: var(--content-max-width);
-  height: 100%;
+  height: var(--navbar-height);
   margin: 0 auto;
   padding: 0 var(--space-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 16px var(--color-shadow);
+  backdrop-filter: blur(8px);
+  transition: all var(--transition-base);
+}
+
+.navbar-inner:hover {
+  box-shadow: 0 6px 24px var(--color-shadow);
 }
 
 .mobile-toggler {
   display: none;
   background: transparent;
   border: none;
-  color: var(--color-text-inverse);
+  color: var(--color-text-primary);
   cursor: pointer;
-  padding: 8px;
-  margin-left: -8px;
+  padding: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.mobile-toggler:hover {
+  background: var(--color-bg-muted);
 }
 
 .navbar-left {
@@ -181,26 +199,26 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  color: var(--color-text-inverse);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .logo-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-surface);
-  color: var(--color-primary);
-  font-weight: 700;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  transition: transform var(--transition-base);
+}
+
+.navbar-left:hover .logo-mark {
+  transform: scale(1.08) rotate(-5deg);
 }
 
 .system-name {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 19px;
+  font-weight: 800;
   white-space: nowrap;
+  letter-spacing: -0.5px;
 }
 
 .navbar-menu {
@@ -209,37 +227,52 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   border-bottom: none !important;
   justify-content: center;
   background: transparent;
-
-  --el-menu-bg-color: transparent;
-  --el-menu-text-color: var(--color-text-inverse-muted);
-  --el-menu-hover-text-color: var(--color-text-inverse);
-  --el-menu-hover-bg-color: var(--color-overlay-inverse);
-  --el-menu-active-color: var(--color-text-inverse);
 }
 
-:deep(.el-menu-item.is-active) {
-  border-bottom-color: var(--color-text-inverse) !important;
+/* Style menu items explicitly to avoid linter warnings about unknown element-plus vars */
+:deep(.navbar-menu .el-menu-item) {
+  height: calc(var(--navbar-height) - var(--space-4));
+  line-height: calc(var(--navbar-height) - var(--space-4));
+  margin: var(--space-2) var(--space-1);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  border-bottom: none !important;
+  transition: all var(--transition-fast);
 }
 
-.navbar-right {
-  min-width: 220px;
-  display: flex;
-  justify-content: flex-end;
+:deep(.navbar-menu .el-menu-item:hover) {
+  background: var(--color-bg-muted);
+  color: var(--color-text-primary);
+  transform: translateY(-1px);
+}
+
+:deep(.navbar-menu .el-menu-item.is-active) {
+  background: var(--color-primary-soft) !important;
+  color: var(--color-text-inverse) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px var(--color-shadow);
 }
 
 .user-trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--color-text-inverse);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border-radius: var(--radius-xl);
   cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.user-trigger:hover {
+  background: var(--color-bg-muted);
+  border-color: var(--color-border);
 }
 
 .user-name {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 500;
+  color: var(--color-text-primary);
 }
 
 .drawer-header {
@@ -248,13 +281,14 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
   gap: var(--space-3);
   padding: var(--space-4);
   margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
   cursor: pointer;
 }
 
 .system-name-dark {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-primary);
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--color-text-secondary);
 }
 
 .mobile-menu {

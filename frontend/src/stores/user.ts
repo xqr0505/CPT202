@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { logout as apiLogout } from '@/api/auth'
+import { fetchUserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
 export interface UserInfo {
@@ -46,6 +47,21 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+
+  const fetchAndSetUserProfile = async () => {
+    try {
+      const user = await fetchUserProfile()
+      setUserInfo(
+        { id: user.id, username: user.username, nickname: user.nickname },
+        user.role as UserRole
+      )
+      return user
+    } catch (e) {
+      console.error('Failed to fetch user profile', e)
+      throw e
+    }
+  }
+
   return {
     token,
     userInfo,
@@ -55,6 +71,7 @@ export const useUserStore = defineStore('user', () => {
     isSpecialist,
     setToken,
     setUserInfo,
-    logout
+    logout,
+    fetchAndSetUserProfile
   }
 })

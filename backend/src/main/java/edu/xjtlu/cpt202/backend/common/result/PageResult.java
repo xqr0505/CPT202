@@ -18,10 +18,6 @@ public class PageResult<T> implements Serializable {
 
     private long total;
 
-    private List<T> records;
-
-    private int pageNum;
-
-    private int pageSize;
+    private List<T> list;
 
 }

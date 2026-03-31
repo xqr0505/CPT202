@@ -17,19 +17,13 @@ import { onMounted } from 'vue'
 import AppNavbar from './components/AppNavbar.vue'
 import AppFooter from './components/AppFooter.vue'
 import { useUserStore } from '@/stores/user'
-import { fetchUserProfile } from '@/api/user'
 
 const userStore = useUserStore()
 
 onMounted(async () => {
-  // TODO: Replace with real API call to fetch user profile
   if (!userStore.userInfo) {
     try {
-      const user = await fetchUserProfile()
-      userStore.setUserInfo(
-        { id: user.id, username: user.username, nickname: user.nickname },
-        user.role as 'customer' | 'specialist' | 'admin'
-      )
+      await userStore.fetchAndSetUserProfile()
     } catch (e) {
       console.error(e)
     }

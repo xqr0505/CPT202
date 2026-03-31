@@ -27,7 +27,23 @@ const routes = [
       { path: 'profile', component: () => import('../views/customer/Profile.vue') }
     ]
   },
-  // Keep root redirect to customer search for convenience
+  {
+    path: '/error',
+    children: [
+      { path: '403', component: () => import('../views/error/Forbidden.vue') },
+      { path: '404', component: () => import('../views/error/NotFound.vue') },
+      { path: '500', component: () => import('../views/error/ServerError.vue') },
+      { path: 'global', component: () => import('../views/error/GlobalError.vue') }
+    ]
+  },
+  {
+    path: '/dev',
+    component: () => import('../views/dev/DevDemo.vue')
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/error/404'
+  },
   {
     path: '/',
     redirect: '/customer/search'

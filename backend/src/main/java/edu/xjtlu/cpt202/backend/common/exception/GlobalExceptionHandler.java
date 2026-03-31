@@ -6,6 +6,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 /**
@@ -31,6 +33,11 @@ public class GlobalExceptionHandler {
             message = ResultCodeEnum.PARAM_ERROR.getMessage();
         }
         return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), message);
+    }
+
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public Result<Void> handleNotFoundException(Exception e) {
+        return Result.fail(ResultCodeEnum.NOT_FOUND.getCode(), ResultCodeEnum.NOT_FOUND.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

@@ -1,4 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import {
+  applySavedThemePreference,
+  isStoredUserAccountDeactivated
+} from '@/api/user'
 
 const routes = [
   {
@@ -24,7 +28,26 @@ const routes = [
       { path: 'specialists', component: () => import('../views/customer/SpecialistSearch.vue') },
       { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
       { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
-      { path: 'profile', component: () => import('../views/customer/Profile.vue') }
+      {
+        path: 'profile',
+        component: () => import('../views/customer/Profile.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'profile/edit',
+        component: () => import('../views/customer/ProfileEdit.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'profile/password',
+        component: () => import('../views/customer/ChangePassword.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'profile/style-settings',
+        component: () => import('../views/customer/StyleSettings.vue'),
+        meta: { requiresAuth: true }
+      }
     ]
   },
   {
@@ -53,6 +76,41 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+})
+
+router.beforeEach(to => {
+  applySavedThemePreference()
+
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const isDeactivated = isStoredUserAccountDeactivated()
+
+  if (requiresAuth && isDeactivated) {
+    localStorage.removeItem('token')
+
+    return {
+      path: '/auth/login',
+      query: {
+        reason: 'deactivated'
+      }
+    }
+  }
+
+  if (!requiresAuth) {
+    return true
+  }
+
+  const token = localStorage.getItem('token')
+
+  if (token) {
+    return true
+  }
+
+  return {
+    path: '/auth/login',
+    query: {
+      redirect: to.fullPath
+    }
+  }
 })
 
 export default router

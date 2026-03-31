@@ -73,7 +73,7 @@ export const logout = () => {
 };
 
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8081',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json;charset=UTF-8'

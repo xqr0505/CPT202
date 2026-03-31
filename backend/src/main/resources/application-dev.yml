@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/cpt202_consultancy?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3306/cpt202_consultancy?useUnicode=true&characterEncoding=utf8&serverTimezone=GMT%2B8
     username: root
     password: 123456 # Your password
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -9,19 +9,18 @@ spring:
     restart:
       enabled: true
 
-# JWT 秘钥配置（开发环境）
-# 秘钥长度必须 >= 32 字符（256 位）
+# JWT config
 jwt:
   secret: dev-secret-key-with-at-least-32-characters
 
-# API 文档
+# API 
 springdoc:
   api-docs:
     enabled: true
   swagger-ui:
     enabled: true
 
-# 日志
+# log
 logging:
   level:
     root: INFO

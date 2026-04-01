@@ -1,12 +1,14 @@
 <template>
   <section class="page-card">
     <p class="page-tag">Customer</p>
-    <h1>Dashboard (placeholder)</h1>
-    <p>This page is intentionally left empty as a placeholder for the Dashboard.</p>
+    <h1>Dashboard</h1>
+    <UpcomingAppointments />
   </section>
 </template>
 
 <script setup lang="ts">
+import UpcomingAppointments from './dashboard/UpcomingAppointments.vue'
+
 defineOptions({ name: 'CustomerDashboard' })
 </script>
 

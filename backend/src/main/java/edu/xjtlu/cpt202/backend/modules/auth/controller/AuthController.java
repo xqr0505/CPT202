@@ -1,0 +1,40 @@
+package edu.xjtlu.cpt202.backend.modules.auth.controller;
+
+import edu.xjtlu.cpt202.backend.common.result.Result;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class AuthController {
+
+    private final AuthService authService;
+
+    @Autowired
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @PostMapping("/auth/verify-email")
+    public Result<Void> sendVerificationCode(@Valid @RequestBody SendVerificationCodeRequest request) {
+        authService.sendVerificationCode(request);
+        return Result.success();
+    }
+
+    @PostMapping("/auth/register")
+    public Result<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return Result.success(authService.register(request));
+    }
+
+    @PostMapping("/auth/login")
+    public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        return Result.success(authService.login(request));
+    }
+}

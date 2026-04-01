@@ -1,11 +1,11 @@
 <template>
   <div class="login-container">
     <div class="login-form-card">
-      <h1 class="login-title">预约平台登录</h1>
+      <h1 class="login-title">Reservation System Login</h1>
       
-      <!-- 角色选择 -->
+      <!-- Role selection -->
       <div class="form-group">
-        <label>选择身份</label>
+        <label>Select role</label>
         <div class="role-selector">
           <button 
             v-for="roleOption in roles"
@@ -19,25 +19,25 @@
         <span v-if="errors.role" class="error-text">{{ errors.role }}</span>
       </div>
 
-      <!-- 邮箱输入 -->
+      <!-- Email input -->
       <div class="form-group">
-        <label>邮箱地址</label>
+        <label>Email address</label>
         <input 
           v-model="form.email"
           type="email"
-          placeholder="请输入邮箱地址"
+          placeholder="Enter your email"
           @blur="validateEmail"
         />
         <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
       </div>
 
-      <!-- 密码输入 -->
+      <!-- Password input -->
       <div class="form-group">
-        <label>密码</label>
+        <label>Password</label>
         <input 
           v-model="form.password"
           type="password"
-          placeholder="请输入密码"
+          placeholder="Enter your password"
         />
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
@@ -53,8 +53,8 @@
 
       <!-- 底部链接 -->
       <div class="footer-links">
-        <router-link to="/register">没有账户？立即注册</router-link>
-        <router-link to="/forgot-password">忘记密码？</router-link>
+        <router-link to="/register">No account? Register</router-link>
+        <router-link to="/forgot-password">Forgot password?</router-link>
       </div>
     </div>
   </div>
@@ -73,9 +73,9 @@ const isLoading = ref(false);
 
 // 角色选项
 const roles = [
-  { label: '顾客', value: 'CUSTOMER' },
-  { label: '专家', value: 'SPECIALIST' },
-  { label: '管理员', value: 'ADMIN' }
+  { label: 'CUSTOMER', value: 'CUSTOMER' },
+  { label: 'SPECIALIST', value: 'SPECIALIST' },
+  { label: 'ADMIN', value: 'ADMIN' }
 ];
 
 // 表单数据
@@ -139,11 +139,12 @@ async function handleLogin() {
     ElMessage.success('Login successful');
 
     // 重定向到对应的首页（可根据角色区分）
-    const dashboardRoute = {
-      'CUSTOMER': '/customer/dashboard',
-      'SPECIALIST': '/specialist/dashboard',
-      'ADMIN': '/admin/dashboard'
-    }[form.role];
+    let dashboardRoute = '/customer/dashboard';
+    if (form.role === 'SPECIALIST') {
+      dashboardRoute = '/specialist/dashboard';
+    } else if (form.role === 'ADMIN') {
+      dashboardRoute = '/admin/dashboard';
+    }
 
     setTimeout(() => {
       router.push(dashboardRoute);

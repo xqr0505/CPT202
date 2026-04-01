@@ -1,133 +1,128 @@
 <template>
-  <section class="upcoming-appointments">
-    <div class="header">
+  <div class="upcoming-appointments">
+    <div class="header-section">
       <h2 class="title">Upcoming Appointment</h2>
-      <el-link
-        v-if="hasMoreAppointments"
+      <CustomButton
+        v-if="hasMore"
         type="primary"
+        @click="goToBookings"
         class="view-all-link"
-        @click="goToMyBookings"
       >
         View All
-      </el-link>
+      </CustomButton>
     </div>
 
-    <div v-if="loading" v-loading="loading" class="loading-area"></div>
+    <div v-if="loading" class="loading-state">
+      <el-skeleton :rows="3" animated />
+    </div>
 
-    <template v-else>
-      <div v-if="displayList.length > 0" class="appointment-list">
-        <el-card
-          v-for="appointment in displayList"
-          :key="appointment.id"
-          class="appointment-card"
-          shadow="hover"
-          :class="{ 'is-today': isToday(appointment.startTime) }"
-        >
-          <div class="card-header">
+    <div v-else-if="filteredAppointments.length > 0" class="appointment-list">
+      <div
+        v-for="apt in displayedAppointments"
+        :key="apt.id"
+        class="appointment-card"
+        :class="{ 'is-today': isToday(apt.startTime) }"
+      >
+        <div class="card-left">
+          <div class="date-box">
+            <span class="month">{{ getMonth(apt.startTime) }}</span>
+            <span class="day">{{ getDay(apt.startTime) }}</span>
+          </div>
+          <div class="info-content">
             <div class="expert-info">
-              <span class="expert-name">{{ appointment.specialistName }}</span>
-              <el-tag v-if="isToday(appointment.startTime)" type="warning" size="small" effect="dark" class="today-tag">
+              <span class="expert-name">{{ apt.specialistName }}</span>
+              <el-tag
+                v-if="isToday(apt.startTime)"
+                size="small"
+                type="success"
+                effect="light"
+                class="today-tag"
+              >
                 Today
               </el-tag>
             </div>
-            <!-- BookingStatusTag component not available yet, using text instead -->
-            <span class="status-text">{{ appointment.status }}</span>
+            <div class="service-name">{{ apt.specialistTitle || 'Service' }}</div>
           </div>
-
-          <div class="card-body">
-            <div class="info-row">
-              <el-icon><Service /></el-icon>
-              <span class="service-name">{{ appointment.specialistTitle }}</span>
-            </div>
-            <div class="info-row time-info">
-              <el-icon><Calendar /></el-icon>
-              <span class="date">{{ formatDate(appointment.startTime) }}</span>
-              <el-icon class="time-icon"><Clock /></el-icon>
-              <span class="time">{{ formatTime(appointment.startTime) }}</span>
-            </div>
+        </div>
+        <div class="card-right">
+          <div class="time-block">
+            <el-icon><Clock /></el-icon>
+            <span>{{ formatTime(apt.startTime) }}</span>
           </div>
-        </el-card>
+        </div>
       </div>
+    </div>
 
-      <empty-placeholder
-        v-else
-        description="You don't have an upcoming appointment."
-        :image-size="120"
-      />
-    </template>
-  </section>
+    <EmptyPlaceholder
+      v-else
+      description="You don't have an upcoming appointment."
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Calendar, Clock, Service } from '@element-plus/icons-vue'
-import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
-import { BOOKING_STATUS } from '@/constants/booking'
-import type { UpcomingBookingResponse } from '@/api/booking'
+import { Clock } from '@element-plus/icons-vue'
 import { getUpcomingBookings } from '@/api/booking'
+import type { UpcomingBookingResponse } from '@/api/booking'
+import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
+import CustomButton from '@/components/common/CustomButton.vue'
 
 const router = useRouter()
+const loading = ref(true)
 const appointments = ref<UpcomingBookingResponse[]>([])
-const loading = ref<boolean>(false)
-
-const DISPLAY_LIMIT = 3
-
-const validAppointments = computed(() => {
-  const now = new Date()
-
-  return appointments.value
-    .filter(app => app.status === BOOKING_STATUS.CONFIRMED)
-    .filter(app => {
-      const appointmentTime = new Date(app.startTime)
-      return appointmentTime > now
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.startTime)
-      const timeB = new Date(b.startTime)
-      return timeA.getTime() - timeB.getTime()
-    })
-})
-
-const displayList = computed(() => {
-  return validAppointments.value.slice(0, DISPLAY_LIMIT)
-})
-
-const hasMoreAppointments = computed(() => {
-  return validAppointments.value.length > DISPLAY_LIMIT
-})
-
-const isToday = (dateTimeStr: string): boolean => {
-  const appointmentDate = new Date(dateTimeStr)
-  const today = new Date()
-  return appointmentDate.toDateString() === today.toDateString()
-}
-
-const goToMyBookings = (): void => {
-  // TODO: Implement navigation to customer bookings
-  router.push({ name: 'CustomerBookings' })
-}
 
 const fetchAppointments = async () => {
   loading.value = true
   try {
     const res = await getUpcomingBookings()
-    appointments.value = res
+    appointments.value = res.data || []
   } catch (error) {
     console.error('Failed to fetch upcoming appointments:', error)
+    appointments.value = []
   } finally {
     loading.value = false
   }
 }
 
-const formatDate = (dateTimeStr: string): string => {
-  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
-  return new Intl.DateTimeFormat('en-US', options).format(new Date(dateTimeStr))
+const filteredAppointments = computed(() => {
+  const now = new Date()
+  return appointments.value
+    .filter(apt => apt.status === 'Confirmed' && new Date(apt.startTime) > now)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+})
+
+const displayedAppointments = computed(() => {
+  return filteredAppointments.value.slice(0, 3)
+})
+
+const hasMore = computed(() => {
+  return filteredAppointments.value.length > 3
+})
+
+const goToBookings = () => {
+  router.push('/customer/bookings')
 }
 
-const formatTime = (dateTimeStr: string): string => {
-  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false }
-  return new Intl.DateTimeFormat('en-US', options).format(new Date(dateTimeStr))
+const isToday = (dateString: string) => {
+  const date = new Date(dateString)
+  const today = new Date()
+  return date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+}
+
+const formatTime = (dateString: string) => {
+  return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+const getMonth = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString([], { month: 'short' })
+}
+
+const getDay = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString([], { day: '2-digit' })
 }
 
 onMounted(() => {
@@ -136,104 +131,130 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables';
+@use '@/styles/variables' as *;
 
 .upcoming-appointments {
-  background-color: var(--color-bg-surface, #ffffff);
-  border-radius: var(--radius-lg, 8px);
-  padding: var(--space-16, 16px);
-  box-shadow: 0 2px 8px var(--color-shadow, rgba(0, 0, 0, 0.05));
+  margin-bottom: var(--space-6);
 
-  .header {
+  .header-section {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--space-16, 16px);
+    margin-bottom: var(--space-4);
 
     .title {
-      font-size: var(--font-size-lg, 18px);
+      font-size: 20px;
       font-weight: 600;
-      color: var(--color-text-primary, #303133);
+      color: var(--color-text-primary);
       margin: 0;
     }
-
-    .view-all-link {
-      font-size: var(--font-size-sm, 14px);
-    }
-  }
-
-  .loading-area {
-    min-height: 200px;
   }
 
   .appointment-list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-12, 12px);
+    gap: var(--space-3);
+  }
 
-    .appointment-card {
-      border-radius: var(--radius-md, 6px);
-      border: 1px solid var(--color-border, #dcdfe6);
-      transition: all var(--transition-base, 0.3s);
+  .appointment-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px; /* Standard border-radius is missing variable mapped directly in snapshot, using 8px */
+    transition: all 0.3s;
 
-      &.is-today {
-        background-color: var(--color-warning-light, #fdf6ec);
-        border-color: var(--color-warning, #e6a23c);
+    &:hover {
+      box-shadow: 0 4px 12px var(--color-shadow);
+      border-color: var(--color-primary-soft);
+    }
+
+    &.is-today {
+      background-color: var(--color-primary-soft); /* Highlight color */
+      color: var(--color-text-inverse); /* Let's assume white */
+      border-color: var(--color-primary);
+
+      .date-box {
+        background-color: var(--color-bg-surface);
+        color: var(--color-primary);
       }
 
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid var(--color-border-light, #ebeef5);
-        padding-bottom: var(--space-8, 8px);
-        margin-bottom: var(--space-8, 8px);
-
-        .expert-info {
-          display: flex;
-          align-items: center;
-          gap: var(--space-8, 8px);
-
-          .expert-name {
-            font-size: var(--font-size-md, 16px);
-            font-weight: 600;
-            color: var(--color-text-primary, #303133);
-          }
-
-          .today-tag {
-            font-weight: bold;
-          }
-        }
-
-        .status-text {
-          font-size: var(--font-size-sm, 14px);
-          color: var(--color-text-regular, #606266);
-        }
+      .expert-name,
+      .service-name {
+        color: var(--color-bg-surface);
       }
 
-      .card-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-8, 8px);
-
-        .info-row {
-          display: flex;
-          align-items: center;
-          gap: var(--space-8, 8px);
-          font-size: var(--font-size-sm, 14px);
-          color: var(--color-text-regular, #606266);
-
-          .service-name {
-            font-weight: 500;
-          }
-
-          .time-icon {
-            margin-left: var(--space-8, 8px);
-          }
-        }
+      .time-block {
+        color: var(--color-bg-surface);
       }
+    }
+  }
+
+  .card-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .date-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    background-color: var(--color-bg-page);
+    border-radius: 8px;
+    color: var(--color-primary);
+
+    .month {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .day {
+      font-size: 20px;
+      font-weight: 700;
+    }
+  }
+
+  .info-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+
+    .expert-info {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .expert-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .service-name {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+  }
+
+  .card-right {
+    display: flex;
+    align-items: center;
+
+    .time-block {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
     }
   }
 }
 </style>
-

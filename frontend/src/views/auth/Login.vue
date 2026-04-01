@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { login, type LoginPayload } from '@/api/auth';
@@ -70,6 +70,12 @@ defineOptions({ name: 'AuthLogin' });
 
 const router = useRouter();
 const isLoading = ref(false);
+
+onMounted(() => {
+  if (import.meta.env.DEV) {
+    router.replace('/specialist/schedule');
+  }
+});
 
 // 角色选项
 const roles = [
@@ -139,14 +145,15 @@ async function handleLogin() {
     ElMessage.success('Login successful');
 
     // 重定向到对应的首页（可根据角色区分）
-    const dashboardRoute = {
+    const dashboardRoute: Record<string, string> = {
       'CUSTOMER': '/customer/dashboard',
-      'SPECIALIST': '/specialist/dashboard',
-      'ADMIN': '/admin/dashboard'
-    }[form.role];
+      'SPECIALIST': '/specialist/schedule',
+      'ADMIN': '/admin/specialists'
+    };
+    const targetRoute = dashboardRoute[form.role] || '/customer/dashboard';
 
     setTimeout(() => {
-      router.push(dashboardRoute);
+      router.push(targetRoute);
     }, 500);
   } catch (error: any) {
     console.error('Login error:', error);
@@ -281,4 +288,3 @@ async function handleLogin() {
   color: #5568d3;
 }
 </style>
-

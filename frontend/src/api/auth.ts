@@ -65,7 +65,7 @@ export interface SendVerificationCodePayload {
  * console.log(response.token);
  */
 export function login(payload: LoginPayload, rememberMe: boolean = false): Promise<LoginResponse> {
-  return request.post('/auth/login', payload).then(res => {
+  return request.post<any, LoginResponse>('/auth/login', payload).then(res => {
     // 保存 Token 到本地存储
     saveToken(res.token, rememberMe);
     
@@ -96,7 +96,7 @@ export function login(payload: LoginPayload, rememberMe: boolean = false): Promi
  * });
  */
 export function register(payload: RegisterPayload): Promise<LoginResponse> {
-  return request.post('/auth/register', payload).then(res => {
+  return request.post<any, LoginResponse>('/auth/register', payload).then(res => {
     // 注册成功后自动登录
     saveToken(res.token, false);
     saveUser({
@@ -176,4 +176,3 @@ export function resetPassword(
     }
   });
 }
-

@@ -5,7 +5,7 @@ const routes = [
     path: '/auth',
     component: () => import('../layout/AuthLayout.vue'),
     children: [
-      { name: 'Login', path: 'login', component: () => import('../views/auth/Login.vue') }
+      { path: 'login', name: 'Login', component: () => import('../views/auth/Login.vue') }
     ]
   },
   {
@@ -14,6 +14,15 @@ const routes = [
     meta: { requiresAuth: true, role: 'ADMIN' },
     children: [
       { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') }
+    ]
+  },
+  {
+    path: '/specialist',
+    component: () => import('../layout/SpecialistLayout.vue'),
+    meta: { requiresAuth: true, role: 'SPECIALIST' },
+    children: [
+      { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
+      { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') }
     ]
   },
   {

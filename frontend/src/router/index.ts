@@ -30,10 +30,22 @@ const routes = [
     component: () => import('../layout/DefaultLayout.vue'),
     children: [
       { path: 'search', component: () => import('../views/customer/SpecialistSearch.vue') },
-      { path: 'specialists', component: () => import('../views/customer/SpecialistSearch.vue') },
+      {
+        name: 'CustomerSpecialists',
+        path: 'specialists',
+        component: () => import('../views/customer/SpecialistSearch.vue')
+      },
+      {
+        name: 'CustomerSpecialistDetail',
+        path: 'specialists/:id',
+        component: () => import('../views/customer/SpecialistDetail.vue')
+      },
       { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
       { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
-      { path: 'profile', component: () => import('../views/customer/Profile.vue') }
+      { path: 'profile', component: () => import('../views/customer/Profile.vue') },
+      { path: 'profile/edit', component: () => import('../views/customer/ProfileEdit.vue') },
+      { path: 'profile/password', component: () => import('../views/customer/ChangePassword.vue') },
+      { path: 'profile/style-settings', component: () => import('../views/customer/StyleSettings.vue') }
     ]
   },
   {

@@ -24,7 +24,7 @@
 
       <div class="navbar-right">
         <el-dropdown trigger="click" @command="handleDropdownCommand">
-          <span class="user-trigger">
+          <span class="user-trigger" :class="{ 'is-active': route.path.includes('/profile') }">
             <el-avatar :src="avatarSrc" :size="34">{{ userInitial }}</el-avatar>
             <span class="user-name desktop-only">{{ displayName }}</span>
           </span>
@@ -102,12 +102,11 @@ const currentMenus = computed(() => {
 
 const activeMenu = computed<string>(() => {
   const path: string = route.path
-  const isMatch = currentMenus.value.some(m => path.startsWith(m.path))
-  if (isMatch) {
-    const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
-    return matchedMenu ? matchedMenu.path : (currentMenus.value[0] ? currentMenus.value[0].path : '/')
+  const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
+  if (matchedMenu) {
+    return matchedMenu.path
   }
-  return currentMenus.value[0] ? currentMenus.value[0].path : '/'
+  return ''
 })
 
 const displayName = computed<string>(() => {
@@ -268,6 +267,15 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
 .user-trigger:hover {
   background: var(--color-bg-muted);
   border-color: var(--color-border);
+}
+
+.user-trigger.is-active {
+  background: var(--color-primary-soft);
+  color: var(--color-text-inverse);
+  box-shadow: 0 2px 8px var(--color-shadow);
+}
+.user-trigger.is-active .user-name {
+  color: var(--color-text-inverse);
 }
 
 .user-name {

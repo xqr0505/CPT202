@@ -1,4 +1,4 @@
-package edu.xjtlu.cpt202.backend.modules.booking.model.entity;
+package edu.xjtlu.cpt202.backend.modules.user.model.entity;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+
 /**
  * @author QiranXiao
  * @date 2026/4/1
@@ -20,26 +21,19 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("bookings")
-public class Booking {
+@TableName("specialist_profiles")
+public class SpecialistProfile {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long customerId;
-    private Long specialistId;
-    private Long slotId;
+    private Long userId;
+    private Long categoryId;
+    private String level;
+    private BigDecimal consultationFee;
+    private String avatarUrl;
+    private String bio;
     private String status;
-    private BigDecimal price;
-    private String topic;
-    private String customerNotes;
-    private Long parentBookingId;
-    private String rejectionReason;
-    private LocalDateTime decisionTime;
-    private String cancelledBy;
-    private String cancelReason;
-    private String changeType;
-    private String refundStatus;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

@@ -14,6 +14,17 @@ export interface UserProfile {
   role: UserRoleType;
 }
 
+export interface UserProfile {
+  id: number;
+  username: string;
+  nickname?: string;
+  fullName?: string;
+  email?: string;
+  phoneNumber?: string;
+  avatar?: string;
+  role: typeof USER_ROLES[keyof typeof USER_ROLES];
+}
+
 /**
  * 应用已保存主题偏好（可选，防止调用缺失导致路由守卫报错）
  */

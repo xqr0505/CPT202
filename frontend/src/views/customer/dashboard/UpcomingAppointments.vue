@@ -73,7 +73,6 @@ const loading = ref<boolean>(false)
 
 const DISPLAY_LIMIT = 3
 
-// Computed property to only stringently display confirmed & future/today
 const validAppointments = computed(() => {
   const now = new Date()
 
@@ -105,7 +104,7 @@ const isToday = (dateTimeStr: string): boolean => {
 }
 
 const goToMyBookings = (): void => {
-  // Using a hypothetical route name for booking management
+  // TODO: Implement navigation to customer bookings
   router.push({ name: 'CustomerBookings' })
 }
 

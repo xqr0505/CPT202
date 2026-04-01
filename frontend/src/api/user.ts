@@ -1,4 +1,18 @@
-import { USER_ROLES } from '@/constants/roles';
+import { USER_ROLES, type UserRoleType } from '@/constants/roles';
+
+/**
+ * 用户配置文件类型
+ */
+export interface UserProfile {
+  id: number;
+  username: string;
+  nickname?: string;
+  fullName?: string;
+  email?: string;
+  phoneNumber?: string;
+  avatar?: string;
+  role: UserRoleType;
+}
 
 /**
  * 应用已保存主题偏好（可选，防止调用缺失导致路由守卫报错）
@@ -16,7 +30,7 @@ export const isStoredUserAccountDeactivated = (): boolean => {
 };
 
 // TODO: Implement user data fetching logic and assign the correct role here.
-export const fetchUserProfile = async () => {
+export const fetchUserProfile = async (): Promise<UserProfile> => {
   // Placeholder implementation
   return Promise.resolve({
     id: 1,

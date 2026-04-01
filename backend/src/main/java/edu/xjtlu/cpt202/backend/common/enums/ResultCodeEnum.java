@@ -25,6 +25,10 @@ public enum ResultCodeEnum implements BaseEnum<Integer> {
      */
     FORBIDDEN(403, "No permission to access this resource"),
     /**
+     * Resource not found.
+     */
+    NOT_FOUND(404, "Resource not found"),
+    /**
      * Internal server error or unexpected system exception.
      */
     SYSTEM_ERROR(500, "Internal server error"),

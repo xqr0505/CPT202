@@ -24,6 +24,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author QiranXiao
+ * @date 2026/4/1
+ *
+ */
 @ExtendWith(MockitoExtension.class)
 public class BookingServiceImplTest {
 

@@ -68,6 +68,7 @@ import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { USER_ROLES } from '@/constants/roles'
+import { logout as clearAndRedirect } from '@/api/request'
 
 type DropdownCommand = 'profile' | 'logout'
 
@@ -140,8 +141,7 @@ const handleDropdownCommand = async (command: DropdownCommand): Promise<void> =>
     return
   }
 
-  await userStore.logout()
-  await router.push('/auth/login')
+  clearAndRedirect()
 }
 </script>
 

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { setupRouterGuard } from './permission';
 
 const routes = [
   {
@@ -76,4 +77,7 @@ const router = createRouter({
   routes,
 })
 
-export default router
+setupRouterGuard(router);
+
+export default router;
+

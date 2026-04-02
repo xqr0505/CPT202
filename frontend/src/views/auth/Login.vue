@@ -1,11 +1,11 @@
 <template>
   <div class="login-container">
     <div class="login-form-card">
-      <h1 class="login-title">预约平台登录</h1>
+      <h1 class="login-title">Appointment Platform Login</h1>
       
       <!-- 角色选择 -->
       <div class="form-group">
-        <label>选择身份</label>
+        <label>Select Role</label>
         <div class="role-selector">
           <button 
             v-for="roleOption in roles"
@@ -21,11 +21,11 @@
 
       <!-- 邮箱输入 -->
       <div class="form-group">
-        <label>邮箱地址</label>
+        <label>Email Address</label>
         <input 
           v-model="form.email"
           type="email"
-          placeholder="请输入邮箱地址"
+          placeholder="Please enter your email address"
           @blur="validateEmail"
         />
         <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
@@ -33,11 +33,11 @@
 
       <!-- 密码输入 -->
       <div class="form-group">
-        <label>密码</label>
+        <label>Password</label>
         <input 
           v-model="form.password"
           type="password"
-          placeholder="请输入密码"
+          placeholder="Please enter your password"
         />
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
@@ -48,13 +48,13 @@
         :disabled="isLoading"
         @click="handleLogin"
       >
-        {{ isLoading ? '登录中...' : '登录' }}
+        {{ isLoading ? 'Logging in...' : 'Login' }}
       </button>
 
       <!-- 底部链接 -->
       <div class="footer-links">
-        <router-link to="/register">没有账户？立即注册</router-link>
-        <router-link to="/forgot-password">忘记密码？</router-link>
+        <router-link to="/register">No account? Register now</router-link>
+        <router-link to="/forgot-password">Forgot Password?</router-link>
       </div>
     </div>
   </div>
@@ -65,6 +65,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { login, type LoginPayload } from '@/api/auth';
+import { saveToken, saveUser } from '@/api/request';
 
 defineOptions({ name: 'AuthLogin' });
 
@@ -72,16 +73,16 @@ const router = useRouter();
 const isLoading = ref(false);
 
 onMounted(() => {
-  if (import.meta.env.DEV) {
-    router.replace('/specialist/schedule');
-  }
+  // if (import.meta.env.DEV) {
+  //   router.replace('/specialist/schedule');
+  // }
 });
 
 // 角色选项
 const roles = [
-  { label: '顾客', value: 'CUSTOMER' },
-  { label: '专家', value: 'SPECIALIST' },
-  { label: '管理员', value: 'ADMIN' }
+  { label: 'CUSTOMER', value: 'CUSTOMER' },
+  { label: 'SPECIALIST', value: 'SPECIALIST' },
+  { label: 'ADMIN', value: 'ADMIN' }
 ];
 
 // 表单数据
@@ -133,28 +134,35 @@ async function handleLogin() {
 
     isLoading.value = true;
 
-    // 调用登录 API
-    const payload: LoginPayload = {
-      email: form.email,
-      password: form.password,
-      role: form.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
-    };
-
-    const response = await login(payload, false);
-
-    ElMessage.success('Login successful');
-
-    // 重定向到对应的首页（可根据角色区分）
-    const dashboardRoute: Record<string, string> = {
-      'CUSTOMER': '/customer/dashboard',
-      'SPECIALIST': '/specialist/schedule',
-      'ADMIN': '/admin/specialists'
-    };
-    const targetRoute = dashboardRoute[form.role] || '/customer/dashboard';
-
+    return new Promise<void>((resolve) => {
     setTimeout(() => {
+      // 模拟登录成功的响应数据
+      const mockResponse = {
+        token: 'mock-jwt-token-' + Date.now(),
+        userId: 1001,
+        role: form.role,
+        email: form.email,
+        displayName: form.email.split('@')[0],
+        expiresIn: 1800000  // 30分钟
+      };
+
+      saveToken(mockResponse.token, false);  // false 表示不记住我，存在 sessionStorage
+      saveUser(mockResponse, false);
+      
+
+      ElMessage.success('登录成功（模拟）');
+
+      // 跳转到对应页面
+      const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
+                          form.role === 'SPECIALIST' ? '/specialist/schedule' :
+                          '/admin/specialists';
       router.push(targetRoute);
+      resolve();
     }, 500);
+  }).finally(() => {
+    isLoading.value = false;
+  });
+
   } catch (error: any) {
     console.error('Login error:', error);
     ElMessage.error(error.message || 'Login failed');

@@ -7,7 +7,7 @@
         SELECT
             b.id AS id,
             u.full_name AS specialistName,
-            sp.level AS serviceName,
+            b.topic AS serviceName,
             TIMESTAMP(ts.slot_date, ts.start_time) AS startTime,
             b.status AS status
         FROM bookings b

@@ -1,15 +1,11 @@
 <template>
   <div class="upcoming-appointments">
     <div class="header-section">
-      <h2 class="title">Upcoming Appointment</h2>
-      <CustomButton
-        v-if="hasMore"
-        type="primary"
-        @click="goToBookings"
-        class="view-all-link"
-      >
-        View All
-      </CustomButton>
+      <div class="title-wrapper">
+        <h1 class="main-title">Your Upcoming Appointments</h1>
+        <p class="subtitle">Manage and track your scheduled consultations effortlessly</p>
+      </div>
+      <ViewAllLink class="view-all-link" />
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -68,7 +64,7 @@ import { Clock } from '@element-plus/icons-vue'
 import { getUpcomingBookings } from '@/api/booking'
 import type { UpcomingBookingResponse } from '@/api/booking'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
-import CustomButton from '@/components/common/CustomButton.vue'
+import ViewAllLink from '@/components/common/ViewAllLink.vue'
 
 const router = useRouter()
 const loading = ref(true)
@@ -94,9 +90,6 @@ const fetchAppointments = async () => {
 const displayedAppointments = computed(() => appointments.value.slice(0, 3))
 const hasMore = computed(() => appointments.value.length > 3)
 
-const goToBookings = () => {
-  router.push('/customer/bookings')
-}
 
 const toDate = (dateString?: string) => {
   if (!dateString) return new Date('')
@@ -143,11 +136,23 @@ onMounted(() => {
     align-items: center;
     margin-bottom: var(--space-4);
 
-    .title {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--color-text-primary);
-      margin: 0;
+    .title-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+
+      .main-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--color-text-primary);
+        margin: 0;
+      }
+
+      .subtitle {
+        font-size: 14px;
+        color: var(--color-text-secondary);
+        margin: 0;
+      }
     }
   }
 
@@ -257,6 +262,22 @@ onMounted(() => {
       font-size: 14px;
       font-weight: 500;
       color: var(--color-text-secondary);
+    }
+  }
+
+  .footer-section {
+    margin-top: var(--space-4);
+    text-align: center;
+
+    .view-all-link {
+      font-size: 14px;
+      color: var(--color-primary);
+      text-decoration: underline;
+      cursor: pointer;
+
+      &:hover {
+        color: var(--color-primary-dark);
+      }
     }
   }
 }

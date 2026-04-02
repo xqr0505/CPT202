@@ -20,13 +20,15 @@ export function setupRouterGuard(router: Router) {
       }
     } else {
       // 未登录
-      if (whiteList.includes(to.path)) {
-        // 在白名单内，放行
-        next();
-      } else {
-        // 不在白名单，重定向到登录页，并携带原目标路径
-        next({ path: '/auth/login', query: { redirect: to.fullPath } });
-      }
+      // FIXME: Mock 阶段：放行所有路由
+      // if (whiteList.includes(to.path)) {
+      //   // 在白名单内，放行
+      //   next();
+      // } else {
+      //   // 不在白名单，重定向到登录页，并携带原目标路径
+      //   next({ path: '/auth/login', query: { redirect: to.fullPath } });
+      // }
+      next();
     }
   });
 }

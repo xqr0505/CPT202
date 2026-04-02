@@ -15,6 +15,9 @@ public class SecurityUtils {
     private static final Long DEV_SPECIALIST_ID = 1L;
 
     public static Long getCurrentUserId() {
+        // FIXME: 直接返回 1L
+        return 1L;
+        /*
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()) {
             
@@ -24,6 +27,7 @@ public class SecurityUtils {
             }
         }
         return DEV_SPECIALIST_ID;
+        */
     }
 
     public static String getCurrentUserRole() {

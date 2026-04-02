@@ -27,9 +27,16 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 })
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref<string | null>(localStorage.getItem('token') || null)
-  const userInfo = ref<UserInfo | null>(null)
-  const userRole = ref<UserRole>(null)
+  // FIXME: Mock 阶段，强行塞入假 token
+  const token = ref<string | null>('fake-jwt-token-12345')
+
+  // FIXME: Mock 阶段，强行写死一个用户信息
+  const userInfo = ref<UserInfo | null>({
+    id: 1,
+    username: 'mockuser',
+    nickname: 'Mock Customer'
+  })
+  const userRole = ref<UserRole>(USER_ROLES.CUSTOMER)
 
   const isLoggedIn = computed(() => !!token.value)
   const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)

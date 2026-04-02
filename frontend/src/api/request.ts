@@ -99,6 +99,21 @@ export const logout = () => {
   router.push({ name: 'Login' }).catch(() => null);
 };
 
+// TTL for suppressing duplicate messages (ms)
+const ERROR_CACHE_TTL = 5000
+const errorCache = new Map<string, number>()
+let handling401 = false
+
+function showErrorOnce(msg: string) {
+  if (!msg) return
+  const now = Date.now()
+  const last = errorCache.get(msg)
+  if (!last || now - last > ERROR_CACHE_TTL) {
+    ElMessage.error(msg)
+    errorCache.set(msg, now)
+  }
+}
+
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8081',
   timeout: 10000,
@@ -135,35 +150,44 @@ service.interceptors.response.use(
     }
 
     if (res.code === 401) {
-      clearAuthData();
-      ElMessage.error(res.message || 'Unauthorized, please login again');
-      router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
+      if (!handling401) {
+        handling401 = true
+        clearAuthData();
+        showErrorOnce(res.message || 'Unauthorized, please login again');
+        router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
+        // allow future 401 handling after short delay
+        setTimeout(() => { handling401 = false }, 3000)
+      }
       return Promise.reject(new Error(res.message || 'Unauthorized'));
     }
 
     if (res.code === 403) {
-      ElMessage.error(res.message || 'Forbidden');
+      showErrorOnce(res.message || 'Forbidden');
       return Promise.reject(new Error(res.message || 'Forbidden'));
     }
 
-    ElMessage.error(res.message || 'Error');
+    showErrorOnce(res.message || 'Error');
     return Promise.reject(new Error(res.message || 'Error'));
   },
   error => {
     const status = error.response?.status;
 
     if (status === 401) {
-      clearAuthData();
-      ElMessage.error('Unauthorized, please login again');
-      router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
+      if (!handling401) {
+        handling401 = true
+        clearAuthData();
+        showErrorOnce('Unauthorized, please login again');
+        router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
+        setTimeout(() => { handling401 = false }, 3000)
+      }
     } else if (status === 403) {
-      ElMessage.error('Forbidden');
+      showErrorOnce('Forbidden');
     } else if (status === 500) {
-      ElMessage.error('Server error, please try again later');
+      showErrorOnce('Server error, please try again later');
     } else if (error.code === 'ECONNABORTED') {
-      ElMessage.error('Request timeout');
+      showErrorOnce('Request timeout');
     } else if (error.message?.includes('Network Error')) {
-      ElMessage.error('Network error, please check your connection');
+      showErrorOnce('Network error, please check your connection');
     }
 
     return Promise.reject(error);
@@ -171,5 +195,4 @@ service.interceptors.response.use(
 );
 
 export default service;
-
 

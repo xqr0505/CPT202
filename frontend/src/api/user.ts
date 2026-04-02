@@ -1,4 +1,18 @@
-import { USER_ROLES } from '@/constants/roles';
+import { USER_ROLES, type UserRoleType } from '@/constants/roles';
+
+/**
+ * 用户配置文件类型
+ */
+export interface UserProfile {
+  id: number;
+  username: string;
+  nickname?: string;
+  fullName?: string;
+  email?: string;
+  phoneNumber?: string;
+  avatar?: string;
+  role: UserRoleType;
+}
 
 export interface UserProfile {
   id: number;

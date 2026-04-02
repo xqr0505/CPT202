@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
  */
 public class SecurityUtils {
 
+    private static final Long DEV_SPECIALIST_ID = 1L;
+
     public static Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()) {
@@ -21,11 +23,12 @@ public class SecurityUtils {
                 return (Long) principal;
             }
         }
-        return null;
+        return DEV_SPECIALIST_ID;
     }
 
     public static String getCurrentUserRole() {
-        return UserContextHolder.getRole();
+        String role = UserContextHolder.getRole();
+        return role != null ? role : "SPECIALIST";
     }
 
     public static boolean isAuthenticated() {

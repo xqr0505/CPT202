@@ -6,7 +6,7 @@
     <div class="section-card">
       <h2>BookingStatusTag</h2>
       <div class="demo-flex">
-        <BookingStatusTag v-for="s in statuses" :key="s" :status="s" />
+        <BookingStatusTag v-for="(s, index) in statuses" :key="String(s) || index" :status="s" />
       </div>
     </div>
 
@@ -43,7 +43,8 @@
 </template>
 
 <script setup lang="ts">
-import { BookingStatus } from '@/constants/booking.ts'
+import { BOOKING_STATUS } from '@/constants/booking.ts'
+import type { BookingStatus } from '@/constants/booking.ts'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
@@ -52,7 +53,7 @@ import type { TableColumn, FetchDataParams, FetchDataResult } from '@/components
 
 defineOptions({ name: 'DevDemo' })
 
-const statuses = Object.values(BookingStatus)
+const statuses = Object.values(BOOKING_STATUS) as BookingStatus[]
 
 const tableColumns: TableColumn[] = [
   { label: 'ID', prop: 'id', width: 100 },

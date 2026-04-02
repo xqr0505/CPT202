@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.common.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import jakarta.servlet.ServletException;
@@ -31,6 +32,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         Result<?> result = Result.fail(ResultCodeEnum.UNAUTHORIZED.getCode(), "Unauthorized: " + authException.getMessage());
         
         ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
         response.getWriter().write(mapper.writeValueAsString(result));
     }
 }

@@ -10,13 +10,16 @@ const routes = [
     ]
   },
   {
-    path: '/admin',
-    component: () => import('../layout/AdminLayout.vue'),
-    meta: { requiresAuth: true, role: 'ADMIN' },
-    children: [
-      { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') }
-    ]
-  },
+  path: '/admin',
+  component: () => import('../layout/AdminLayout.vue'),
+  meta: { requiresAuth: true, role: 'ADMIN' },
+  children: [
+    { path: 'categories', component: () => import('../views/admin/AdminCategoryList.vue') },
+    { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') },
+    { path: 'specialists/create', component: () => import('../views/admin/AdminSpecialistForm.vue') },
+    { path: 'specialists/:id/edit', component: () => import('../views/admin/AdminSpecialistForm.vue') }
+  ]
+},
   {
     path: '/specialist',
     component: () => import('../layout/SpecialistLayout.vue'),

@@ -68,7 +68,9 @@ public class SecurityConfig {
                                 "/auth/refresh-token"
                         ).permitAll()
 
-                        .anyRequest().authenticated()
+                        // FIXME: 暂时允许所有请求直接通过！
+                        // .anyRequest().authenticated()
+                        .anyRequest().permitAll()
                 )
 
 

@@ -39,30 +39,53 @@ public class BookingControllerTest {
     @Test
     @WithMockUser(roles = "CUSTOMER")
     public void getUpcomingBookings_Success() throws Exception {
-        // Arrange
-        UpcomingBookingVO bookingVO = UpcomingBookingVO.builder()
-                .id(1L)
-                .specialistId(101L)
-                .specialistName("Dr. John Doe")
-                .specialistTitle("Senior Psychologist")
-                .startTime(LocalDateTime.now().plusDays(1))
-                .endTime(LocalDateTime.now().plusDays(1).plusHours(1))
-                .status("CONFIRMED")
-                .build();
-
-        List<UpcomingBookingVO> mockResponse = Collections.singletonList(bookingVO);
-
-        when(bookingService.getUpcomingBookingsByCustomer(anyLong(), anyInt()))
-                .thenReturn(mockResponse);
+        // Arrange: mock service to return 3 bookings
+        List<UpcomingBookingVO> mockBookings = List.of(
+                UpcomingBookingVO.builder()
+                        .id(1L)
+                        .specialistName("Dr. John Doe")
+                        .serviceName("Mental Health Consultation")
+                        .startTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0))
+                        .today(false)
+                        .status("CONFIRMED")
+                        .build(),
+                UpcomingBookingVO.builder()
+                        .id(2L)
+                        .specialistName("Dr. Jane Smith")
+                        .serviceName("Career Counseling")
+                        .startTime(LocalDateTime.now().plusDays(2).withHour(14).withMinute(0))
+                        .today(false)
+                        .status("CONFIRMED")
+                        .build(),
+                UpcomingBookingVO.builder()
+                        .id(3L)
+                        .specialistName("Dr. Alan Turing")
+                        .serviceName("AI Consultation")
+                        .startTime(LocalDateTime.now().plusDays(3).withHour(9).withMinute(30))
+                        .today(false)
+                        .status("CONFIRMED")
+                        .build()
+        );
+        when(bookingService.getUpcomingBookingsByCustomer(anyLong(), anyInt())).thenReturn(mockBookings);
 
         // Act & Assert
         mockMvc.perform(get("/api/v1/customer/dashboard/upcoming")
-                .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(3))
                 .andExpect(jsonPath("$.data[0].specialistName").value("Dr. John Doe"))
+                .andExpect(jsonPath("$.data[1].specialistName").value("Dr. Jane Smith"))
+                .andExpect(jsonPath("$.data[2].specialistName").value("Dr. Alan Turing"))
                 .andExpect(jsonPath("$.data[0].status").value("CONFIRMED"));
+
+        // Also test empty list
+        when(bookingService.getUpcomingBookingsByCustomer(anyLong(), anyInt())).thenReturn(Collections.emptyList());
+        mockMvc.perform(get("/api/v1/customer/dashboard/upcoming")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test
@@ -82,4 +105,3 @@ public class BookingControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 }
-

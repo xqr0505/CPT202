@@ -43,10 +43,32 @@ public class BookingServiceImplTest {
         // Arrange
         Long customerId = 1L;
         int limit = 3;
-        UpcomingBookingVO bookingVO = new UpcomingBookingVO();
-        bookingVO.setId(1L);
-        List<UpcomingBookingVO> mockResponse = Collections.singletonList(bookingVO);
-
+        List<UpcomingBookingVO> mockResponse = List.of(
+                UpcomingBookingVO.builder()
+                        .id(1L)
+                        .specialistName("Schedule Dev Specialist")
+                        .serviceName("Counseling")
+                        .startTime(LocalDateTime.of(2026, 4, 3, 10, 0, 0))
+                        .today(true)
+                        .status("CONFIRMED")
+                        .build(),
+                UpcomingBookingVO.builder()
+                        .id(2L)
+                        .specialistName("Dr. Adam Smith")
+                        .serviceName("Career Planning")
+                        .startTime(LocalDateTime.of(2026, 4, 4, 14, 0, 0))
+                        .today(false)
+                        .status("CONFIRMED")
+                        .build(),
+                UpcomingBookingVO.builder()
+                        .id(3L)
+                        .specialistName("Schedule Dev Specialist")
+                        .serviceName("Counseling")
+                        .startTime(LocalDateTime.of(2026, 4, 5, 9, 0, 0))
+                        .today(false)
+                        .status("CONFIRMED")
+                        .build()
+        );
         when(bookingMapper.selectUpcomingBookings(eq(customerId), anyString(), any(LocalDateTime.class), eq(limit)))
                 .thenReturn(mockResponse);
 
@@ -55,8 +77,22 @@ public class BookingServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getId());
+        assertEquals(3, result.size());
+        assertEquals("Schedule Dev Specialist", result.get(0).getSpecialistName());
+        assertEquals("Counseling", result.get(0).getServiceName());
+        assertEquals(LocalDateTime.of(2026, 4, 3, 10, 0, 0), result.get(0).getStartTime());
+        assertTrue(result.get(0).getToday());
+        assertEquals("CONFIRMED", result.get(0).getStatus());
+        assertEquals("Dr. Adam Smith", result.get(1).getSpecialistName());
+        assertEquals("Career Planning", result.get(1).getServiceName());
+        assertEquals(LocalDateTime.of(2026, 4, 4, 14, 0, 0), result.get(1).getStartTime());
+        assertFalse(result.get(1).getToday());
+        assertEquals("CONFIRMED", result.get(1).getStatus());
+        assertEquals("Schedule Dev Specialist", result.get(2).getSpecialistName());
+        assertEquals("Counseling", result.get(2).getServiceName());
+        assertEquals(LocalDateTime.of(2026, 4, 5, 9, 0, 0), result.get(2).getStartTime());
+        assertFalse(result.get(2).getToday());
+        assertEquals("CONFIRMED", result.get(2).getStatus());
     }
 
     @Test
@@ -119,4 +155,3 @@ public class BookingServiceImplTest {
         assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), exception.getCode());
     }
 }
-

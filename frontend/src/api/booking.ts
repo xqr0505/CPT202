@@ -1,13 +1,12 @@
 import request from './request'
-import type { BookingStatus } from '@/constants/booking'
 
 export interface UpcomingBookingResponse {
-  id: number
-  specialistName: string
-  specialistTitle: string
-  startTime: string // ISO string
-  endTime: string // ISO string
-  status: BookingStatus
+  id: string;
+  specialistName: string;
+  serviceName: string;
+  startTime: string; // format: 'YYYY-MM-DD HH:mm:ss'
+  today: boolean;
+  status: string;
 }
 
 export const getUpcomingBookings = () => {

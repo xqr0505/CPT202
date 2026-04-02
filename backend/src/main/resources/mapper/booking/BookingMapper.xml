@@ -6,20 +6,17 @@
     <select id="selectUpcomingBookings" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO">
         SELECT
             b.id AS id,
-            b.specialist_id AS specialistId,
             u.full_name AS specialistName,
-            sp.avatar_url AS specialistAvatar,
-            sp.level AS specialistTitle,
+            sp.level AS serviceName,
             TIMESTAMP(ts.slot_date, ts.start_time) AS startTime,
-            TIMESTAMP(ts.slot_date, ts.end_time) AS endTime,
             b.status AS status
         FROM bookings b
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id
         JOIN users u ON sp.user_id = u.id
         WHERE b.customer_id = #{customerId}
-          AND b.status = #{status}
-          AND TIMESTAMP(ts.slot_date, ts.start_time) > #{currentTime}
+        AND b.status = #{status}
+        AND TIMESTAMP(ts.slot_date, ts.start_time) > #{currentTime}
         ORDER BY ts.slot_date ASC, ts.start_time ASC
         LIMIT #{limit}
     </select>

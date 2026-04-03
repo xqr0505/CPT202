@@ -77,8 +77,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getSpecialistList,
-  type SpecialistItem,
-  type SpecialistListResponse
+  type SpecialistItem
 } from '@/api/adminSpecialist'
 
 interface CategoryOption {
@@ -102,7 +101,6 @@ function getAvatarFallback(name: string) {
 }
 
 function formatFee(fee: number) {
-  if (typeof fee !== 'number') return '-'
   return `$${fee.toFixed(2)}`
 }
 
@@ -132,8 +130,8 @@ async function fetchSpecialistList() {
   loading.value = true
   try {
     const data = await getSpecialistList()
-    const list = (data as SpecialistListResponse)?.list
-    tableData.value = Array.isArray(list) ? list : []
+    const rows = Array.isArray(data) ? data : data.list
+    tableData.value = rows
     buildCategoryOptions(tableData.value)
   } catch (error) {
     console.error('Failed to fetch specialist list:', error)

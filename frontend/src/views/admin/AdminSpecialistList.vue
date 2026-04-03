@@ -63,6 +63,7 @@
             size="small"
             :type="row.status === 'Active' ? 'warning' : 'success'"
             plain
+            @click="handleToggleStatus(row)"
           >
             {{ row.status === 'Active' ? 'Deactivate' : 'Activate' }}
           </el-button>
@@ -75,8 +76,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getSpecialistList,
+  updateSpecialistStatus,
+  type SpecialistStatus,
   type SpecialistItem
 } from '@/api/adminSpecialist'
 
@@ -110,6 +114,33 @@ function goCreatePage() {
 
 function goEditPage(id: number) {
   router.push(`/admin/specialists/${id}/edit`)
+}
+
+async function handleToggleStatus(row: SpecialistItem) {
+  const nextStatus: SpecialistStatus = row.status === 'Active' ? 'Inactive' : 'Active'
+  const actionText = nextStatus === 'Active' ? 'activate' : 'deactivate'
+
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to ${actionText} specialist "${row.name}"?`,
+      'Confirm Status Change',
+      {
+        type: 'warning',
+        confirmButtonText: 'Confirm',
+        cancelButtonText: 'Cancel'
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    await updateSpecialistStatus(row.id, nextStatus)
+    ElMessage.success('Status updated successfully')
+    await fetchSpecialistList()
+  } catch (error) {
+    console.error('Failed to update specialist status:', error)
+  }
 }
 
 function buildCategoryOptions(list: SpecialistItem[]) {

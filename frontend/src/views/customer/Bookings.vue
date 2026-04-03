@@ -1,136 +1,245 @@
 <template>
   <section class="bookings-page">
-    <section class="page-card">
-      <h1>My Bookings</h1>
-      <p class="page-desc">Your booking history and upcoming appointments.</p>
-    </section>
+    <div class="tabs-bar">
+      <div
+        class="tab-item"
+        :class="{ active: currentTab === 'upcoming' }"
+        @click="switchTab('upcoming')"
+      >
+        Upcoming
+      </div>
+      <div
+        class="tab-item"
+        :class="{ active: currentTab === 'history' }"
+        @click="switchTab('history')"
+      >
+        History
+      </div>
+    </div>
 
-    <section class="page-card filters-card">
-      <el-radio-group v-model="timeScope" @change="refreshTable">
-        <el-radio-button label="UPCOMING">Upcoming</el-radio-button>
-        <el-radio-button label="HISTORY">History</el-radio-button>
-      </el-radio-group>
-    </section>
-
-    <PaginationTable
-      ref="tableRef"
-      :columns="columns"
-      :fetch-data="fetchData"
-    >
-      <template #specialistName="{ row }">
-        <div class="specialist-cell">
-          <el-avatar :src="row.specialistAvatar" :size="36">
-            {{ row.specialistName?.charAt?.(0) || 'S' }}
-          </el-avatar>
-          <div>
-            <div class="specialist-name">{{ row.specialistName }}</div>
-            <div class="specialist-title">{{ row.specialistTitle }}</div>
+    <div class="table-container">
+      <PaginationTable
+        ref="tableRef"
+        :columns="tableColumns"
+        :fetchData="fetchBookings"
+      >
+        <!-- Date & Time Slot -->
+        <template #dateTime="{ row }">
+          <div class="date-time-cell">
+            <span class="date">{{ formatDate(row.startTime) }}</span>
+            <span class="time">{{ formatTime(row.startTime) }}</span>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <template #startTime="{ row }">
-        <div>{{ formatDateTime(row.startTime) }}</div>
-      </template>
+        <!-- Expert Slot -->
+        <template #expert="{ row }">
+          <div class="expert-cell">
+            <el-avatar :src="row.specialistAvatar" :size="36" class="expert-avatar">
+              {{ row.specialistName?.charAt(0) || 'E' }}
+            </el-avatar>
+            <div class="expert-info">
+              <span class="expert-name">{{ row.specialistName }}</span>
+              <span class="expert-title" v-if="row.specialistTitle">{{ row.specialistTitle }}</span>
+            </div>
+          </div>
+        </template>
 
-      <template #status="{ row }">
-        <BookingStatusTag :status="row.status" />
-      </template>
+        <!-- Service Slot -->
+        <template #service="{ row }">
+          <span class="service-name">{{ row.serviceName }}</span>
+        </template>
 
-      <template #amount="{ row }">
-        <span>{{ formatAmount(row.amount) }}</span>
-      </template>
-    </PaginationTable>
+        <!-- Status Slot -->
+        <template #status="{ row }">
+          <BookingStatusTag :status="row.status" />
+        </template>
+
+        <!-- Action Slot -->
+        <template #action="{ row }">
+          <div class="action-cell">
+            <template v-if="currentTab === 'upcoming'">
+              <CustomButton size="small" @click="handleViewDetails(row)">View Details</CustomButton>
+              <CustomButton size="small" type="primary" plain @click="handleReschedule(row)">Reschedule</CustomButton>
+              <CustomButton size="small" type="danger" plain @click="handleCancel(row)">Cancel</CustomButton>
+            </template>
+            <template v-else>
+              <CustomButton size="small" @click="handleViewDetails(row)">View Details</CustomButton>
+              <CustomButton size="small" type="primary" @click="handleBookAgain(row)">Book Again</CustomButton>
+            </template>
+          </div>
+        </template>
+      </PaginationTable>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { FetchDataParams, FetchDataResult, TableColumn } from '@/components/business/PaginationTable.vue'
+import { ref, computed, nextTick } from 'vue'
+import { getUnifiedBookings } from '@/api/booking'
 import PaginationTable from '@/components/business/PaginationTable.vue'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
-import { getBookingHistory, type BookingHistoryItem } from '@/api/booking'
+import CustomButton from '@/components/common/CustomButton.vue'
+import dayjs from 'dayjs'
+import type { FetchDataParams } from '@/components/business/PaginationTable.vue'
+import type { UnifiedBookingItem } from '@/api/booking'
 
 defineOptions({ name: 'CustomerBookings' })
 
-const timeScope = ref<'UPCOMING' | 'HISTORY'>('UPCOMING')
+const currentTab = ref<'upcoming' | 'history'>('upcoming')
 const tableRef = ref<InstanceType<typeof PaginationTable> | null>(null)
 
-const columns: TableColumn[] = [
-  { label: 'Specialist', prop: 'specialistName', minWidth: 220 },
-  { label: 'Start Time', prop: 'startTime', minWidth: 180 },
-  { label: 'Duration', prop: 'duration', minWidth: 100 },
-  { label: 'Status', prop: 'status', minWidth: 120 },
-  { label: 'Fee', prop: 'amount', minWidth: 100 },
-]
+const tableColumns = computed(() => [
+  { prop: 'dateTime', label: 'Date & Time', minWidth: 150, slotName: 'dateTime' },
+  { prop: 'expert', label: 'Expert', minWidth: 200, slotName: 'expert' },
+  { prop: 'service', label: 'Service', minWidth: 150, slotName: 'service' },
+  { prop: 'status', label: 'Status', minWidth: 120, slotName: 'status' },
+  { prop: 'action', label: 'Action', minWidth: 280, slotName: 'action' }
+])
 
-const fetchData = async (
-  params: FetchDataParams,
-): Promise<FetchDataResult<BookingHistoryItem>> => {
-  const res = await getBookingHistory({
+const switchTab = (tab: 'upcoming' | 'history') => {
+  if (currentTab.value === tab) return
+  currentTab.value = tab
+  nextTick(() => {
+    tableRef.value?.refresh()
+  })
+}
+
+const fetchBookings = async (params: FetchDataParams) => {
+  const { data } = await getUnifiedBookings({
     pageNo: params.page,
     pageSize: params.limit,
-    timeScope: timeScope.value,
-  }) as unknown as { list: BookingHistoryItem[]; total: number }
-
+    type: currentTab.value
+  })
   return {
-    list: res.list || [],
-    total: res.total || 0,
+    list: data.list,
+    total: data.total
   }
 }
 
-const refreshTable = () => {
-  tableRef.value?.refresh()
+const formatDate = (dateStr: string) => {
+  return dayjs(dateStr).format('MMM DD, YYYY')
 }
 
-const formatDateTime = (value: string) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+const formatTime = (dateStr: string) => {
+  return dayjs(dateStr).format('HH:mm A')
 }
 
-const formatAmount = (value: number) => `¥${Number(value || 0).toFixed(2)}`
+// Action Handlers
+const handleViewDetails = (row: UnifiedBookingItem) => {
+  console.log('View details', row.id)
+}
+const handleReschedule = (row: UnifiedBookingItem) => {
+  console.log('Reschedule', row.id)
+}
+const handleCancel = (row: UnifiedBookingItem) => {
+  console.log('Cancel', row.id)
+}
+const handleBookAgain = (row: UnifiedBookingItem) => {
+  console.log('Book again', row.originalBookingId || row.id)
+}
 </script>
 
 <style scoped lang="scss">
+@use '@/styles/variables.scss' as *;
+
 .bookings-page {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.page-card {
   padding: 24px;
+  background-color: var(--color-background-soft);
+  min-height: 100%;
 }
 
-.page-tag {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.page-desc {
-  margin-top: 16px;
-  color: var(--color-text-secondary);
-}
-
-.filters-card {
+.tabs-bar {
   display: flex;
-  justify-content: flex-start;
+  gap: 32px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
 }
 
-.specialist-cell {
+.tab-item {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text-regular);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.3s;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+
+  &.active {
+    color: var(--color-primary);
+    font-weight: 600;
+
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -9px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background-color: var(--color-primary);
+    }
+  }
+}
+
+.table-container {
+  background: var(--color-background);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  padding: 20px;
+}
+
+.date-time-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .date {
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .time {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+}
+
+.expert-cell {
   display: flex;
   align-items: center;
   gap: 12px;
+
+  .expert-avatar {
+    flex-shrink: 0;
+  }
+
+  .expert-info {
+    display: flex;
+    flex-direction: column;
+
+    .expert-name {
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    .expert-title {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+  }
 }
 
-.specialist-name {
-  font-weight: 600;
-  color: var(--color-text-primary);
+.service-name {
+  color: var(--color-text-regular);
+  font-weight: 500;
 }
 
-.specialist-title {
-  color: var(--color-text-secondary);
-  font-size: 13px;
+.action-cell {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

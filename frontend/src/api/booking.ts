@@ -31,12 +31,29 @@ export interface BookingHistoryItem {
   endTime: string
   duration: number
   status: BookingStatus | string
-  amount: number
 }
 
 export interface BookingHistoryResponse {
   total: number
   list: BookingHistoryItem[]
+}
+
+export interface UnifiedBookingItem {
+  id: string
+  specialistName: string
+  specialistAvatar?: string
+  specialistTitle?: string
+  startTime: string
+  endTime: string
+  serviceName: string
+  status: BookingStatus | string
+  amount: number
+  originalBookingId?: string
+}
+
+export interface UnifiedBookingResponse {
+  total: number
+  list: UnifiedBookingItem[]
 }
 
 export const getUpcomingBookings = () => {
@@ -54,6 +71,16 @@ export const getBookingHistory = (params: {
   status?: string
 }) => {
   return request.get<BookingHistoryResponse>('/api/v1/customer/bookings', {
+    params,
+  })
+}
+
+export const getUnifiedBookings = (params: {
+  pageNo: number
+  pageSize: number
+  type: 'upcoming' | 'history'
+}) => {
+  return request.get<UnifiedBookingResponse>('/api/v1/customer/bookings/unified', {
     params,
   })
 }

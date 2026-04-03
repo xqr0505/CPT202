@@ -11,8 +11,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
@@ -112,6 +114,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         return new BookingCreateVO(booking.getId(), booking.getStatus());
+    }
+
+    @Override
+    public PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto) {
+        LocalDateTime currentTime = LocalDateTime.now();
+        long offset = (long) (dto.getPageNo() - 1) * dto.getPageSize();
+        List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), currentTime, offset, dto.getPageSize());
+        Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), currentTime);
+        return new PageResult<>(total, list);
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

@@ -4,7 +4,9 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,5 +45,13 @@ public class CustomerBookingController {
         return Result.success(result);
     }
 
+    @GetMapping("/list")
+    @Operation(summary = "Get customer booking list", description = "Get paginated list of customer bookings by tab (UPCOMING or HISTORY).")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<PageResult<BookingItemVO>> getBookingList(@ModelAttribute BookingPageQueryDTO dto) {
+        Long customerId = SecurityUtils.getCurrentUserId();
+        PageResult<BookingItemVO> result = bookingService.getBookingList(customerId, dto);
+        return Result.success(result);
+    }
 
 }

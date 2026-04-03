@@ -9,11 +9,8 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
@@ -113,65 +110,6 @@ public class BookingServiceImplTest {
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }
 
-    @Test
-    public void listBookings_Success() {
-        // Arrange
-        Long customerId = 1L;
-        BookingHistoryQueryDTO queryDTO = new BookingHistoryQueryDTO();
-        queryDTO.setPageNo(1);
-        queryDTO.setPageSize(10);
-
-        IPage<BookingHistoryListVO> mockPage = new Page<>(1, 10);
-        mockPage.setTotal(1);
-        BookingHistoryListVO vo = new BookingHistoryListVO();
-        mockPage.setRecords(Collections.singletonList(vo));
-
-        when(bookingMapper.listBookings(any(Page.class), eq(queryDTO), eq(customerId)))
-                .thenReturn(mockPage);
-
-        // Act
-        PageResult<BookingHistoryListVO> result = bookingService.listBookings(customerId, queryDTO);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getTotal());
-        assertEquals(1, result.getList().size());
-    }
-
-    @Test
-    public void getBookingDetail_Success() {
-        // Arrange
-        Long bookingId = 1L;
-        Long customerId = 1L;
-        BookingDetailVO mockDetail = new BookingDetailVO();
-        mockDetail.setId(bookingId);
-
-        when(bookingMapper.getBookingDetail(bookingId, customerId))
-                .thenReturn(mockDetail);
-
-        // Act
-        BookingDetailVO result = bookingService.getBookingDetail(bookingId, customerId);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(bookingId, result.getId());
-    }
-
-    @Test
-    public void getBookingDetail_NotFound() {
-        // Arrange
-        Long bookingId = 1L;
-        Long customerId = 1L;
-
-        when(bookingMapper.getBookingDetail(bookingId, customerId))
-                .thenReturn(null);
-
-        // Act & Assert
-        BusinessException exception = assertThrows(BusinessException.class, () -> {
-            bookingService.getBookingDetail(bookingId, customerId);
-        });
-        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), exception.getCode());
-    }
 
     @Test
     public void createBooking_Success() {

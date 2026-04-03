@@ -2,8 +2,6 @@ package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,32 +34,6 @@ public class CustomerBookingControllerTest {
     @MockBean
     private BookingService bookingService;
 
-    @Test
-    @WithMockUser(roles = "CUSTOMER")
-    public void getBookings_Success() throws Exception {
-        BookingHistoryListVO item = BookingHistoryListVO.builder()
-                .id(10L)
-                .specialistName("Dr. Jane Smith")
-                .status("PENDING")
-                .amount(new BigDecimal("150.00"))
-                .startTime(LocalDateTime.of(2026, 4, 5, 9, 0))
-                .endTime(LocalDateTime.of(2026, 4, 5, 9, 45))
-                .build();
-
-        when(bookingService.listBookings(anyLong(), any()))
-                .thenReturn(new PageResult<>(1, List.of(item)));
-
-        mockMvc.perform(get("/api/v1/customer/bookings")
-                        .param("pageNo", "1")
-                        .param("pageSize", "10")
-                        .param("timeScope", "UPCOMING")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].id").value(10))
-                .andExpect(jsonPath("$.data.list[0].specialistName").value("Dr. Jane Smith"));
-    }
 
     @Test
     @WithMockUser(roles = "CUSTOMER")
@@ -102,24 +74,5 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.message").value("topic is required"));
     }
 
-    @Test
-    @WithMockUser(roles = "CUSTOMER")
-    public void getBookingDetail_Success() throws Exception {
-        BookingDetailVO detail = BookingDetailVO.builder()
-                .id(10L)
-                .specialistName("Dr. Jane Smith")
-                .status("CONFIRMED")
-                .amount(new BigDecimal("150.00"))
-                .build();
 
-        when(bookingService.getBookingDetail(10L, 1L)).thenReturn(detail);
-
-        mockMvc.perform(get("/api/v1/customer/bookings/10")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.id").value(10))
-                .andExpect(jsonPath("$.data.specialistName").value("Dr. Jane Smith"))
-                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
-    }
 }

@@ -4,10 +4,7 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,15 +34,6 @@ public class CustomerBookingController {
 
     private final BookingService bookingService;
 
-    @GetMapping
-    @Operation(summary = "Get cooking history", description = "Get paginated list of bookings based on time scope and status.")
-    @PreAuthorize("hasRole('CUSTOMER')")
-    public Result<PageResult<BookingHistoryListVO>> getBookings(@ModelAttribute BookingHistoryQueryDTO queryDTO) {
-        Long customerId = SecurityUtils.getCurrentUserId();
-        PageResult<BookingHistoryListVO> result = bookingService.listBookings(customerId, queryDTO);
-        return Result.success(result);
-    }
-
     @PostMapping
     @Operation(summary = "Create booking", description = "Create a booking for a specialist time slot.")
     @PreAuthorize("hasRole('CUSTOMER')")
@@ -55,13 +43,5 @@ public class CustomerBookingController {
         return Result.success(result);
     }
 
-    @GetMapping("/{bookingId}")
-    @Operation(summary = "Get booking detail", description = "Get detailed information for a specific booking.")
-    @PreAuthorize("hasRole('CUSTOMER')")
-    public Result<BookingDetailVO> getBookingDetail(
-            @Parameter(description = "Booking ID") @PathVariable Long bookingId) {
-        Long customerId = SecurityUtils.getCurrentUserId();
-        BookingDetailVO detail = bookingService.getBookingDetail(bookingId, customerId);
-        return Result.success(detail);
-    }
+
 }

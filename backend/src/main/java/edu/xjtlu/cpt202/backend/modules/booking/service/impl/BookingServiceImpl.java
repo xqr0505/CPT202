@@ -23,7 +23,7 @@ import java.util.List;
 
 /**
  * @author QiranXiao
- * @date 2026/4/1
+ * @since 2026/4/1
  */
 @Slf4j
 @Service
@@ -34,7 +34,16 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     public List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit) {
-        return bookingMapper.selectUpcomingBookings(customerId, BookingStatusEnum.CONFIRMED.name(), LocalDateTime.now(), limit);
+        LocalDateTime now = LocalDateTime.now();
+        List<UpcomingBookingVO> result = bookingMapper.selectUpcomingBookings(customerId, BookingStatusEnum.CONFIRMED.name(), now, limit);
+
+        if (result != null) {
+            result.forEach(booking -> {
+                booking.setToday(booking.getStartTime().toLocalDate().isEqual(now.toLocalDate()));
+            });
+        }
+
+        return result != null ? result : List.of();
     }
 
     @Override

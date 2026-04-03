@@ -1,4 +1,5 @@
 import request from './request'
+import type {BookingStatus} from "@/constants/booking.ts";
 
 export interface UpcomingBookingResponse {
   id: string;

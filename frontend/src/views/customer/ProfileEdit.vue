@@ -1,7 +1,6 @@
 <template>
   <section class="page-card profile-edit-page">
     <div class="page-header">
-      <p class="page-tag">Customer</p>
       <h1 class="page-title">Edit Profile</h1>
       <p class="page-text">
         Update your saved contact details and keep your account information accurate.

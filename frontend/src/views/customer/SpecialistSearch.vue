@@ -2,7 +2,6 @@
   <section class="search-page">
     <header class="hero card">
       <div>
-        <p class="eyebrow">Customer</p>
         <h1>Find the right specialist for your next consultation</h1>
         <p class="hero-copy">
           Search by name, category, price, and date availability. The list keeps your filter state in the URL so detail-page back navigation stays intact.

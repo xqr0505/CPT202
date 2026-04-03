@@ -1,7 +1,6 @@
 <template>
   <section class="bookings-page">
     <section class="page-card">
-      <p class="page-tag">Customer</p>
       <h1>My Bookings</h1>
       <p class="page-desc">Your booking history and upcoming appointments.</p>
     </section>

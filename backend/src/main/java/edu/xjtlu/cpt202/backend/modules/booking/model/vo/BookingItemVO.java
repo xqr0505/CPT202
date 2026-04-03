@@ -31,7 +31,7 @@ public class BookingItemVO {
     @Schema(description = "Specialist Avatar URL", example = "https://example.com/avatar.jpg")
     private String specialistAvatar;
 
-    @Schema(description = "Service Name", example = "Mental Health Consultation")
+    @Schema(description = "Booking Topic", example = "Mental Health Consultation")
     private String serviceName;
 
     @Schema(description = "Appointment Date and Time", example = "2026-04-20T10:00:00")

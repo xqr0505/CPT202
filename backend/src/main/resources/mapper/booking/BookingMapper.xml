@@ -27,7 +27,7 @@
             CAST(sp.id AS CHAR) AS specialistId,
             u.full_name AS specialistName,
             sp.avatar_url AS specialistAvatar,
-            ec.category_name AS serviceName,
+            b.topic AS serviceName,
             TIMESTAMP(ts.slot_date, ts.start_time) AS appointmentDateTime,
             b.status AS status,
             b.price AS amount
@@ -35,7 +35,6 @@
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id
         JOIN users u ON sp.user_id = u.id
-        JOIN expertise_categories ec ON sp.category_id = ec.id
         WHERE b.customer_id = #{customerId}
         <if test="tab == 'UPCOMING'">
             AND TIMESTAMP(ts.slot_date, ts.start_time) >= #{currentTime}

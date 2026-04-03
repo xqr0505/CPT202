@@ -87,7 +87,7 @@ const tableColumns: TableColumn[] = [
   { prop: 'expert', label: 'Expert', minWidth: '220', slotName: 'expert' },
   { prop: 'serviceName', label: 'Service', minWidth: '200' },
   { prop: 'status', label: 'Status', minWidth: '150', slotName: 'status' },
-  { prop: 'action', label: 'Action', width: '320', slotName: 'action' }
+  { prop: 'action', label: 'Action', width: '350', slotName: 'action' }
 ]
 
 const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<BookingListItem>> => {
@@ -97,10 +97,7 @@ const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<Booki
       pageNo: params.page,
       pageSize: params.limit
     })
-    // Since backend's response uses our custom uniform result layer,
-    // it typically returns data inside `res.data`
-    // Based on previous contexts, result might be strictly unwrapped by request.ts wrapper
-    // Wait, let's look at what `res` actually is. Usually request.ts returns data directly.
+
     return {
       list: (res as any).list || [],
       total: Number((res as any).total) || 0
@@ -119,10 +116,7 @@ const handleTabChange = () => {
 
 const formatDateTime = (dtStr: string) => {
   if (!dtStr) return ''
-  // Basic fallback formatting if missing a standard tool, or string is ready format
-  // Convert '2026-04-03 10:00:00' to 'Apr 03, 2026 10:00 AM'
   try {
-    // If exact format is '2026-04-03 10:00:00', JS Date might struggle on safari without 'T'
     const cleanDtStr = dtStr.replace(' ', 'T')
     const dateObj = new Date(cleanDtStr)
     if (isNaN(dateObj.getTime())) return dtStr
@@ -168,7 +162,6 @@ const handleAction = (action: string, row: BookingListItem) => {
     box-shadow: 0 2px 4px var(--color-shadow);
   }
 
-  /* Customize the element plus tabs look inside */
   :deep(.booking-tabs) {
     .el-tabs__item {
       font-size: var(--font-size-md);
@@ -238,12 +231,20 @@ const handleAction = (action: string, row: BookingListItem) => {
 
   .action-buttons {
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 8px;
 
-    .action-btn {
-      margin: 0;
+    @media (max-width: 600px) {
+      flex-wrap: wrap;
+    }
+  }
+
+  .action-btn {
+    margin: 0;
+
+    @media (max-width: 600px) {
+      flex: 1 1 100%;
     }
   }
 }

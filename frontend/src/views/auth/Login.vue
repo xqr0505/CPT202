@@ -42,7 +42,6 @@
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
 
-      <!-- 登录按钮 -->
       <button 
         class="login-btn"
         :disabled="isLoading"
@@ -51,7 +50,6 @@
         {{ isLoading ? 'Logging in...' : 'Login' }}
       </button>
 
-      <!-- 底部链接 -->
       <div class="footer-links">
         <router-link to="/register">No account? Register now</router-link>
         <router-link to="/forgot-password">Forgot Password?</router-link>
@@ -77,30 +75,24 @@ onMounted(() => {
   // }
 });
 
-// 角色选项
 const roles = [
   { label: 'CUSTOMER', value: 'CUSTOMER' },
   { label: 'SPECIALIST', value: 'SPECIALIST' },
   { label: 'ADMIN', value: 'ADMIN' }
 ];
 
-// 表单数据
 const form = reactive({
   email: '',
   password: '',
   role: 'CUSTOMER'
 });
 
-// 表单错误
 const errors = reactive({
   email: '',
   password: '',
   role: ''
 });
 
-/**
- * 验证邮箱格式
- */
 function validateEmail() {
   if (!form.email) {
     errors.email = 'Email is required';
@@ -117,12 +109,8 @@ function validateEmail() {
   return true;
 }
 
-/**
- * 处理登录
- */
 async function handleLogin() {
   try {
-    // 验证所有字段
     errors.role = form.role ? '' : 'Please select a role first.';
     const emailValid = validateEmail();
     errors.password = form.password ? '' : 'Password is required';
@@ -133,18 +121,16 @@ async function handleLogin() {
 
     isLoading.value = true;
     
-    // 准备符合后端要求的 payload
     const payload: LoginPayload = {
       email: form.email,
       password: form.password,
       role: form.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
     };
-    // 调用真实的 login API
+
     const response = await login(payload, false);
     
     ElMessage.success('Login successful');
 
-    // 跳转到对应页面
     const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
                         form.role === 'SPECIALIST' ? '/specialist/schedule' :
                         '/admin/specialists';

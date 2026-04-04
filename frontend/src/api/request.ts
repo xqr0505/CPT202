@@ -3,8 +3,8 @@ import { ElMessage } from 'element-plus';
 import router from '@/router';
 
 /**
- * 定义后端返回数据的通用结构
- * @template T - 返回数据 data 的类型
+ * Default API response structure
+ * @template T - data type of the response payload
  */
 interface ApiResponse<T = any> {
   code: number;
@@ -12,17 +12,10 @@ interface ApiResponse<T = any> {
   data: T;
 }
 
-/**
- * 获取当前的认证令牌 (Token)
- * 优先检查持久化 LocalStorage，其次检查会话级SessionStorage
- */
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
 
-/**
- * 清除所有认证相关的数据
- */
 const clearAuthData = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
@@ -31,10 +24,6 @@ const clearAuthData = () => {
   sessionStorage.removeItem('user');
 };
 
-/**
- * 保存认证数据
- * 根据用户是否选择“记住我”，决定存储位置
- */
 export const saveAuthData = (token: string, user: any, rememberMe: boolean = false) => {
   if (rememberMe) {
     localStorage.setItem('token', token);
@@ -50,10 +39,6 @@ export const saveAuthData = (token: string, user: any, rememberMe: boolean = fal
     localStorage.removeItem('rememberMe');  }
 };
 
-/**
- * 保存 Token 到存储
- * 根据 rememberMe 参数决定是否持久化
- */
 export const saveToken = (token: string, rememberMe: boolean = false) => {
   if (rememberMe) {
     localStorage.setItem('token', token);
@@ -64,10 +49,6 @@ export const saveToken = (token: string, rememberMe: boolean = false) => {
   }
 };
 
-/**
- * 保存用户信息到存储
- * 根据 rememberMe 参数决定是否持久化
- */
 export const saveUser = (user: any, rememberMe: boolean = false) => {
   if (rememberMe) {
     localStorage.setItem('user', JSON.stringify(user));
@@ -78,9 +59,6 @@ export const saveUser = (user: any, rememberMe: boolean = false) => {
   }
 };
 
-/**
- * 获取当前登录的用户信息
- */
 export const getUser = (): any => {
   const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
   try {
@@ -90,10 +68,6 @@ export const getUser = (): any => {
   }
 };
 
-/**
- * 用户登出操作
- * 清除本地数据并强制跳转到登录页
- */
 export const logout = () => {
   clearAuthData();
   router.push({ name: 'Login' }).catch(() => null);
@@ -122,10 +96,6 @@ const service = axios.create({
   }
 });
 
-/**
- * 请求拦截器
- * 在请求发送之前执行：主要用于给请求头添加 Token
- */
 service.interceptors.request.use(
   config => {
     const token = getAuthToken();

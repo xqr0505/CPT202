@@ -219,7 +219,7 @@ async function handleRegister() {
     const target = response.role === 'SPECIALIST' ? '/specialist/schedule' : '/customer/search';
     setTimeout(() => { router.push(target); }, 500);
   } catch (error: any) {
-    ElMessage.error(error.message || '注册失败');
+    ElMessage.error(error.message || 'Failed to register');
   } finally {
     isLoading.value = false;
   }

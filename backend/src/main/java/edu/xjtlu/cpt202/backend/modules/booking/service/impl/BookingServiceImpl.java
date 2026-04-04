@@ -12,6 +12,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     public List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit) {
-        return bookingMapper.selectUpcomingBookings(customerId, BookingStatusEnum.CONFIRMED.name(), LocalDateTime.now(), limit);
+        return bookingMapper.selectUpcomingBookings(
+                customerId,
+                BookingStatusEnum.CONFIRMED.name(),
+                LocalDateTime.now(),
+                limit
+        );
     }
 
     @Override
@@ -51,5 +57,13 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
         return detail;
+    }
+
+    @Override
+    public List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId) {
+        return bookingMapper.selectPendingRequestsForSpecialist(
+                currentUserId,
+                BookingStatusEnum.PENDING.name()
+        );
     }
 }

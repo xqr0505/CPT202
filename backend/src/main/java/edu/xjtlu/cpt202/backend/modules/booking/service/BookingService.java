@@ -6,6 +6,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 
 import java.util.List;
@@ -15,9 +16,12 @@ import java.util.List;
  * @date 2026/4/1
  */
 public interface BookingService extends IService<Booking> {
+
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);
 
     PageResult<BookingHistoryListVO> listBookings(Long customerId, BookingHistoryQueryDTO queryDTO);
 
     BookingDetailVO getBookingDetail(Long bookingId, Long customerId);
+
+    List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId);
 }

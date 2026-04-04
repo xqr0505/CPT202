@@ -80,4 +80,21 @@
         JOIN users u ON sp.user_id = u.id
         WHERE b.id = #{bookingId} AND b.customer_id = #{customerId}
     </select>
+    <select id="selectPendingRequestsForSpecialist"
+        resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO">
+    SELECT
+        b.id AS id,
+        u.full_name AS customerName,
+        TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
+        TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
+        b.topic AS topic,
+        b.created_at AS submissionTime
+    FROM bookings b
+    JOIN time_slots ts ON b.slot_id = ts.id
+    JOIN users u ON b.customer_id = u.id
+    JOIN specialist_profiles sp ON b.specialist_id = sp.id
+    WHERE sp.user_id = #{currentUserId}
+      AND b.status = #{status}
+    ORDER BY b.created_at DESC
+</select>
 </mapper>

@@ -16,15 +16,16 @@ const routes = [
       { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') }
     ]
   },
-  {
-    path: '/specialist',
-    component: () => import('../layout/SpecialistLayout.vue'),
-    meta: { requiresAuth: true, role: 'SPECIALIST' },
-    children: [
-      { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
-      { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') }
-    ]
-  },
+{
+  path: '/specialist',
+  component: () => import('../layout/SpecialistLayout.vue'),
+  meta: { requiresAuth: true, role: 'SPECIALIST' },
+  children: [
+    { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
+    { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') },
+    { path: 'booking-requests', component: () => import('../views/specialist/BookingRequests.vue') }
+  ]
+},
   {
     path: '/customer',
     component: () => import('../layout/DefaultLayout.vue'),

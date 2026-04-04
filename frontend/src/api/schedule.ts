@@ -8,6 +8,13 @@ export interface TimeSlotVO {
   startTime: string
   endTime: string
   status: string
+  statusDesc?: string
+  bookingId?: number
+  bookingStatus?: string
+  bookingStatusDesc?: string
+  customerId?: number
+  customerName?: string
+  customerEmail?: string
   recurringRuleId?: number
   createdAt: string
 }
@@ -21,7 +28,6 @@ export interface CreateSlotRequest {
 export interface UpdateSlotRequest {
   startTime?: string
   endTime?: string
-  status?: string
 }
 
 export interface RecurringRuleVO {

@@ -37,6 +37,26 @@
         <template #status="{ row }">
           <BookingStatusTag :status="row.status" />
         </template>
+        <template #mobile-item="{ row }">
+          <div class="booking-card">
+            <div class="card-header">
+              <div class="datetime-cell">
+                <span>{{ row.date }} {{ row.time }}</span>
+              </div>
+              <BookingStatusTag :status="row.status" />
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="info-label">Specialist:</span>
+                <span class="info-value">{{ row.specialist }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Topic:</span>
+                <span class="info-value">{{ row.topic }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </PaginationTable>
     </div>
   </div>
@@ -128,5 +148,47 @@ const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResu
   gap: var(--space-4);
   align-items: center;
 }
-</style>
 
+.booking-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-light, #ebeef5);
+    padding-bottom: var(--space-2);
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+
+      .info-label {
+        color: var(--color-text-secondary);
+        width: 80px;
+        font-size: var(--font-size-sm);
+      }
+
+      .info-value {
+        color: var(--color-text-primary);
+        font-weight: 500;
+        font-size: var(--font-size-sm);
+      }
+    }
+  }
+}
+</style>

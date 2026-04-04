@@ -59,6 +59,50 @@
   --transition-fast: 120ms ease;
   --transition-base: 180ms ease;
   --transition-slow: 240ms ease;
+
+  --color-btn-bg-default: var(--color-bg-muted);
+  --color-btn-border-default: var(--color-border);
+  --color-btn-text-default: var(--color-text-primary);
+  --color-btn-bg-default-hover: var(--color-primary-soft);
+  --color-btn-border-default-hover: var(--color-primary);
+  --color-btn-text-default-hover: var(--color-primary);
+  --color-btn-shadow-default: var(--color-shadow);
+
+  --color-btn-bg-primary: rgba(51, 144, 251, 0.12);
+  --color-btn-border-primary: var(--color-primary);
+  --color-btn-text-primary: var(--color-primary);
+  --color-btn-bg-primary-hover: var(--color-primary);
+  --color-btn-border-primary-hover: var(--color-primary-hover);
+  --color-btn-text-primary-hover: var(--color-text-inverse);
+  --color-btn-shadow-primary: rgba(51, 144, 251, 0.18);
+
+  --color-btn-bg-success: rgba(58, 167, 109, 0.10);
+  --color-btn-border-success: var(--color-success);
+  --color-btn-text-success: var(--color-success);
+  --color-btn-bg-success-hover: var(--color-success);
+  --color-btn-text-success-hover: var(--color-text-inverse);
+  --color-btn-shadow-success: rgba(58, 167, 109, 0.15);
+
+  --color-btn-bg-warning: rgba(211, 155, 46, 0.10);
+  --color-btn-border-warning: var(--color-warning);
+  --color-btn-text-warning: var(--color-warning);
+  --color-btn-bg-warning-hover: var(--color-warning);
+  --color-btn-text-warning-hover: var(--color-text-inverse);
+  --color-btn-shadow-warning: rgba(211, 155, 46, 0.15);
+
+  --color-btn-bg-danger: rgba(212, 92, 115, 0.10);
+  --color-btn-border-danger: var(--color-danger);
+  --color-btn-text-danger: var(--color-danger);
+  --color-btn-bg-danger-hover: var(--color-danger);
+  --color-btn-text-danger-hover: var(--color-text-inverse);
+  --color-btn-shadow-danger: rgba(212, 92, 115, 0.15);
+
+  --color-btn-bg-info: rgba(91, 124, 240, 0.10);
+  --color-btn-border-info: var(--color-info);
+  --color-btn-text-info: var(--color-info);
+  --color-btn-bg-info-hover: var(--color-info);
+  --color-btn-text-info-hover: var(--color-text-inverse);
+  --color-btn-shadow-info: rgba(91, 124, 240, 0.15);
 }
 
 :root[data-theme='dark'] {
@@ -92,6 +136,50 @@
   --color-warning: #e5b95c;
   --color-danger: #f07d94;
   --color-info: #7fa0ff;
+
+  --color-btn-bg-default: var(--color-bg-muted);
+  --color-btn-border-default: var(--color-border);
+  --color-btn-text-default: var(--color-text-primary);
+  --color-btn-bg-default-hover: var(--color-primary-soft);
+  --color-btn-border-default-hover: var(--color-primary);
+  --color-btn-text-default-hover: var(--color-primary);
+  --color-btn-shadow-default: var(--color-shadow);
+
+  --color-btn-bg-primary: rgba(51, 144, 251, 0.12);
+  --color-btn-border-primary: var(--color-primary);
+  --color-btn-text-primary: var(--color-primary);
+  --color-btn-bg-primary-hover: var(--color-primary);
+  --color-btn-border-primary-hover: var(--color-primary-hover);
+  --color-btn-text-primary-hover: var(--color-text-inverse);
+  --color-btn-shadow-primary: rgba(51, 144, 251, 0.18);
+
+  --color-btn-bg-success: rgba(58, 167, 109, 0.10);
+  --color-btn-border-success: var(--color-success);
+  --color-btn-text-success: var(--color-success);
+  --color-btn-bg-success-hover: var(--color-success);
+  --color-btn-text-success-hover: var(--color-text-inverse);
+  --color-btn-shadow-success: rgba(58, 167, 109, 0.15);
+
+  --color-btn-bg-warning: rgba(211, 155, 46, 0.10);
+  --color-btn-border-warning: var(--color-warning);
+  --color-btn-text-warning: var(--color-warning);
+  --color-btn-bg-warning-hover: var(--color-warning);
+  --color-btn-text-warning-hover: var(--color-text-inverse);
+  --color-btn-shadow-warning: rgba(211, 155, 46, 0.15);
+
+  --color-btn-bg-danger: rgba(212, 92, 115, 0.10);
+  --color-btn-border-danger: var(--color-danger);
+  --color-btn-text-danger: var(--color-danger);
+  --color-btn-bg-danger-hover: var(--color-danger);
+  --color-btn-text-danger-hover: var(--color-text-inverse);
+  --color-btn-shadow-danger: rgba(212, 92, 115, 0.15);
+
+  --color-btn-bg-info: rgba(91, 124, 240, 0.10);
+  --color-btn-border-info: var(--color-info);
+  --color-btn-text-info: var(--color-info);
+  --color-btn-bg-info-hover: var(--color-info);
+  --color-btn-text-info-hover: var(--color-text-inverse);
+  --color-btn-shadow-info: rgba(91, 124, 240, 0.15);
 }
 
 html,

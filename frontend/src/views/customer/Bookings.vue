@@ -61,13 +61,60 @@
             </template>
           </div>
         </template>
+
+        <template #mobile-item="{ row }">
+          <div class="booking-card">
+            <div class="card-header">
+              <div class="datetime-cell">
+                <el-icon class="calendar-icon"><Calendar /></el-icon>
+                <span>{{ formatDateTime(row.appointmentDateTime) }}</span>
+              </div>
+              <BookingStatusTag :status="row.status" />
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="info-label">Expert:</span>
+                <span class="info-value">
+                  <el-avatar :size="24" :src="row.specialistAvatar" class="expert-avatar-small">
+                    {{ row.specialistName ? row.specialistName.charAt(0) : 'E' }}
+                  </el-avatar>
+                  {{ row.specialistName }}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Service:</span>
+                <span class="info-value">{{ row.serviceName }}</span>
+              </div>
+            </div>
+            <div class="card-footer">
+              <CustomButton class="mobile-action-btn" type="primary" plain @click="handleAction('view', row)">
+                View
+              </CustomButton>
+
+              <template v-if="activeTab === 'UPCOMING'">
+                <CustomButton class="mobile-action-btn" type="warning" plain @click="handleAction('reschedule', row)">
+                  Reschedule
+                </CustomButton>
+                <CustomButton class="mobile-action-btn" type="danger" plain @click="handleAction('cancel', row)">
+                  Cancel
+                </CustomButton>
+              </template>
+
+              <template v-else>
+                <CustomButton class="mobile-action-btn" type="success" plain @click="handleAction('bookAgain', row)">
+                  Book Again
+                </CustomButton>
+              </template>
+            </div>
+          </div>
+        </template>
       </PaginationTable>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { Calendar } from '@element-plus/icons-vue'
 import { getBookingList } from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
@@ -76,11 +123,13 @@ import PaginationTable from '@/components/business/PaginationTable.vue'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router';
 
 defineOptions({ name: 'CustomerBookings' })
 
 const activeTab = ref<'UPCOMING' | 'HISTORY'>('UPCOMING')
 const tableRef = ref<InstanceType<typeof PaginationTable> | null>(null)
+const router = useRouter();
 
 const tableColumns: TableColumn[] = [
   { prop: 'appointmentDateTime', label: 'Date & Time', minWidth: '200', slotName: 'datetime' },
@@ -135,9 +184,20 @@ const formatDateTime = (dtStr: string) => {
 }
 
 const handleAction = (action: string, row: BookingListItem) => {
-  ElMessage.info(`${action.toUpperCase()} action clicked for ${row.specialistName}`)
-  // TODO: Implement actual action flows
-}
+  switch (action) {
+    case 'reschedule':
+      router.push(`/customer/bookings/${row.id}/reschedule`);
+      break;
+    case 'cancel':
+      router.push(`/customer/bookings/${row.id}/cancel`);
+      break;
+    case 'bookAgain':
+      router.push(`/customer/specialists/${row.specialistId}?from=/customer/specialists`);
+      break;
+    default:
+      ElMessage.warning('Action not implemented');
+  }
+};
 </script>
 
 <style scoped lang="scss">
@@ -245,6 +305,71 @@ const handleAction = (action: string, row: BookingListItem) => {
 
     @media (max-width: 600px) {
       flex: 1 1 100%;
+    }
+  }
+
+  .booking-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--color-border-light, #ebeef5);
+      padding-bottom: var(--space-2);
+    }
+
+    .card-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+
+      .info-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+
+        .info-label {
+          color: var(--color-text-secondary);
+          width: 60px;
+          font-size: var(--font-size-sm);
+        }
+
+        .info-value {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          color: var(--color-text-primary);
+          font-weight: 500;
+          font-size: var(--font-size-sm);
+
+          .expert-avatar-small {
+            background-color: var(--color-primary-light);
+            color: var(--color-primary);
+          }
+        }
+      }
+    }
+
+    .card-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      padding-top: var(--space-2);
+      border-top: 1px solid var(--color-border-light, #ebeef5);
+
+      .mobile-action-btn {
+        flex: 1;
+        min-height: 44px;
+        margin: 0;
+      }
     }
   }
 }

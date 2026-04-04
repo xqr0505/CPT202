@@ -72,7 +72,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/customer/search'
+    redirect: '/auth/login' 
   },
   {
     path: '/:pathMatch(.*)*',

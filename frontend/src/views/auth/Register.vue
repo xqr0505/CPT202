@@ -216,7 +216,7 @@ async function handleRegister() {
     const response = await register(payload);
     ElMessage.success('Registration successful, logging in...');
 
-    const target = response.role === 'SPECIALIST' ? '/specialist/dashboard' : '/customer/dashboard';
+    const target = response.role === 'SPECIALIST' ? '/specialist/schedule' : '/customer/search';
     setTimeout(() => { router.push(target); }, 500);
   } catch (error: any) {
     ElMessage.error(error.message || '注册失败');

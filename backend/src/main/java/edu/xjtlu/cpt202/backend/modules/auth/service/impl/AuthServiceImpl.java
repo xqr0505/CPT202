@@ -34,18 +34,19 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthServiceImpl.class);
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$");
+
     private final UserMapper userMapper;
     private final VerificationCodeMapper verificationCodeMapper;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
+
+    @Autowired(required = false)
+    private JavaMailSender mailSender;
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
-                           VerificationCodeMapper verificationCodeMapper,
-                           JavaMailSender mailSender) {
+                           VerificationCodeMapper verificationCodeMapper) {
         this.userMapper = userMapper;
         this.verificationCodeMapper = verificationCodeMapper;
-        this.mailSender = mailSender;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -72,7 +73,7 @@ public class AuthServiceImpl implements AuthService {
         // 4: 邮箱已存在
         Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", request.getEmail()));
         if (existingCount != null && existingCount > 0) {
-            throw new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(), "This email is already registered");
+            throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -101,20 +102,25 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         verificationCodeMapper.insert(verificationCode);
 
+        logger.info("========== Verification Code (Development Mode) ==========");
+        logger.info("Email: {}", request.getEmail());
+        logger.info("Verification Code: {}", code);
+        logger.info("Expiration: {} minutes", SecurityConstant.VERIFICATION_CODE_EXPIRATION_MINUTES);
+        logger.info("=====================================");
         // 可替换为真实邮件服务，在未配置的情况下只做日志输出
-        try {
-            if (mailSender != null) {
-                SimpleMailMessage message = new SimpleMailMessage();
-                message.setTo(request.getEmail());
-                message.setSubject("Your verification code");
-                message.setText("Your verification code is: " + code + " (valid for 5 minutes)");
-                mailSender.send(message);
-            } else {
-                logger.info("Mail sender not configured, skip email dispatch. Code= {} for email= {}", code, request.getEmail());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to send verification email, continuing logically: {}", e.getMessage());
-        }
+        // try {
+        //     if (mailSender != null) {
+        //         SimpleMailMessage message = new SimpleMailMessage();
+        //         message.setTo(request.getEmail());
+        //         message.setSubject("Your verification code");
+        //         message.setText("Your verification code is: " + code + " (valid for 5 minutes)");
+        //         mailSender.send(message);
+        //     } else {
+        //         logger.info("Mail sender not configured, skip email dispatch. Code= {} for email= {}", code, request.getEmail());
+        //     }
+        // } catch (Exception e) {
+        //     logger.warn("Failed to send verification email, continuing logically: {}", e.getMessage());
+        // }
 
         logger.info("Verification code '{}' generated for {}", code, request.getEmail());
     }
@@ -136,7 +142,7 @@ public class AuthServiceImpl implements AuthService {
 
         Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", request.getEmail()));
         if (existingCount != null && existingCount > 0) {
-            throw new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(), "This email is already registered");
+            throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
         }
 
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
@@ -159,8 +165,8 @@ public class AuthServiceImpl implements AuthService {
         verificationCodeMapper.updateById(codeRecord);
 
         String role = request.getRole().trim().toUpperCase(Locale.ROOT);
-        if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role) && !"ADMIN".equals(role)) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first.");
+        if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER or SPECIALIST can register.");
         }
 
         User newUser = User.builder()
@@ -188,6 +194,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
+        // 1. 基础字段非空校验（已存在）
         if (StrUtil.hasBlank(request.getEmail(), request.getPassword(), request.getRole())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please enter every field");
         }
@@ -197,14 +204,63 @@ public class AuthServiceImpl implements AuthService {
                 .eq("email", request.getEmail().trim().toLowerCase(Locale.ROOT))
                 .eq("role", role));
 
+        // 2. 用户不存在，统一返回“无效凭证”（防止枚举用户名）
         if (user == null) {
             throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Invalid credentials");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Invalid credentials");
+        // 3. 检查账户是否被锁定
+        if ("LOCKED".equals(user.getStatus())) {
+            // 检查锁定时间是否已过（如果 lockTime + 锁定分钟数 > 当前时间，则仍锁定）
+            if (user.getLockTime() != null) {
+                LocalDateTime unlockTime = user.getLockTime().plusMinutes(SecurityConstant.ACCOUNT_LOCK_DURATION_MINUTES);
+                if (LocalDateTime.now().isBefore(unlockTime)) {
+                    throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), 
+                        "Account is locked, please try again later.");
+                } else {
+                    // 锁定已过期，自动解锁并重置失败计数
+                    user.setStatus("ACTIVE");
+                    user.setLoginFailCount(0);
+                    user.setLockTime(null);
+                    userMapper.updateById(user);
+                }
+            } else {
+                // 没有 lockTime 但状态为 LOCKED，视为永久锁定（或直接抛异常）
+                throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), "Account is locked.");
+            }
         }
 
+        // 4. 检查账户是否被注销
+        if ("DEACTIVATED".equals(user.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), "Account has been deactivated.");
+        }
+
+        // 5. 密码校验
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            // 密码错误：增加失败计数
+            int newFailCount = (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount()) + 1;
+            user.setLoginFailCount(newFailCount);
+            if (newFailCount >= SecurityConstant.MAX_LOGIN_ATTEMPTS) {
+                // 锁定账户
+                user.setStatus("LOCKED");
+                user.setLockTime(LocalDateTime.now());
+                userMapper.updateById(user);
+                throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), 
+                    "Too many failed attempts. Account locked for " + SecurityConstant.ACCOUNT_LOCK_DURATION_MINUTES + " minutes.");
+            } else {
+                userMapper.updateById(user);
+                throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Invalid credentials");
+            }
+        }
+
+        // 6. 登录成功：重置失败计数、清空锁定时间、更新最后登录时间（如果有字段）
+        user.setLoginFailCount(0);
+        user.setLockTime(null);
+        // 如果你有 lastLoginTime 字段，可以在这里更新
+        // user.setLastLoginTime(LocalDateTime.now());
+        userMapper.updateById(user);
+
+        // 7. 生成 JWT
         String token = JwtUtils.generateToken(user.getId(), user.getRole());
 
         return LoginResponse.builder()

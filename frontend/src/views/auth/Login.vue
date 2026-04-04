@@ -65,7 +65,6 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { login, type LoginPayload } from '@/api/auth';
-import { saveToken, saveUser } from '@/api/request';
 
 defineOptions({ name: 'AuthLogin' });
 
@@ -133,36 +132,23 @@ async function handleLogin() {
     }
 
     isLoading.value = true;
+    
+    // 准备符合后端要求的 payload
+    const payload: LoginPayload = {
+      email: form.email,
+      password: form.password,
+      role: form.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
+    };
+    // 调用真实的 login API
+    const response = await login(payload, false);
+    
+    ElMessage.success('Login successful');
 
-    return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      // 模拟登录成功的响应数据
-      const mockResponse = {
-        token: 'mock-jwt-token-' + Date.now(),
-        userId: 1001,
-        role: form.role,
-        email: form.email,
-        displayName: form.email.split('@')[0],
-        expiresIn: 1800000  // 30分钟
-      };
-
-      saveToken(mockResponse.token, false);  // false 表示不记住我，存在 sessionStorage
-      saveUser(mockResponse, false);
-      
-
-      ElMessage.success('登录成功（模拟）');
-
-      // 跳转到对应页面
-      const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
-                          form.role === 'SPECIALIST' ? '/specialist/schedule' :
-                          '/admin/specialists';
-      router.push(targetRoute);
-      resolve();
-    }, 500);
-  }).finally(() => {
-    isLoading.value = false;
-  });
-
+    // 跳转到对应页面
+    const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
+                        form.role === 'SPECIALIST' ? '/specialist/schedule' :
+                        '/admin/specialists';
+    router.push(targetRoute);
   } catch (error: any) {
     console.error('Login error:', error);
     ElMessage.error(error.message || 'Login failed');

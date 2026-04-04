@@ -26,7 +26,7 @@ public class SecurityConstant {
     /**
      * The default expiration time for JWT Access Tokens, in milliseconds (1 hour).
      */
-    public static final Long JWT_EXPIRATION_MILLISECONDS = 3600000L;
+    public static final Long JWT_EXPIRATION_MILLISECONDS = 30 * 60 * 1000L; // 30 minutes
 
     /**
      * The expiration time for Refresh Tokens, in days.
@@ -46,7 +46,7 @@ public class SecurityConstant {
     /**
      * The duration, in minutes, for which an account remains locked after exceeding MAX_LOGIN_ATTEMPTS.
      */
-    public static final Integer ACCOUNT_LOCK_DURATION_MINUTES = 30;
+    public static final Integer ACCOUNT_LOCK_DURATION_MINUTES = 15;
 
     /**
      * The expiration time for email verification codes, in minutes.

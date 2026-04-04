@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 /**
+ * global exception handler
  * @author QiranXiao
  * @date 2026/3/26
  */
@@ -41,7 +42,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
-        // Log the actual exception here in a real application
         return Result.fail(ResultCodeEnum.SYSTEM_ERROR.getCode(), ResultCodeEnum.SYSTEM_ERROR.getMessage());
     }
+
 }

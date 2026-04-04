@@ -16,7 +16,7 @@ interface ApiResponse<T = any> {
  * 获取当前的认证令牌 (Token)
  * 优先检查持久化 LocalStorage，其次检查会话级SessionStorage
  */
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
 

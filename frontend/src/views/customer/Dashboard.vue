@@ -2,7 +2,9 @@
   <section class="page-card">
     <p class="page-tag">Customer</p>
     <h1>Dashboard</h1>
-    <UpcomingAppointments/>
+    <el-card>
+      <UpcomingAppointments />
+    </el-card>
   </section>
 </template>
 

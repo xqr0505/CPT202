@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { setupRouterGuard } from './permission';
 
 const routes = [
   {
@@ -14,13 +15,16 @@ const routes = [
     name: 'Register'
   },
   {
-    path: '/admin',
-    component: () => import('../layout/AdminLayout.vue'),
-    meta: { requiresAuth: true, role: 'ADMIN' },
-    children: [
-      { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') }
-    ]
-  },
+  path: '/admin',
+  component: () => import('../layout/AdminLayout.vue'),
+  meta: { requiresAuth: true, role: 'ADMIN' },
+  children: [
+    { path: 'categories', component: () => import('../views/admin/AdminCategoryList.vue') },
+    { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') },
+    { path: 'specialists/create', component: () => import('../views/admin/AdminSpecialistForm.vue') },
+    { path: 'specialists/:id/edit', component: () => import('../views/admin/AdminSpecialistForm.vue') }
+  ]
+},
   {
     path: '/specialist',
     component: () => import('../layout/SpecialistLayout.vue'),
@@ -81,4 +85,7 @@ const router = createRouter({
   routes,
 })
 
-export default router
+setupRouterGuard(router);
+
+export default router;
+

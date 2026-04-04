@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @MapperScan("edu.xjtlu.cpt202.backend.modules.*.mapper")
 @SpringBootApplication
+@MapperScan("edu.xjtlu.cpt202.backend.modules.**.mapper")
 public class BackendApplication {
 
 	public static void main(String[] args) {

@@ -6,6 +6,7 @@
  */
 
 import request, { saveToken, saveUser } from './request';
+import { logout as clearAndRedirect } from './request';
 
 /**
  * 登录请求参数类型
@@ -142,7 +143,10 @@ export function sendVerificationCode(payload: SendVerificationCodePayload): Prom
  * // 自动跳转到登录页
  */
 export function logout(): Promise<any> {
-  return request.post('/auth/logout', {});
+  // 可选：通知后端（如果后端需要）
+  return request.post('/auth/logout', {}).finally(() => {
+    clearAndRedirect();  // 清除本地数据并跳转登录页
+  });
 }
 
 /**

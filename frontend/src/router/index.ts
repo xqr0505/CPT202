@@ -10,6 +10,11 @@ const routes = [
     ]
   },
   {
+    path: '/register',
+    component: () => import('../views/auth/Register.vue'),
+    name: 'Register'
+  },
+  {
   path: '/admin',
   component: () => import('../layout/AdminLayout.vue'),
   meta: { requiresAuth: true, role: 'ADMIN' },
@@ -67,7 +72,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/customer/search'
+    redirect: '/auth/login' 
   },
   {
     path: '/:pathMatch(.*)*',

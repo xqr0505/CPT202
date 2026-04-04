@@ -1,34 +1,53 @@
+// src/router/permission.ts
 import type { Router, RouteLocationNormalized } from 'vue-router';
-import { getAuthToken } from '@/api/request';  // 我们需要导出 getAuthToken
+import { getAuthToken, getUser } from '@/api/request';
 
-// 白名单：不需要登录就能访问的页面
-const whiteList = ['/auth/login', '/error/403', '/error/404', '/error/500'];
+// WhiteList
+const whiteList = ['/auth/login', '/register', '/error/403', '/error/404', '/error/500'];
 
-// 设置路由守卫
+const getDefaultHomePath = (role: string): string => {
+  switch (role) {
+    case 'ADMIN':
+      return '/admin/specialists';
+    case 'SPECIALIST':
+      return '/specialist/schedule';
+    case 'CUSTOMER':
+    default:
+      return '/customer/search';
+  }
+};
+
 export function setupRouterGuard(router: Router) {
-  router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormalized, next) => {
-    const token = getAuthToken();  // 检查是否存在 token
+  router.beforeEach(async (to, from, next) => {
+    const token = getAuthToken();
+    const user = getUser(); // { userId, role, email, displayName }
 
-    if (token) {
-      // 已登录
-      if (to.path === '/auth/login') {
-        // 如果已登录且要去登录页，则重定向到首页（或原来的目标）
-        next({ path: '/customer/search' });
-      } else {
-        // 正常访问，放行
-        next();
+    if (token && user) {
+      // Logged in, check permissions
+      if (to.path === '/auth/login' || to.path === '/register') {
+        next({ path: getDefaultHomePath(user.role) });
+        return;
       }
-    } else {
-      // 未登录
-      // FIXME: Mock 阶段：放行所有路由
-      // if (whiteList.includes(to.path)) {
-      //   // 在白名单内，放行
-      //   next();
-      // } else {
-      //   // 不在白名单，重定向到登录页，并携带原目标路径
-      //   next({ path: '/auth/login', query: { redirect: to.fullPath } });
-      // }
+
+      if (to.path === '/') {
+        next({ path: getDefaultHomePath(user.role) });
+        return;
+      }
+
+      const requiredRole = to.meta?.role as string | undefined;
+      if (requiredRole && user.role !== requiredRole) {
+        next({ path: '/error/403' });
+        return;
+      }
+
       next();
+    } else {
+      // Not logged in, check if the route is in the whitelist
+      if (whiteList.includes(to.path)) {
+        next();
+      } else {
+        next({ path: '/auth/login', query: { redirect: to.fullPath } });
+      }
     }
   });
 }

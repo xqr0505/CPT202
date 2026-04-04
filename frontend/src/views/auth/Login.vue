@@ -3,7 +3,7 @@
     <div class="login-form-card">
       <h1 class="login-title">Appointment Platform Login</h1>
       
-      <!-- 角色选择 -->
+      <!-- Role selection -->
       <div class="form-group">
         <label>Select Role</label>
         <div class="role-selector">
@@ -19,30 +19,29 @@
         <span v-if="errors.role" class="error-text">{{ errors.role }}</span>
       </div>
 
-      <!-- 邮箱输入 -->
+      <!-- Email input -->
       <div class="form-group">
         <label>Email Address</label>
         <input 
           v-model="form.email"
           type="email"
-          placeholder="Please enter your email address"
+          placeholder="Enter your email"
           @blur="validateEmail"
         />
         <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
       </div>
 
-      <!-- 密码输入 -->
+      <!-- Password input -->
       <div class="form-group">
         <label>Password</label>
         <input 
           v-model="form.password"
           type="password"
-          placeholder="Please enter your password"
+          placeholder="Enter your password"
         />
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
 
-      <!-- 登录按钮 -->
       <button 
         class="login-btn"
         :disabled="isLoading"
@@ -51,7 +50,6 @@
         {{ isLoading ? 'Logging in...' : 'Login' }}
       </button>
 
-      <!-- 底部链接 -->
       <div class="footer-links">
         <router-link to="/register">No account? Register now</router-link>
         <router-link to="/forgot-password">Forgot Password?</router-link>
@@ -65,7 +63,6 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { login, type LoginPayload } from '@/api/auth';
-import { saveToken, saveUser } from '@/api/request';
 
 defineOptions({ name: 'AuthLogin' });
 
@@ -78,30 +75,24 @@ onMounted(() => {
   // }
 });
 
-// 角色选项
 const roles = [
   { label: 'CUSTOMER', value: 'CUSTOMER' },
   { label: 'SPECIALIST', value: 'SPECIALIST' },
   { label: 'ADMIN', value: 'ADMIN' }
 ];
 
-// 表单数据
 const form = reactive({
   email: '',
   password: '',
   role: 'CUSTOMER'
 });
 
-// 表单错误
 const errors = reactive({
   email: '',
   password: '',
   role: ''
 });
 
-/**
- * 验证邮箱格式
- */
 function validateEmail() {
   if (!form.email) {
     errors.email = 'Email is required';
@@ -118,12 +109,8 @@ function validateEmail() {
   return true;
 }
 
-/**
- * 处理登录
- */
 async function handleLogin() {
   try {
-    // 验证所有字段
     errors.role = form.role ? '' : 'Please select a role first.';
     const emailValid = validateEmail();
     errors.password = form.password ? '' : 'Password is required';
@@ -133,36 +120,21 @@ async function handleLogin() {
     }
 
     isLoading.value = true;
+    
+    const payload: LoginPayload = {
+      email: form.email,
+      password: form.password,
+      role: form.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
+    };
 
-    return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      // 模拟登录成功的响应数据
-      const mockResponse = {
-        token: 'mock-jwt-token-' + Date.now(),
-        userId: 1001,
-        role: form.role,
-        email: form.email,
-        displayName: form.email.split('@')[0],
-        expiresIn: 1800000  // 30分钟
-      };
+    const response = await login(payload, false);
+    
+    ElMessage.success('Login successful');
 
-      saveToken(mockResponse.token, false);  // false 表示不记住我，存在 sessionStorage
-      saveUser(mockResponse, false);
-      
-
-      ElMessage.success('登录成功（模拟）');
-
-      // 跳转到对应页面
-      const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
-                          form.role === 'SPECIALIST' ? '/specialist/schedule' :
-                          '/admin/specialists';
-      router.push(targetRoute);
-      resolve();
-    }, 500);
-  }).finally(() => {
-    isLoading.value = false;
-  });
-
+    const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
+                        form.role === 'SPECIALIST' ? '/specialist/schedule' :
+                        '/admin/specialists';
+    router.push(targetRoute);
   } catch (error: any) {
     console.error('Login error:', error);
     ElMessage.error(error.message || 'Login failed');

@@ -1,35 +1,54 @@
 <template>
   <div class="pagination-table">
-    <el-table
-      v-loading="loading"
-      :data="tableData"
-      class="table-content"
-      border
-      stripe
-    >
-      <el-table-column
-        v-for="col in columns"
-        :key="col.prop || col.label"
-        :prop="col.prop"
-        :label="col.label"
-        :width="col.width"
-        :min-width="col.minWidth"
+    <template v-if="!isMobile">
+      <el-table
+        v-loading="loading"
+        :data="tableData"
+        class="table-content"
+        border
+        stripe
       >
-        <template #default="scope" v-if="col.slotName || $slots[col.prop || '']">
-          <slot :name="col.slotName || col.prop" :row="scope.row" :index="scope.$index">
-            {{ scope.row[col.prop!] }}
-          </slot>
-        </template>
-      </el-table-column>
-    </el-table>
+        <el-table-column
+          v-for="col in columns"
+          :key="col.prop || col.label"
+          :prop="col.prop"
+          :label="col.label"
+          :width="col.width"
+          :min-width="col.minWidth"
+        >
+          <template #default="scope" v-if="col.slotName || $slots[col.prop || '']">
+            <slot :name="col.slotName || col.prop" :row="scope.row" :index="scope.$index">
+              {{ scope.row[col.prop!] }}
+            </slot>
+          </template>
+        </el-table-column>
+      </el-table>
+    </template>
 
-    <div class="pagination-wrapper">
+    <template v-else>
+      <div class="mobile-list-content" v-loading="loading">
+        <template v-if="$slots.mobile">
+          <slot name="mobile" :data="tableData"></slot>
+        </template>
+        <template v-else>
+          <div v-for="(row, index) in tableData" :key="index" class="mobile-fallback-card">
+            <slot name="mobile-item" :row="row" :index="index">
+              <pre>{{ row }}</pre>
+            </slot>
+          </div>
+        </template>
+        <el-empty v-if="tableData.length === 0 && !loading" description="No Data" />
+      </div>
+    </template>
+
+    <div class="pagination-wrapper" :class="{ 'is-mobile': isMobile }">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
+        :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
         :total="total"
+        :small="isMobile"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       />
@@ -38,7 +57,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useWindowSize } from '@vueuse/core'
 
 export interface TableColumn {
   prop?: string
@@ -64,6 +84,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { width } = useWindowSize()
+const isMobile = computed(() => width.value < 768)
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
@@ -120,11 +143,18 @@ onMounted(() => {
     margin-bottom: var(--space-4);
   }
 
+  .mobile-list-content {
+    margin-bottom: var(--space-4);
+  }
+
   .pagination-wrapper {
     display: flex;
     justify-content: flex-end;
     margin-top: var(--space-4);
+
+    &.is-mobile {
+      justify-content: center;
+    }
   }
 }
 </style>
-

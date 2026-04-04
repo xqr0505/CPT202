@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { Calendar } from '@element-plus/icons-vue'
 import { getBookingList } from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
@@ -76,11 +76,13 @@ import PaginationTable from '@/components/business/PaginationTable.vue'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router';
 
 defineOptions({ name: 'CustomerBookings' })
 
 const activeTab = ref<'UPCOMING' | 'HISTORY'>('UPCOMING')
 const tableRef = ref<InstanceType<typeof PaginationTable> | null>(null)
+const router = useRouter();
 
 const tableColumns: TableColumn[] = [
   { prop: 'appointmentDateTime', label: 'Date & Time', minWidth: '200', slotName: 'datetime' },
@@ -135,9 +137,20 @@ const formatDateTime = (dtStr: string) => {
 }
 
 const handleAction = (action: string, row: BookingListItem) => {
-  ElMessage.info(`${action.toUpperCase()} action clicked for ${row.specialistName}`)
-  // TODO: Implement actual action flows
-}
+  switch (action) {
+    case 'reschedule':
+      router.push(`/customer/bookings/${row.id}/reschedule`);
+      break;
+    case 'cancel':
+      router.push(`/customer/bookings/${row.id}/cancel`);
+      break;
+    case 'bookAgain':
+      router.push(`/customer/specialists/${row.specialistId}?from=/customer/specialists`);
+      break;
+    default:
+      ElMessage.warning('Action not implemented');
+  }
+};
 </script>
 
 <style scoped lang="scss">

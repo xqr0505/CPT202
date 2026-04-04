@@ -16,14 +16,15 @@ interface Props {
 const props = defineProps<Props>()
 
 const tagType = computed(() => {
-  switch (props.status) {
-    case BOOKING_STATUS.PENDING:
+  const normalizedStatus = String(props.status || '').toUpperCase()
+  switch (normalizedStatus) {
+    case 'PENDING':
       return 'warning'
-    case BOOKING_STATUS.CONFIRMED:
+    case 'CONFIRMED':
       return 'success'
-    case BOOKING_STATUS.CANCELLED:
+    case 'CANCELLED':
       return 'danger'
-    case BOOKING_STATUS.COMPLETED:
+    case 'COMPLETED':
       return 'info'
     default:
       return 'info'

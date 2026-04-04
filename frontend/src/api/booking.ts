@@ -22,6 +22,28 @@ export interface CreateBookingResponse {
   status: BookingStatus | string
 }
 
+export interface BookingListItem {
+  id: string;
+  specialistId: string;
+  specialistName: string;
+  specialistAvatar?: string;
+  specialistTitle?: string;
+  appointmentDateTime: string;
+  serviceName: string;
+  status: BookingStatus | string;
+  amount?: number;
+}
+
+export interface BookingListResponse {
+  total: number;
+  list: BookingListItem[];
+}
+
+export interface BookingListQuery {
+  pageNo?: number;
+  pageSize?: number;
+  tab: 'UPCOMING' | 'HISTORY';
+}
 
 export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
@@ -31,4 +53,6 @@ export const createBooking = (data: CreateBookingRequest) => {
   return request.post<CreateBookingResponse>('/api/v1/customer/bookings', data)
 }
 
-
+export const getBookingList = (params: BookingListQuery) => {
+  return request.get<BookingListResponse>('/api/v1/customer/bookings/list', { params });
+}

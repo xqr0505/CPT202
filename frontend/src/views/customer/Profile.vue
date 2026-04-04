@@ -1,7 +1,6 @@
 <template>
   <section class="page-card profile-page">
     <div class="page-header">
-      <p class="page-tag">Customer</p>
       <h1 class="page-title">Profile and Account Settings</h1>
       <p class="page-text">
         Use this account settings page to review your profile details and manage your password,

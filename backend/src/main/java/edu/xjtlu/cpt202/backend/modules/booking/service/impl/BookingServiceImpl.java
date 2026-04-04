@@ -11,11 +11,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
@@ -67,21 +66,6 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return result != null ? result : List.of();
     }
 
-    @Override
-    public PageResult<BookingHistoryListVO> listBookings(Long customerId, BookingHistoryQueryDTO queryDTO) {
-        Page<BookingHistoryListVO> page = new Page<>(queryDTO.getPageNo(), queryDTO.getPageSize());
-        IPage<BookingHistoryListVO> resultPage = bookingMapper.listBookings(page, queryDTO, customerId);
-        return new PageResult<>(resultPage.getTotal(), resultPage.getRecords());
-    }
-
-    @Override
-    public BookingDetailVO getBookingDetail(Long bookingId, Long customerId) {
-        BookingDetailVO detail = bookingMapper.getBookingDetail(bookingId, customerId);
-        if (detail == null) {
-            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
-        }
-        return detail;
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -130,6 +114,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         return new BookingCreateVO(booking.getId(), booking.getStatus());
+    }
+
+    @Override
+    public PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto) {
+        LocalDateTime currentTime = LocalDateTime.now();
+        long offset = (long) (dto.getPageNo() - 1) * dto.getPageSize();
+        List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), currentTime, offset, dto.getPageSize());
+        Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), currentTime);
+        return new PageResult<>(total, list);
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

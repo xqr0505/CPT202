@@ -9,11 +9,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
@@ -66,7 +65,7 @@ public class BookingServiceImplTest {
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(LocalDateTime.of(2026, 4, 3, 10, 0, 0))
+                        .startTime(LocalDateTime.of(2026, 4, 4, 10, 0, 0))
                         .today(true)
                         .status("CONFIRMED")
                         .build(),
@@ -75,7 +74,7 @@ public class BookingServiceImplTest {
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
                         .startTime(LocalDateTime.of(2026, 4, 4, 14, 0, 0))
-                        .today(false)
+                        .today(true)
                         .status("CONFIRMED")
                         .build(),
                 UpcomingBookingVO.builder()
@@ -98,13 +97,13 @@ public class BookingServiceImplTest {
         assertEquals(3, result.size());
         assertEquals("Schedule Dev Specialist", result.get(0).getSpecialistName());
         assertEquals("Counseling", result.get(0).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 3, 10, 0, 0), result.get(0).getStartTime());
+        assertEquals(LocalDateTime.of(2026, 4, 4, 10, 0, 0), result.get(0).getStartTime());
         assertTrue(result.get(0).getToday());
         assertEquals("CONFIRMED", result.get(0).getStatus());
         assertEquals("Dr. Adam Smith", result.get(1).getSpecialistName());
         assertEquals("Career Planning", result.get(1).getServiceName());
         assertEquals(LocalDateTime.of(2026, 4, 4, 14, 0, 0), result.get(1).getStartTime());
-        assertFalse(result.get(1).getToday());
+        assertTrue(result.get(1).getToday());
         assertEquals("CONFIRMED", result.get(1).getStatus());
         assertEquals("Schedule Dev Specialist", result.get(2).getSpecialistName());
         assertEquals("Counseling", result.get(2).getServiceName());
@@ -113,65 +112,6 @@ public class BookingServiceImplTest {
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }
 
-    @Test
-    public void listBookings_Success() {
-        // Arrange
-        Long customerId = 1L;
-        BookingHistoryQueryDTO queryDTO = new BookingHistoryQueryDTO();
-        queryDTO.setPageNo(1);
-        queryDTO.setPageSize(10);
-
-        IPage<BookingHistoryListVO> mockPage = new Page<>(1, 10);
-        mockPage.setTotal(1);
-        BookingHistoryListVO vo = new BookingHistoryListVO();
-        mockPage.setRecords(Collections.singletonList(vo));
-
-        when(bookingMapper.listBookings(any(Page.class), eq(queryDTO), eq(customerId)))
-                .thenReturn(mockPage);
-
-        // Act
-        PageResult<BookingHistoryListVO> result = bookingService.listBookings(customerId, queryDTO);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getTotal());
-        assertEquals(1, result.getList().size());
-    }
-
-    @Test
-    public void getBookingDetail_Success() {
-        // Arrange
-        Long bookingId = 1L;
-        Long customerId = 1L;
-        BookingDetailVO mockDetail = new BookingDetailVO();
-        mockDetail.setId(bookingId);
-
-        when(bookingMapper.getBookingDetail(bookingId, customerId))
-                .thenReturn(mockDetail);
-
-        // Act
-        BookingDetailVO result = bookingService.getBookingDetail(bookingId, customerId);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(bookingId, result.getId());
-    }
-
-    @Test
-    public void getBookingDetail_NotFound() {
-        // Arrange
-        Long bookingId = 1L;
-        Long customerId = 1L;
-
-        when(bookingMapper.getBookingDetail(bookingId, customerId))
-                .thenReturn(null);
-
-        // Act & Assert
-        BusinessException exception = assertThrows(BusinessException.class, () -> {
-            bookingService.getBookingDetail(bookingId, customerId);
-        });
-        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), exception.getCode());
-    }
 
     @Test
     public void createBooking_Success() {
@@ -321,5 +261,91 @@ public class BookingServiceImplTest {
 
         assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), exception.getCode());
         assertEquals("Time slot already booked", exception.getMessage());
+    }
+
+    @Test
+    public void getBookingList_UPCOMING_Success() {
+        // Arrange
+        Long customerId = 1L;
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setTab("UPCOMING");
+        dto.setPageNo(1);
+        dto.setPageSize(10);
+
+        List<BookingItemVO> mockList = List.of(
+                BookingItemVO.builder()
+                        .id("1")
+                        .specialistId("101")
+                        .specialistName("Dr. John Doe")
+                        .specialistAvatar("https://example.com/avatar.jpg")
+                        .serviceName("Mental Health Consultation")
+                        .appointmentDateTime(LocalDateTime.of(2026, 4, 20, 10, 0))
+                        .status("PENDING")
+                        .amount(new BigDecimal("150.00"))
+                        .build()
+        );
+        Long mockTotal = 1L;
+
+        when(bookingMapper.selectBookingList(eq(customerId), eq("UPCOMING"), any(LocalDateTime.class), eq(0L), eq(10)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(customerId), eq("UPCOMING"), any(LocalDateTime.class)))
+                .thenReturn(mockTotal);
+
+        // Act
+        PageResult<BookingItemVO> result = bookingService.getBookingList(customerId, dto);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(1L, result.getTotal());
+        assertEquals(1, result.getList().size());
+        assertEquals("1", result.getList().get(0).getId());
+        assertEquals("Dr. John Doe", result.getList().get(0).getSpecialistName());
+        assertEquals("Mental Health Consultation", result.getList().get(0).getServiceName());
+        assertEquals(LocalDateTime.of(2026, 4, 20, 10, 0), result.getList().get(0).getAppointmentDateTime());
+        assertEquals("PENDING", result.getList().get(0).getStatus());
+        assertEquals(new BigDecimal("150.00"), result.getList().get(0).getAmount());
+    }
+
+    @Test
+    public void getBookingList_HISTORY_Success() {
+        // Arrange
+        Long customerId = 1L;
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setTab("HISTORY");
+        dto.setPageNo(2);
+        dto.setPageSize(5);
+
+        List<BookingItemVO> mockList = List.of(
+                BookingItemVO.builder()
+                        .id("2")
+                        .specialistId("102")
+                        .specialistName("Dr. Jane Smith")
+                        .specialistAvatar("https://example.com/avatar2.jpg")
+                        .serviceName("Career Planning")
+                        .appointmentDateTime(LocalDateTime.of(2026, 3, 15, 14, 0))
+                        .status("COMPLETED")
+                        .amount(new BigDecimal("100.00"))
+                        .build()
+        );
+        Long mockTotal = 7L;
+
+        when(bookingMapper.selectBookingList(eq(customerId), eq("HISTORY"), any(LocalDateTime.class), eq(5L), eq(5)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(customerId), eq("HISTORY"), any(LocalDateTime.class)))
+                .thenReturn(mockTotal);
+
+        // Act
+        PageResult<BookingItemVO> result = bookingService.getBookingList(customerId, dto);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(7L, result.getTotal());
+        assertEquals(1, result.getList().size());
+        assertEquals("2", result.getList().get(0).getId());
+        assertEquals("Dr. Jane Smith", result.getList().get(0).getSpecialistName());
+        assertEquals("Career Planning", result.getList().get(0).getServiceName());
+        assertEquals(LocalDateTime.of(2026, 3, 15, 14, 0), result.getList().get(0).getAppointmentDateTime());
+        assertEquals("COMPLETED", result.getList().get(0).getStatus());
+        assertEquals(new BigDecimal("100.00"), result.getList().get(0).getAmount());
     }
 }

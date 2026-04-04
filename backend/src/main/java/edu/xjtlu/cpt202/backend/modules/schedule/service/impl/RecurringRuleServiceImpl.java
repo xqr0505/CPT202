@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.utils.BeanCopyUtils;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRule;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleMapper;
@@ -11,6 +12,7 @@ import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.CreateRecurringRuleRequest;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.RecurringRuleVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.RecurringRuleService;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
 
     private final AvailabilityRecurringRuleMapper recurringRuleMapper;
     private final TimeSlotMapper timeSlotMapper;
+    private final SpecialistProfileMapper specialistProfileMapper;
 
     @Override
     @Transactional
@@ -122,9 +125,13 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
 
         int slotsCreated = 0;
         while (!nextOccurrence.isAfter(endDate)) {
-            createTimeSlotFromRule(rule, nextOccurrence);
+            if (hasTimeSlotConflict(rule.getSpecialistId(), nextOccurrence, rule.getStartTime(), rule.getEndTime())) {
+                log.info("Skipped recurring slot on {} for rule {} due to conflict", nextOccurrence, rule.getId());
+            } else {
+                createTimeSlotFromRule(rule, nextOccurrence);
+                slotsCreated++;
+            }
             nextOccurrence = nextOccurrence.plusWeeks(1);
-            slotsCreated++;
         }
 
         log.info("Generated {} time slots from recurring rule {}", slotsCreated, rule.getId());
@@ -137,7 +144,7 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         slot.setSlotDate(date);
         slot.setStartTime(rule.getStartTime());
         slot.setEndTime(rule.getEndTime());
-        slot.setStatus("AVAILABLE");
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
 
         timeSlotMapper.insert(slot);
     }
@@ -154,7 +161,11 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         if (userId == null) {
             throw new BusinessException(UNAUTHORIZED);
         }
-        return userId;
+        Long specialistProfileId = specialistProfileMapper.selectIdByUserId(userId);
+        if (specialistProfileId == null) {
+            throw new BusinessException(NOT_FOUND.getCode(), "Specialist profile not found");
+        }
+        return specialistProfileId;
     }
 
     private void validateTimeRange(LocalTime start, LocalTime end) {
@@ -174,8 +185,16 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
                .apply("NOT (end_time <= {0} OR start_time >= {1})", startTime, endTime);
 
         if (recurringRuleMapper.selectCount(wrapper) > 0) {
-            throw new BusinessException(PARAM_ERROR);
+            throw new BusinessException(PARAM_ERROR.getCode(), "Recurring rule overlaps with an existing rule");
         }
+    }
+
+    private boolean hasTimeSlotConflict(Long specialistId, LocalDate slotDate, LocalTime startTime, LocalTime endTime) {
+        LambdaQueryWrapper<TimeSlot> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TimeSlot::getSpecialistId, specialistId)
+               .eq(TimeSlot::getSlotDate, slotDate)
+               .apply("NOT (end_time <= {0} OR start_time >= {1})", startTime, endTime);
+        return timeSlotMapper.selectCount(wrapper) > 0;
     }
 
     private RecurringRuleVO convertToVO(AvailabilityRecurringRule rule) {

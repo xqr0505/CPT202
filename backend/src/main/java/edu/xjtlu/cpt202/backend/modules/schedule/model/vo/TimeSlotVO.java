@@ -29,6 +29,18 @@ public class TimeSlotVO {
 
     private String statusDesc;
 
+    private Long bookingId;
+
+    private String bookingStatus;
+
+    private String bookingStatusDesc;
+
+    private Long customerId;
+
+    private String customerName;
+
+    private String customerEmail;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

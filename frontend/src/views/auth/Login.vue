@@ -150,21 +150,22 @@ async function handleLogin() {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-bg-page);
 }
 
 .login-form-card {
-  background: white;
-  border-radius: 8px;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
   padding: 40px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 40px var(--color-shadow);
+  transition: background-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .login-title {
   text-align: center;
-  color: #333;
+  color: var(--color-text-primary);
   margin-bottom: 30px;
   font-size: 24px;
 }
@@ -176,23 +177,29 @@ async function handleLogin() {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
 .form-group input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background: var(--color-bg-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   font-size: 14px;
-  transition: border-color 0.3s;
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(51, 144, 251, 0.1);
+}
+
+.form-group input::placeholder {
+  color: var(--color-text-tertiary);
 }
 
 .role-selector {
@@ -204,26 +211,27 @@ async function handleLogin() {
 .role-btn {
   flex: 1;
   padding: 10px;
-  border: 2px solid #ddd;
-  background: white;
-  border-radius: 4px;
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all var(--transition-fast);
 }
 
 .role-btn:hover {
-  border-color: #667eea;
+  border-color: var(--color-primary);
 }
 
 .role-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
 }
 
 .error-text {
   display: block;
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 12px;
   margin-top: 5px;
 }
@@ -231,23 +239,24 @@ async function handleLogin() {
 .login-btn {
   width: 100%;
   padding: 12px;
-  background: #667eea;
-  color: white;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: background var(--transition-fast);
   margin-top: 20px;
 }
 
 .login-btn:hover:not(:disabled) {
-  background: #5568d3;
+  background: var(--color-primary-hover);
 }
 
 .login-btn:disabled {
-  background: #ccc;
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
   cursor: not-allowed;
 }
 
@@ -259,12 +268,12 @@ async function handleLogin() {
 }
 
 .footer-links a {
-  color: #667eea;
+  color: var(--color-primary);
   text-decoration: none;
-  transition: color 0.3s;
+  transition: color var(--transition-fast);
 }
 
 .footer-links a:hover {
-  color: #5568d3;
+  color: var(--color-primary-hover);
 }
 </style>

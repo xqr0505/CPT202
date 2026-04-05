@@ -232,98 +232,163 @@ async function handleRegister() {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-bg-page);
 }
+
 .register-card {
   width: 420px;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
   padding: 32px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 28px var(--color-shadow);
+  transition: background-color var(--transition-base), box-shadow var(--transition-base);
 }
+
 .register-title {
-  color: #333;
+  color: var(--color-text-primary);
   font-weight: 700;
   text-align: center;
   margin-bottom: 20px;
 }
+
 .form-group {
   margin-bottom: 16px;
 }
+
 .form-group label {
   font-weight: 600;
   margin-bottom: 8px;
   display: block;
+  color: var(--color-text-primary);
 }
+
 .form-group input {
   width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background: var(--color-bg-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-size: 14px;
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(51, 144, 251, 0.1);
+}
+
+.form-group input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
 .error-text {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 12px;
   margin-top: 4px;
   display: block;
 }
+
 .hint-text {
   display: block;
-  color: #4a90e2;
+  color: var(--color-success);
   font-size: 12px;
   margin-bottom: 8px;
 }
+
 .role-selector {
   display: flex;
   gap: 10px;
 }
+
 .role-btn {
   flex: 1;
-  border: 1px solid #ddd;
-  color: #333;
-  background: #fff;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-sm);
   padding: 8px;
   cursor: pointer;
+  transition: all var(--transition-fast);
 }
+
+.role-btn:hover {
+  border-color: var(--color-primary);
+}
+
 .role-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
 }
+
 .verification-group {
   display: flex;
   align-items: center;
 }
+
 .verification-group input {
   flex: 1;
   margin-right: 10px;
 }
+
 .code-btn {
-  border: 1px solid #667eea;
-  color: #667eea;
-  background: #fff;
-  border-radius: 4px;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
 }
+
+.code-btn:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.code-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .register-btn {
   width: 100%;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 12px;
-  background: #667eea;
-  color: white;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   font-weight: 600;
   cursor: pointer;
   margin-top: 8px;
+  transition: background var(--transition-fast);
 }
+
+.register-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.register-btn:disabled {
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
 .footer-links {
   margin-top: 14px;
   text-align: center;
 }
+
 .footer-links a {
-  color: #667eea;
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.footer-links a:hover {
+  color: var(--color-primary-hover);
 }
 </style>

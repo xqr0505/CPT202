@@ -59,45 +59,46 @@
       </div>
 
       <div class="password-panel__body">
-        <el-form label-position="top" class="password-form">
+        <el-form
+          ref="passwordFormRef"
+          :model="form"
+          :rules="passwordRules"
+          label-position="top"
+          class="password-form"
+        >
           <div class="form-grid">
-            <el-form-item label="Current Password" :error="formErrors.currentPassword">
+            <el-form-item label="Current Password" prop="currentPassword">
               <el-input
                 v-model="form.currentPassword"
                 type="password"
                 show-password
                 placeholder="Enter your current password"
-                @blur="validateField('currentPassword')"
-                @input="handleFieldInput('currentPassword')"
               />
             </el-form-item>
 
-            <el-form-item label="New Password" :error="formErrors.newPassword">
+            <el-form-item label="New Password" prop="newPassword">
               <el-input
                 v-model="form.newPassword"
                 type="password"
                 show-password
                 placeholder="Enter your new password"
-                @blur="validateField('newPassword')"
-                @input="handleFieldInput('newPassword')"
+                @input="handleNewPasswordInput"
               />
             </el-form-item>
 
-            <el-form-item label="Confirm New Password" :error="formErrors.confirmationPassword">
+            <el-form-item label="Confirm New Password" prop="confirmationPassword">
               <el-input
                 v-model="form.confirmationPassword"
                 type="password"
                 show-password
                 placeholder="Confirm your new password"
-                @blur="validateField('confirmationPassword')"
-                @input="handleFieldInput('confirmationPassword')"
               />
             </el-form-item>
           </div>
         </el-form>
 
         <p class="password-hint">
-          Your new password must be at least 8 characters long.
+          Your new password must be at least 8 characters and include uppercase, lowercase, and a number.
         </p>
 
         <p v-if="saveErrorMessage" class="feedback-message feedback-message--error">
@@ -110,15 +111,13 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
 
 defineOptions({ name: 'CustomerChangePassword' })
 
 type ViewState = 'loading' | 'ready' | 'error'
-type ChangePasswordField = keyof ChangePasswordPayload
-type ChangePasswordFieldErrors = Partial<Record<ChangePasswordField, string>>
 
 interface ChangePasswordPayload {
   currentPassword: string
@@ -128,7 +127,7 @@ interface ChangePasswordPayload {
 
 const USER_PASSWORD_STORAGE_KEY = 'mock-user-password'
 const DEFAULT_PASSWORD = 'Password123'
-const MIN_PASSWORD_LENGTH = 8
+const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
 
 const wait = async (delay = 250): Promise<void> => {
   await new Promise(resolve => window.setTimeout(resolve, delay))
@@ -142,36 +141,24 @@ const writeStoredPassword = (password: string): void => {
   localStorage.setItem(USER_PASSWORD_STORAGE_KEY, password)
 }
 
-const validateChangePasswordPayload = (
-  payload: ChangePasswordPayload
-): ChangePasswordFieldErrors => {
-  const normalizedPayload = {
-    currentPassword: payload.currentPassword.trim(),
-    newPassword: payload.newPassword.trim(),
-    confirmationPassword: payload.confirmationPassword.trim()
-  }
-  const fieldErrors: ChangePasswordFieldErrors = {}
-
-  if (!normalizedPayload.currentPassword) {
-    fieldErrors.currentPassword = 'Current password is required.'
-  }
-
-  if (!normalizedPayload.newPassword) {
-    fieldErrors.newPassword = 'New password is required.'
-  } else if (normalizedPayload.newPassword.length < MIN_PASSWORD_LENGTH) {
-    fieldErrors.newPassword = `New password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
-  }
-
-  if (!normalizedPayload.confirmationPassword) {
-    fieldErrors.confirmationPassword = 'Confirmation password is required.'
-  } else if (
-    normalizedPayload.newPassword &&
-    normalizedPayload.confirmationPassword !== normalizedPayload.newPassword
+const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof error.response === 'object' &&
+    error.response !== null &&
+    'data' in error.response &&
+    typeof error.response.data === 'object' &&
+    error.response.data !== null &&
+    'message' in error.response.data &&
+    typeof error.response.data.message === 'string' &&
+    error.response.data.message.trim()
   ) {
-    fieldErrors.confirmationPassword = 'Confirmation password must match the new password.'
+    return error.response.data.message
   }
 
-  return fieldErrors
+  return error instanceof Error && error.message ? error.message : fallbackMessage
 }
 
 const router = useRouter()
@@ -180,6 +167,7 @@ const viewState = ref<ViewState>('loading')
 const isSaving = ref(false)
 const loadErrorMessage = ref('We could not load password settings.')
 const saveErrorMessage = ref('')
+const passwordFormRef = ref<FormInstance>()
 
 const form = reactive<ChangePasswordPayload>({
   currentPassword: '',
@@ -187,24 +175,48 @@ const form = reactive<ChangePasswordPayload>({
   confirmationPassword: ''
 })
 
-const formErrors = reactive<Record<ChangePasswordField, string>>({
-  currentPassword: '',
-  newPassword: '',
-  confirmationPassword: ''
-})
+const validateConfirmationPassword = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void
+): void => {
+  const confirmationPassword = typeof value === 'string' ? value.trim() : ''
 
-const applyFieldErrors = (fieldErrors: ChangePasswordFieldErrors = {}): void => {
-  formErrors.currentPassword = fieldErrors.currentPassword || ''
-  formErrors.newPassword = fieldErrors.newPassword || ''
-  formErrors.confirmationPassword = fieldErrors.confirmationPassword || ''
+  if (!confirmationPassword) {
+    callback(new Error('Confirmation password is required.'))
+    return
+  }
+
+  if (confirmationPassword !== form.newPassword.trim()) {
+    callback(new Error('Confirmation password must match the new password.'))
+    return
+  }
+
+  callback()
+}
+
+const passwordRules: FormRules<ChangePasswordPayload> = {
+  currentPassword: [{ required: true, message: 'Current password is required.', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: 'New password is required.', trigger: 'blur' },
+    {
+      pattern: passwordPattern,
+      message: 'Password must include uppercase, lowercase and number',
+      trigger: 'blur'
+    }
+  ],
+  confirmationPassword: [
+    { required: true, message: 'Confirmation password is required.', trigger: 'blur' },
+    { validator: validateConfirmationPassword, trigger: 'blur' }
+  ]
 }
 
 const resetForm = (): void => {
   form.currentPassword = ''
   form.newPassword = ''
   form.confirmationPassword = ''
-  applyFieldErrors()
   saveErrorMessage.value = ''
+  passwordFormRef.value?.clearValidate()
 }
 
 const loadPage = async (): Promise<void> => {
@@ -223,28 +235,26 @@ const loadPage = async (): Promise<void> => {
   }
 }
 
-const validateField = (field: ChangePasswordField): boolean => {
-  const fieldErrors = validateChangePasswordPayload(form)
-  formErrors[field] = fieldErrors[field] || ''
-  return !formErrors[field]
-}
-
-const handleFieldInput = (field: ChangePasswordField): void => {
-  if (formErrors[field]) {
-    validateField(field)
+const handleNewPasswordInput = (): void => {
+  if (form.confirmationPassword.trim()) {
+    void passwordFormRef.value?.validateField('confirmationPassword')
   }
 }
 
-const validateForm = (): boolean => {
-  const fieldErrors = validateChangePasswordPayload(form)
-  applyFieldErrors(fieldErrors)
-  return !Object.values(fieldErrors).some(Boolean)
+const validateForm = async (): Promise<boolean> => {
+  if (!passwordFormRef.value) {
+    return false
+  }
+
+  const valid = await passwordFormRef.value.validate().catch(() => false)
+  return valid !== false
 }
 
 const savePassword = async (): Promise<void> => {
   saveErrorMessage.value = ''
 
-  if (!validateForm()) {
+  if (!(await validateForm())) {
+    saveErrorMessage.value = 'Please correct the highlighted fields and try again.'
     return
   }
 
@@ -253,19 +263,9 @@ const savePassword = async (): Promise<void> => {
   try {
     await wait(250)
 
-    const fieldErrors = validateChangePasswordPayload({
-      currentPassword: form.currentPassword,
-      newPassword: form.newPassword,
-      confirmationPassword: form.confirmationPassword
-    })
-
     if (form.currentPassword.trim() && form.currentPassword.trim() !== readStoredPassword()) {
-      fieldErrors.currentPassword = 'Current password is incorrect.'
-    }
-
-    if (Object.values(fieldErrors).some(Boolean)) {
-      applyFieldErrors(fieldErrors)
-      saveErrorMessage.value = 'Please correct the highlighted fields and try again.'
+      saveErrorMessage.value = 'Current password is incorrect.'
+      ElMessage.error(saveErrorMessage.value)
       return
     }
 
@@ -273,10 +273,7 @@ const savePassword = async (): Promise<void> => {
     resetForm()
     ElMessage.success('The password has been changed successfully.')
   } catch (error) {
-    saveErrorMessage.value =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to update your password right now.'
+    saveErrorMessage.value = getErrorMessage(error, 'Unable to update your password right now.')
     ElMessage.error(saveErrorMessage.value)
   } finally {
     isSaving.value = false

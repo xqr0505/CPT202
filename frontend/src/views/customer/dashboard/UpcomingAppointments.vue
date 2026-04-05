@@ -167,11 +167,10 @@ onMounted(() => {
     justify-content: space-between;
     align-items: center;
     padding: var(--space-4);
-    /* temporarily force visible background & color for debugging */
-    background-color: #ffffff;
-    color: #222222;
+    background-color: var(--color-bg-surface);
+    color: var(--color-text-primary);
     border: 1px solid var(--color-border);
-    border-radius: 8px; /* Standard border-radius is missing variable mapped directly in snapshot, using 8px */
+    border-radius: var(--radius-md);
     transition: all 0.3s;
 
     &:hover {
@@ -180,8 +179,8 @@ onMounted(() => {
     }
 
     &.is-today {
-      background-color: var(--color-primary-soft); /* Highlight color */
-      color: var(--color-text-inverse); /* Let's assume white */
+      background-color: var(--color-primary-soft);
+      color: var(--color-text-inverse);
       border-color: var(--color-primary);
 
       .date-box {
@@ -214,7 +213,7 @@ onMounted(() => {
     width: 60px;
     height: 60px;
     background-color: var(--color-bg-page);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     color: var(--color-primary);
 
     .month {

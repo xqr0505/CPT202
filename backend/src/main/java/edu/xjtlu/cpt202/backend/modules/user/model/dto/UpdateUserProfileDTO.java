@@ -8,17 +8,17 @@ import lombok.Data;
 @Data
 public class UpdateUserProfileDTO {
 
-    @NotBlank(message = "Full name is required")
+    @NotBlank(message = "Full name is required.")
     private String fullName;
 
-    @NotBlank(message = "Email is required")
-    @Email(message = "Email must be valid")
+    @NotBlank(message = "Email is required.")
+    @Email(message = "Please enter a valid email address.")
     private String email;
 
-    @NotBlank(message = "Phone number is required")
+    @NotBlank(message = "Phone number is required.")
     @Pattern(
-            regexp = "^\\d{11}$",
-            message = "Phone number must be exactly 11 digits"
+            regexp = "^\\+\\d{1,3}\\s\\d{4,14}$",
+            message = "Please enter a valid phone number."
     )
     private String phoneNumber;
 }

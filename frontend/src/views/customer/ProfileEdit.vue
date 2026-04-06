@@ -261,6 +261,23 @@ const DEFAULT_PROFILE: UpdateUserProfilePayload = {
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const COUNTRY_CODE_PATTERN = /^\+\d{1,3}$/
+const LOCAL_PHONE_NUMBER_PATTERN = /^\d+$/
+const GENERIC_PHONE_NUMBER_MESSAGE = 'Please enter a valid phone number.'
+const COMMON_REGION_PHONE_RULES: Readonly<Record<string, { exactLength: number; message: string }>> = {
+  '+86': {
+    exactLength: 11,
+    message: 'China phone numbers must be 11 digits.'
+  },
+  '+65': {
+    exactLength: 8,
+    message: 'Singapore phone numbers must be 8 digits.'
+  },
+  '+1': {
+    exactLength: 10,
+    message: 'US/Canada phone numbers must be 10 digits.'
+  }
+}
 
 const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
   if (
@@ -334,24 +351,36 @@ const validatePhoneNumber = (
   callback: (error?: Error) => void
 ): void => {
   if (!form.countryCode) {
-    callback(new Error('Please select a country code'))
+    callback(new Error('Phone number is required.'))
     return
   }
 
-  if (!/^\+\d{1,3}$/.test(form.countryCode)) {
-    callback(new Error('Please select a valid country or region calling code'))
+  if (!COUNTRY_CODE_PATTERN.test(form.countryCode)) {
+    callback(new Error(GENERIC_PHONE_NUMBER_MESSAGE))
     return
   }
 
   const localPhoneNumber = typeof value === 'string' ? value.trim() : ''
 
   if (!localPhoneNumber) {
-    callback(new Error('Phone number is required'))
+    callback(new Error('Phone number is required.'))
     return
   }
 
-  if (!/^\d+$/.test(localPhoneNumber)) {
-    callback(new Error('Phone number must contain digits only'))
+  if (!LOCAL_PHONE_NUMBER_PATTERN.test(localPhoneNumber)) {
+    callback(new Error('Phone number must contain digits only.'))
+    return
+  }
+
+  const commonRegionRule = COMMON_REGION_PHONE_RULES[form.countryCode]
+
+  if (commonRegionRule && localPhoneNumber.length !== commonRegionRule.exactLength) {
+    callback(new Error(commonRegionRule.message))
+    return
+  }
+
+  if (!commonRegionRule && (localPhoneNumber.length < 4 || localPhoneNumber.length > 14)) {
+    callback(new Error(GENERIC_PHONE_NUMBER_MESSAGE))
     return
   }
 
@@ -364,7 +393,7 @@ const profileRules: FormRules<ProfileEditForm> = {
     { required: true, message: 'Email is required.', trigger: 'blur' },
     {
       pattern: emailPattern,
-      message: 'Enter a valid email address.',
+      message: 'Please enter a valid email address.',
       trigger: 'blur'
     }
   ],
@@ -458,8 +487,10 @@ const saveProfile = async (): Promise<void> => {
     profileFormRef.value?.validate((isValid, invalidFields) => {
       if (!isValid) {
         saveErrorMessage.value = invalidFields?.localPhoneNumber
-          ? 'Please fix phone number format'
-          : 'Please correct the highlighted fields and try again.'
+          ? GENERIC_PHONE_NUMBER_MESSAGE
+          : invalidFields?.email
+            ? 'Please enter a valid email address.'
+            : 'Please correct the highlighted fields and try again.'
         ElMessage.error(saveErrorMessage.value)
         resolve(false)
         return

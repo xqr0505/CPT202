@@ -9,6 +9,19 @@ spring:
     baseline-on-migrate: true
     validate-on-migrate: true
     fail-on-missing-locations: true
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 2906326615@qq.com
+    password: ${MAIL_PASSWORD}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true   # 开启STARTTLS
+            required: true
 
 server:
   port: 8081

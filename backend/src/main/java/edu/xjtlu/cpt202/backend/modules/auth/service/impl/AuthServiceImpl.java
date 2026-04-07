@@ -39,8 +39,11 @@ public class AuthServiceImpl implements AuthService {
     private final VerificationCodeMapper verificationCodeMapper;
     private final PasswordEncoder passwordEncoder;
 
-    @Autowired(required = false)
+    @Autowired
     private JavaMailSender mailSender;
+
+    @Autowired
+    private org.springframework.core.env.Environment env;
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
@@ -102,25 +105,31 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         verificationCodeMapper.insert(verificationCode);
 
-        logger.info("========== Verification Code (Development Mode) ==========");
-        logger.info("Email: {}", request.getEmail());
-        logger.info("Verification Code: {}", code);
-        logger.info("Expiration: {} minutes", SecurityConstant.VERIFICATION_CODE_EXPIRATION_MINUTES);
-        logger.info("=====================================");
-        // 可替换为真实邮件服务，在未配置的情况下只做日志输出
-        // try {
-        //     if (mailSender != null) {
-        //         SimpleMailMessage message = new SimpleMailMessage();
-        //         message.setTo(request.getEmail());
-        //         message.setSubject("Your verification code");
-        //         message.setText("Your verification code is: " + code + " (valid for 5 minutes)");
-        //         mailSender.send(message);
-        //     } else {
-        //         logger.info("Mail sender not configured, skip email dispatch. Code= {} for email= {}", code, request.getEmail());
-        //     }
-        // } catch (Exception e) {
-        //     logger.warn("Failed to send verification email, continuing logically: {}", e.getMessage());
-        // }
+        try {
+        if (mailSender == null) {
+            logger.error("Mail sender not configured");
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
+                    "Mail service is unavailable");
+        }
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(env.getProperty("spring.mail.username"));
+        message.setTo(request.getEmail());
+        message.setSubject("Email Verification");
+        message.setText("Your verification code is: " + code + "\nThis code will expire in 5 minutes.");
+
+        mailSender.send(message);
+
+        logger.info("Verification email sent to {}", request.getEmail());
+
+    } catch (Exception e) {
+        logger.error("Failed to send verification email: {}", e.getMessage(), e);
+
+        verificationCodeMapper.deleteById(verificationCode.getId());
+
+        throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
+                "Failed to send verification email");
+    }
 
         logger.info("Verification code '{}' generated for {}", code, request.getEmail());
     }

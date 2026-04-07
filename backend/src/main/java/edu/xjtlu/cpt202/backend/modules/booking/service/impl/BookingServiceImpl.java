@@ -120,8 +120,8 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     public PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto) {
         LocalDateTime currentTime = LocalDateTime.now();
         long offset = (long) (dto.getPageNo() - 1) * dto.getPageSize();
-        List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), currentTime, offset, dto.getPageSize());
-        Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), currentTime);
+        List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), dto.getStatus(), currentTime, offset, dto.getPageSize());
+        Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), dto.getStatus(), currentTime);
         return new PageResult<>(total, list);
     }
 

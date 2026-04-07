@@ -66,7 +66,7 @@ public class BookingServiceImplTest {
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(LocalDateTime.of(2026, 4, 4, 10, 0, 0))
+                        .startTime(LocalDateTime.of(2026, 4, 8, 10, 0, 0))
                         .today(true)
                         .status("CONFIRMED")
                         .build(),
@@ -74,7 +74,7 @@ public class BookingServiceImplTest {
                         .id(2L)
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
-                        .startTime(LocalDateTime.of(2026, 4, 4, 14, 0, 0))
+                        .startTime(LocalDateTime.of(2026, 4, 8, 14, 0, 0))
                         .today(true)
                         .status("CONFIRMED")
                         .build(),
@@ -82,7 +82,7 @@ public class BookingServiceImplTest {
                         .id(3L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(LocalDateTime.of(2026, 4, 5, 9, 0, 0))
+                        .startTime(LocalDateTime.of(2026, 4, 9, 9, 0, 0))
                         .today(false)
                         .status("CONFIRMED")
                         .build()
@@ -98,17 +98,17 @@ public class BookingServiceImplTest {
         assertEquals(3, result.size());
         assertEquals("Schedule Dev Specialist", result.get(0).getSpecialistName());
         assertEquals("Counseling", result.get(0).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 4, 10, 0, 0), result.get(0).getStartTime());
+        assertEquals(LocalDateTime.of(2026, 4, 8, 10, 0, 0), result.get(0).getStartTime());
         assertTrue(result.get(0).getToday());
         assertEquals("CONFIRMED", result.get(0).getStatus());
         assertEquals("Dr. Adam Smith", result.get(1).getSpecialistName());
         assertEquals("Career Planning", result.get(1).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 4, 14, 0, 0), result.get(1).getStartTime());
+        assertEquals(LocalDateTime.of(2026, 4, 8, 14, 0, 0), result.get(1).getStartTime());
         assertTrue(result.get(1).getToday());
         assertEquals("CONFIRMED", result.get(1).getStatus());
         assertEquals("Schedule Dev Specialist", result.get(2).getSpecialistName());
         assertEquals("Counseling", result.get(2).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 5, 9, 0, 0), result.get(2).getStartTime());
+        assertEquals(LocalDateTime.of(2026, 4, 9, 9, 0, 0), result.get(2).getStartTime());
         assertFalse(result.get(2).getToday());
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }
@@ -307,5 +307,74 @@ public class BookingServiceImplTest {
         assertTrue(result.getList().isEmpty());
         verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq("HISTORY"), eq(null), any(LocalDateTime.class), eq(5L), eq(5));
         verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq("HISTORY"), eq(null), any(LocalDateTime.class));
+    }
+
+    @Test
+    void testGetBookingList_WithStatusFilter() {
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setPageNo(1);
+        dto.setPageSize(10);
+        dto.setTab("HISTORY");
+        dto.setStatus("COMPLETED");
+
+        List<BookingItemVO> mockList = List.of(new BookingItemVO());
+        when(bookingMapper.selectBookingList(eq(1L), eq("HISTORY"), eq("COMPLETED"), any(LocalDateTime.class), eq(0L), eq(10)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(1L), eq("HISTORY"), eq("COMPLETED"), any(LocalDateTime.class)))
+                .thenReturn(1L);
+
+        PageResult<BookingItemVO> result = bookingService.getBookingList(1L, dto);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        assertEquals(1, result.getList().size());
+        verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq("HISTORY"), eq("COMPLETED"), any(LocalDateTime.class), eq(0L), eq(10));
+        verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq("HISTORY"), eq("COMPLETED"), any(LocalDateTime.class));
+    }
+
+    @Test
+    void testGetBookingList_AllBookings() {
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setPageNo(1);
+        dto.setPageSize(10);
+        dto.setTab(null);
+        dto.setStatus(null);
+
+        List<BookingItemVO> mockList = List.of(new BookingItemVO(), new BookingItemVO());
+        when(bookingMapper.selectBookingList(eq(1L), eq(null), eq(null), any(LocalDateTime.class), eq(0L), eq(10)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(1L), eq(null), eq(null), any(LocalDateTime.class)))
+                .thenReturn(2L);
+
+        PageResult<BookingItemVO> result = bookingService.getBookingList(1L, dto);
+
+        assertNotNull(result);
+        assertEquals(2, result.getTotal());
+        assertEquals(2, result.getList().size());
+        verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq(null), eq(null), any(LocalDateTime.class), eq(0L), eq(10));
+        verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq(null), eq(null), any(LocalDateTime.class));
+    }
+
+    @Test
+    void testGetBookingList_UpcomingWithStatus() {
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setPageNo(1);
+        dto.setPageSize(5);
+        dto.setTab("UPCOMING");
+        dto.setStatus("PENDING");
+
+        List<BookingItemVO> mockList = List.of(new BookingItemVO());
+        when(bookingMapper.selectBookingList(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class), eq(0L), eq(5)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class)))
+                .thenReturn(1L);
+
+        PageResult<BookingItemVO> result = bookingService.getBookingList(1L, dto);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        assertEquals(1, result.getList().size());
+        verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class), eq(0L), eq(5));
+        verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class));
     }
 }

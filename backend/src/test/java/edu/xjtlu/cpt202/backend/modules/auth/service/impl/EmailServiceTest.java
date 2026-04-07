@@ -4,12 +4,14 @@ import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import jakarta.mail.internet.MimeMessage;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -36,19 +38,24 @@ public class EmailServiceTest {
      * 测试1：直接使用 JavaMailSender 发送简单邮件
      * 目的：验证 SMTP 配置、授权码、网络连接是否正确
      */
+    
+
     @Test
-    @DisplayName("Test JavaMailSender basic email sending")
+    @DisplayName("Test JavaMailSender with display name")
     void testSendSimpleEmail() {
         String toEmail = "Danyi.Huang23@student.xjtlu.edu.cn";
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom("2906326615@qq.com");
-        message.setTo(toEmail);
-        message.setSubject("Mail Service Test");
-        message.setText("If you receive this email, SMTP configuration is working correctly.");
+        assertDoesNotThrow(() -> {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
 
-        assertDoesNotThrow(() -> mailSender.send(message),
-                "Failed to send email. Check SMTP configuration.");
+            helper.setFrom("ExpertLink <2906326615@qq.com>");
+            helper.setTo(toEmail);
+            helper.setSubject("Mail Service Test");
+            helper.setText("If you receive this email, SMTP configuration is working correctly.");
+
+            mailSender.send(mimeMessage);
+        }, "Failed to send email. Check SMTP configuration.");
     }
 
     /**

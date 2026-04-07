@@ -15,11 +15,13 @@ import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import jakarta.mail.internet.MimeMessage;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -112,13 +114,15 @@ public class AuthServiceImpl implements AuthService {
                     "Mail service is unavailable");
         }
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(env.getProperty("spring.mail.username"));
-        message.setTo(request.getEmail());
-        message.setSubject("Email Verification");
-        message.setText("Your verification code is: " + code + "\nThis code will expire in 5 minutes.");
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
 
-        mailSender.send(message);
+        helper.setFrom("ExpertLink <" + env.getProperty("spring.mail.username") + ">");
+        helper.setTo(request.getEmail());
+        helper.setSubject("Email Verification");
+        helper.setText("Your verification code is: " + code + "\nThis code will expire in 5 minutes.");
+
+        mailSender.send(mimeMessage);
 
         logger.info("Verification email sent to {}", request.getEmail());
 

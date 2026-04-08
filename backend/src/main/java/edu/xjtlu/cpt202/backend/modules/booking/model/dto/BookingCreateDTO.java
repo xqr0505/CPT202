@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.model.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
@@ -18,9 +19,11 @@ public class BookingCreateDTO {
     private Long slotId;
 
     @NotBlank(message = "topic is required")
-    @Schema(description = "Booking topic", example = "Career planning")
+    @Size(max = 100, message = "topic must be at most 100 characters")
+    @Schema(description = "Visit reason selected from booking topics", example = "Initial Consultation")
     private String topic;
 
-    @Schema(description = "Customer notes", example = "I want to discuss internship choices.")
+    @Size(max = 500, message = "customerNotes must be at most 500 characters")
+    @Schema(description = "Optional medical notes", example = "Intermittent chest pain for two weeks.")
     private String customerNotes;
 }

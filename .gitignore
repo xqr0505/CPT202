@@ -52,4 +52,5 @@ Thumbs.db
 mvnw.cmd
 mvnw
 
+.env
 node_modules/

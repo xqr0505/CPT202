@@ -23,8 +23,7 @@ spring:
             enable: true   # 开启STARTTLS
             required: true
 
-server:
-  port: 8080
+
 
 # Logging
 logging:

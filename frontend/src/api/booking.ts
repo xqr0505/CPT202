@@ -46,6 +46,8 @@ export interface BookingListQuery {
   status?: string;
 }
 
+export type BookingItem = BookingListItem;
+
 export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
 }

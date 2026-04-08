@@ -322,8 +322,8 @@ const splitPhoneNumber = (phoneNumber: string): Pick<ProfileEditForm, 'countryCo
 
   if (matchedPhoneNumber) {
     return {
-      countryCode: matchedPhoneNumber[1],
-      localPhoneNumber: matchedPhoneNumber[2]
+      countryCode: matchedPhoneNumber[1] ?? DEFAULT_COUNTRY_CODE,
+      localPhoneNumber: matchedPhoneNumber[2] ?? ''
     }
   }
 
@@ -449,10 +449,10 @@ const form = reactive<ProfileEditForm>({
 const resetForm = (profile: UpdateUserProfilePayload): void => {
   const phoneDetails = splitPhoneNumber(profile.phoneNumber)
 
-  form.fullName = profile.fullName
-  form.email = profile.email
-  form.countryCode = phoneDetails.countryCode
-  form.localPhoneNumber = phoneDetails.localPhoneNumber
+  form.fullName = profile.fullName ?? DEFAULT_PROFILE.fullName
+  form.email = profile.email ?? DEFAULT_PROFILE.email
+  form.countryCode = phoneDetails.countryCode ?? DEFAULT_COUNTRY_CODE
+  form.localPhoneNumber = phoneDetails.localPhoneNumber ?? ''
   saveErrorMessage.value = ''
   profileFormRef.value?.clearValidate()
 }

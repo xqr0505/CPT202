@@ -10,6 +10,8 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
@@ -20,7 +22,6 @@ import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
-import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,9 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 /**
  * @author QiranXiao
@@ -41,14 +40,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> implements BookingService {
 
-    private static final Map<Long, List<String>> SPECIALIST_TOPICS = Map.of(
-            1L, Arrays.asList("Career Planning", "Study Abroad"),
-            201L, Arrays.asList("Career Planning", "Study Abroad"),
-            202L, Arrays.asList("Mental Wellness", "Stress Management"),
-            203L, Arrays.asList("Study Abroad", "Career Planning")
-    );
-
     private final BookingMapper bookingMapper;
+    private final BookingTopicMapper bookingTopicMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistQueryService specialistQueryService;
 
@@ -80,7 +73,9 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (!TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot already booked");
         }
-        validateTopic(createDTO.getSpecialistId(), createDTO.getTopic());
+        String normalizedTopic = normalizeTopic(createDTO.getTopic());
+        validateTopic(normalizedTopic);
+        String normalizedNotes = normalizeNotes(createDTO.getCustomerNotes());
 
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(createDTO.getSpecialistId());
 
@@ -90,15 +85,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 .slotId(createDTO.getSlotId())
                 .status(BookingStatusEnum.PENDING.name())
                 .price(resolvePrice(specialist.getConsultationFee()))
-                .topic(createDTO.getTopic().trim())
-                .customerNotes(createDTO.getCustomerNotes())
+                .topic(normalizedTopic)
+                .customerNotes(normalizedNotes)
                 .parentBookingId(null)
-                .decisionTime(LocalDateTime.now())
-                .cancelledBy("")
-                .cancelReason("")
-                .changeType("")
+                .decisionTime(null)
+                .cancelledBy(null)
+                .cancelReason(null)
+                .changeType(null)
                 .refundStatus("NONE")
-                .rejectionReason("")
+                .rejectionReason(null)
                 .build();
         bookingMapper.insert(booking);
 
@@ -129,12 +124,21 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return consultationFee == null ? BigDecimal.ZERO : consultationFee;
     }
 
-    private void validateTopic(Long specialistId, String topic) {
-        List<String> allowedTopics = SPECIALIST_TOPICS.get(specialistId);
-        if (allowedTopics == null || allowedTopics.isEmpty()) {
-            return;
+    private String normalizeTopic(String topic) {
+        return topic == null ? "" : topic.trim();
+    }
+
+    private String normalizeNotes(String customerNotes) {
+        if (customerNotes == null) {
+            return null;
         }
-        if (topic == null || !allowedTopics.contains(topic.trim())) {
+        String normalized = customerNotes.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private void validateTopic(String topic) {
+        Long allowedTopicCount = bookingTopicMapper.countActiveTopicByName(topic);
+        if (allowedTopicCount == null || allowedTopicCount == 0) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Topic is not available for this specialist");
         }
     }

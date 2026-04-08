@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
@@ -70,6 +71,24 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deactivateCurrentUserAccount() {
+        User user = getCurrentUserOrThrow();
+
+        if (AccountStatusEnum.DEACTIVATED.name().equalsIgnoreCase(user.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Account is already deactivated");
+        }
+
+        user.setStatus(AccountStatusEnum.DEACTIVATED.name());
+        user.setLoginFailCount(0);
+        user.setLockTime(null);
+
+        if (userMapper.updateById(user) == 0) {
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to deactivate account");
+        }
+    }
+
     private User getCurrentUserOrThrow() {
         Long currentUserId = getCurrentUserId();
         User user = userMapper.selectById(currentUserId);
@@ -129,6 +148,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         userProfileVO.setFullName(user.getFullName());
         userProfileVO.setEmail(user.getEmail());
         userProfileVO.setPhoneNumber(user.getPhoneNumber());
+        userProfileVO.setStatus(user.getStatus());
         return userProfileVO;
     }
 }

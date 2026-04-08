@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.common.config;
 import edu.xjtlu.cpt202.backend.common.security.JwtAuthenticationFilter;
 import edu.xjtlu.cpt202.backend.common.security.RestAccessDeniedHandler;
 import edu.xjtlu.cpt202.backend.common.security.RestAuthenticationEntryPoint;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,12 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final UserMapper userMapper;
+
+    public SecurityConfig(UserMapper userMapper) {
+        this.userMapper = userMapper;
+    }
 
     @Value("${cors.allowed-origins:}")
     private List<String> allowedOrigins;
@@ -74,7 +81,7 @@ public class SecurityConfig {
                 )
 
 
-                .addFilterBefore(new JwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(userMapper), UsernamePasswordAuthenticationFilter.class)
 
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(new RestAuthenticationEntryPoint())
@@ -112,6 +119,8 @@ public class SecurityConfig {
                 ));
             }
         }
+
+        configuration.addAllowedOrigin("http://120.26.245.169");
 
         configuration.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"

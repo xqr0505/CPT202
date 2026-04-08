@@ -1,7 +1,10 @@
 package edu.xjtlu.cpt202.backend.common.security;
 
+import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,6 +24,12 @@ import java.io.IOException;
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private final UserMapper userMapper;
+
+    public JwtAuthenticationFilter(UserMapper userMapper) {
+        this.userMapper = userMapper;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -39,13 +48,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = claims.get("role", String.class);
 
                 if (userId != null && role != null) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(userId, null, null);
+                    User user = userMapper.selectById(userId);
 
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    if (user != null && !AccountStatusEnum.DEACTIVATED.name().equalsIgnoreCase(user.getStatus())) {
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(userId, null, null);
 
-                    UserContextHolder.setUserId(userId);
-                    UserContextHolder.setRole(role);
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                        UserContextHolder.setUserId(userId);
+                        UserContextHolder.setRole(role);
+                    } else {
+                        SecurityContextHolder.clearContext();
+                    }
                 }
 
             } catch (Exception e) {

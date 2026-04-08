@@ -25,6 +25,15 @@ public class DevScheduleBypassInitializer {
 
     @PostConstruct
     public void init() {
+        Integer specialistCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM specialist_profiles",
+                Integer.class
+        );
+        if (specialistCount != null && specialistCount > 0) {
+            log.info("Detected existing specialist profiles, skipping dev specialist seed");
+            return;
+        }
+
         seedCategory();
         seedUser();
         seedSpecialistProfile();
@@ -43,7 +52,7 @@ public class DevScheduleBypassInitializer {
         jdbcTemplate.update(
                 "INSERT INTO expertise_categories (id, category_name) VALUES (?, ?)",
                 DEV_CATEGORY_ID,
-                "Schedule Test Category"
+                "Pediatrics"
         );
         log.info("Seeded dev expertise category {}", DEV_CATEGORY_ID);
     }
@@ -69,7 +78,7 @@ public class DevScheduleBypassInitializer {
                 "dev-bypass-no-login",
                 "SPECIALIST",
                 "ACTIVE",
-                "Schedule Dev Specialist",
+                "Dr. Dev Pediatrics",
                 "0000000000",
                 0
         );
@@ -96,8 +105,8 @@ public class DevScheduleBypassInitializer {
                 DEV_USER_ID,
                 DEV_CATEGORY_ID,
                 "SENIOR",
-                100.00,
-                "Temporary specialist profile for schedule module development.",
+                220.00,
+                "Sample pediatric doctor profile used for local schedule development.",
                 "ACTIVE"
         );
         log.info("Seeded dev specialist profile {}", DEV_SPECIALIST_ID);

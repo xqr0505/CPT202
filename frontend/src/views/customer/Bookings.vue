@@ -9,6 +9,20 @@
       </el-tabs>
     </div>
 
+    <div class="filter-wrapper">
+      <div class="status-filter">
+        <CustomButton
+          v-for="option in statusOptions"
+          :key="option.value"
+          :type="activeStatus === option.value ? 'primary' : 'default'"
+          :class="['status-btn', { 'is-active': activeStatus === option.value }]"
+          @click="activeStatus = option.value; handleStatusChange()"
+        >
+          {{ option.label }}
+        </CustomButton>
+      </div>
+    </div>
+
     <div class="table-wrapper">
       <PaginationTable
         ref="tableRef"
@@ -124,12 +138,22 @@ import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router';
+import { BOOKING_STATUS } from '@/constants/booking';
 
 defineOptions({ name: 'CustomerBookings' })
 
 const activeTab = ref<'UPCOMING' | 'HISTORY'>('UPCOMING')
+const activeStatus = ref<string>('null')
 const tableRef = ref<InstanceType<typeof PaginationTable> | null>(null)
 const router = useRouter();
+
+const statusOptions = [
+  { label: 'All', value: 'null' },
+  { label: 'Pending', value: 'PENDING' },
+  { label: 'Confirmed', value: 'CONFIRMED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+  { label: 'Completed', value: 'COMPLETED' }
+]
 
 const tableColumns: TableColumn[] = [
   { prop: 'appointmentDateTime', label: 'Date & Time', minWidth: '200', slotName: 'datetime' },
@@ -143,6 +167,7 @@ const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<Booki
   try {
     const res = await getBookingList({
       tab: activeTab.value,
+      status: activeStatus.value === 'null' ? undefined : activeStatus.value,
       pageNo: params.page,
       pageSize: params.limit
     })
@@ -158,6 +183,12 @@ const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<Booki
 }
 
 const handleTabChange = () => {
+  if (tableRef.value) {
+    tableRef.value.refresh()
+  }
+}
+
+const handleStatusChange = () => {
   if (tableRef.value) {
     tableRef.value.refresh()
   }
@@ -249,6 +280,47 @@ const handleAction = (action: string, row: BookingListItem) => {
     .el-tabs__nav-wrap::after {
       height: 1px;
       background-color: var(--color-border);
+    }
+  }
+
+  .filter-wrapper {
+    background-color: var(--color-bg-surface);
+    padding: var(--space-4) var(--space-6);
+    border-radius: 0;
+    box-shadow: 0 4px 12px var(--color-shadow);
+
+    .status-filter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+
+      :deep(.status-btn) {
+        color: var(--color-text-primary);
+        background: var(--color-btn-bg-default);
+        border: 1px solid var(--color-btn-border-default);
+        font-weight: 500;
+        border-radius: var(--radius-md);
+        transition: all var(--transition-base);
+      }
+      :deep(.status-btn.is-active) {
+        color: var(--color-btn-text-primary);
+        background: var(--color-btn-bg-primary);
+        border-color: var(--color-btn-border-primary);
+      }
+      :deep(.status-btn):hover {
+        background: var(--color-btn-bg-default-hover);
+        color: var(--color-text-primary);
+        border-color: var(--color-btn-border-default-hover);
+        filter: brightness(1.03);
+        box-shadow: 0 2px 6px var(--color-shadow);
+      }
+      :deep(.status-btn.is-active):hover {
+        background: var(--color-btn-bg-primary-hover);
+        color: var(--color-btn-text-primary-hover);
+        border-color: var(--color-btn-border-primary-hover);
+        box-shadow: 0 2px 8px var(--color-btn-shadow-primary);
+        filter: brightness(1.03);
+      }
     }
   }
 

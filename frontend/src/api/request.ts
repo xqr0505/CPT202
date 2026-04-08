@@ -102,7 +102,7 @@ function shouldSuppressErrorMessage(config?: unknown): boolean {
 }
 
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8081',
+  baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json;charset=UTF-8'

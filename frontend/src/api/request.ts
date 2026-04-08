@@ -12,6 +12,10 @@ interface ApiResponse<T = any> {
   data: T;
 }
 
+type RequestWithToastControl = {
+  suppressErrorMessage?: boolean;
+};
+
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
@@ -88,6 +92,15 @@ function showErrorOnce(msg: string) {
   }
 }
 
+function shouldSuppressErrorMessage(config?: unknown): boolean {
+  return Boolean(
+    config &&
+      typeof config === 'object' &&
+      'suppressErrorMessage' in config &&
+      (config as RequestWithToastControl).suppressErrorMessage
+  )
+}
+
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081',
   timeout: 10000,
@@ -114,6 +127,7 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   response => {
     const res = response.data as ApiResponse;
+    const suppressErrorMessage = shouldSuppressErrorMessage(response.config);
 
     if (res.code === 200) {
       return res.data;
@@ -123,7 +137,9 @@ service.interceptors.response.use(
       if (!handling401) {
         handling401 = true
         clearAuthData();
-        showErrorOnce(res.message || 'Unauthorized, please login again');
+        if (!suppressErrorMessage) {
+          showErrorOnce(res.message || 'Unauthorized, please login again');
+        }
         router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
         // allow future 401 handling after short delay
         setTimeout(() => { handling401 = false }, 3000)
@@ -132,32 +148,47 @@ service.interceptors.response.use(
     }
 
     if (res.code === 403) {
-      showErrorOnce(res.message || 'Forbidden');
+      if (!suppressErrorMessage) {
+        showErrorOnce(res.message || 'Forbidden');
+      }
       return Promise.reject(new Error(res.message || 'Forbidden'));
     }
 
-    showErrorOnce(res.message || 'Error');
+    if (!suppressErrorMessage) {
+      showErrorOnce(res.message || 'Error');
+    }
     return Promise.reject(new Error(res.message || 'Error'));
   },
   error => {
     const status = error.response?.status;
+    const suppressErrorMessage = shouldSuppressErrorMessage(error.config);
 
     if (status === 401) {
       if (!handling401) {
         handling401 = true
         clearAuthData();
-        showErrorOnce('Unauthorized, please login again');
+        if (!suppressErrorMessage) {
+          showErrorOnce('Unauthorized, please login again');
+        }
         router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
         setTimeout(() => { handling401 = false }, 3000)
       }
     } else if (status === 403) {
-      showErrorOnce('Forbidden');
+      if (!suppressErrorMessage) {
+        showErrorOnce('Forbidden');
+      }
     } else if (status === 500) {
-      showErrorOnce('Server error, please try again later');
+      if (!suppressErrorMessage) {
+        showErrorOnce('Server error, please try again later');
+      }
     } else if (error.code === 'ECONNABORTED') {
-      showErrorOnce('Request timeout');
+      if (!suppressErrorMessage) {
+        showErrorOnce('Request timeout');
+      }
     } else if (error.message?.includes('Network Error')) {
-      showErrorOnce('Network error, please check your connection');
+      if (!suppressErrorMessage) {
+        showErrorOnce('Network error, please check your connection');
+      }
     }
 
     return Promise.reject(error);

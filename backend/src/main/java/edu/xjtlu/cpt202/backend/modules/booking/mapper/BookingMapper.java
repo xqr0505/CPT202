@@ -18,8 +18,8 @@ public interface BookingMapper extends BaseMapper<Booking> {
 
     List<UpcomingBookingVO> selectUpcomingBookings(@Param("customerId") Long customerId, @Param("status") String status, @Param("currentTime") LocalDateTime currentTime, @Param("limit") int limit);
 
-    List<BookingItemVO> selectBookingList(@Param("customerId") Long customerId, @Param("tab") String tab, @Param("currentTime") LocalDateTime currentTime, @Param("offset") long offset, @Param("pageSize") int pageSize);
+    List<BookingItemVO> selectBookingList(@Param("customerId") Long customerId, @Param("tab") String tab, @Param("status") String status, @Param("currentTime") LocalDateTime currentTime, @Param("offset") long offset, @Param("pageSize") int pageSize);
 
-    Long selectBookingListCount(@Param("customerId") Long customerId, @Param("tab") String tab, @Param("currentTime") LocalDateTime currentTime);
+    Long selectBookingListCount(@Param("customerId") Long customerId, @Param("tab") String tab, @Param("status") String status, @Param("currentTime") LocalDateTime currentTime);
 
 }

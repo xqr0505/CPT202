@@ -37,7 +37,6 @@ withDefaults(defineProps<Props>(), {
   letter-spacing: 0.01em;
 
   &:hover {
-    transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--color-shadow);
   }
 

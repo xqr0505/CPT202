@@ -15,11 +15,13 @@ import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import jakarta.mail.internet.MimeMessage;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -39,8 +41,11 @@ public class AuthServiceImpl implements AuthService {
     private final VerificationCodeMapper verificationCodeMapper;
     private final PasswordEncoder passwordEncoder;
 
-    @Autowired(required = false)
+    @Autowired
     private JavaMailSender mailSender;
+
+    @Autowired
+    private org.springframework.core.env.Environment env;
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
@@ -102,25 +107,33 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         verificationCodeMapper.insert(verificationCode);
 
-        logger.info("========== Verification Code (Development Mode) ==========");
-        logger.info("Email: {}", request.getEmail());
-        logger.info("Verification Code: {}", code);
-        logger.info("Expiration: {} minutes", SecurityConstant.VERIFICATION_CODE_EXPIRATION_MINUTES);
-        logger.info("=====================================");
-        // 可替换为真实邮件服务，在未配置的情况下只做日志输出
-        // try {
-        //     if (mailSender != null) {
-        //         SimpleMailMessage message = new SimpleMailMessage();
-        //         message.setTo(request.getEmail());
-        //         message.setSubject("Your verification code");
-        //         message.setText("Your verification code is: " + code + " (valid for 5 minutes)");
-        //         mailSender.send(message);
-        //     } else {
-        //         logger.info("Mail sender not configured, skip email dispatch. Code= {} for email= {}", code, request.getEmail());
-        //     }
-        // } catch (Exception e) {
-        //     logger.warn("Failed to send verification email, continuing logically: {}", e.getMessage());
-        // }
+        try {
+        if (mailSender == null) {
+            logger.error("Mail sender not configured");
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
+                    "Mail service is unavailable");
+        }
+
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+
+        helper.setFrom("ExpertLink <" + env.getProperty("spring.mail.username") + ">");
+        helper.setTo(request.getEmail());
+        helper.setSubject("Email Verification");
+        helper.setText("Your verification code is: " + code + "\nThis code will expire in 5 minutes.");
+
+        mailSender.send(mimeMessage);
+
+        logger.info("Verification email sent to {}", request.getEmail());
+
+    } catch (Exception e) {
+        logger.error("Failed to send verification email: {}", e.getMessage(), e);
+
+        verificationCodeMapper.deleteById(verificationCode.getId());
+
+        throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
+                "Failed to send verification email");
+    }
 
         logger.info("Verification code '{}' generated for {}", code, request.getEmail());
     }

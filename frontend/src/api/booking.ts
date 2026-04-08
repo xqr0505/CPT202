@@ -42,7 +42,8 @@ export interface BookingListResponse {
 export interface BookingListQuery {
   pageNo?: number;
   pageSize?: number;
-  tab: 'UPCOMING' | 'HISTORY';
+  tab?: 'UPCOMING' | 'HISTORY';
+  status?: string;
 }
 
 export const getUpcomingBookings = () => {

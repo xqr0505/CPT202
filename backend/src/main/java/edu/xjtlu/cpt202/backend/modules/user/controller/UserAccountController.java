@@ -37,4 +37,10 @@ public class UserAccountController {
         userAccountService.changePassword(request);
         return Result.success();
     }
+
+    @PostMapping("/deactivate")
+    public Result<Void> deactivateCurrentUserAccount() {
+        userAccountService.deactivateCurrentUserAccount();
+        return Result.success();
+    }
 }

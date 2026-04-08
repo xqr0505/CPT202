@@ -11,4 +11,6 @@ public interface UserAccountService {
     void updateCurrentUserProfile(UpdateUserProfileDTO request);
 
     void changePassword(ChangePasswordDTO request);
+
+    void deactivateCurrentUserAccount();
 }

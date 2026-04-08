@@ -17,7 +17,7 @@ public class BookingPageQueryDTO {
     @Schema(description = "Page size (10 per page as per PBI)", example = "10", defaultValue = "10")
     private Integer pageSize = 10;
 
-    @Schema(description = "Tab type: 'UPCOMING' or 'HISTORY'", example = "HISTORY", required = true)
+    @Schema(description = "Tab type: 'UPCOMING' or 'HISTORY'. Optional.", example = "HISTORY")
     private String tab;
 
     @Schema(description = "Specific status filter: 'COMPLETED', 'CANCELLED', 'PENDING'. Null means 'All'", example = "COMPLETED")

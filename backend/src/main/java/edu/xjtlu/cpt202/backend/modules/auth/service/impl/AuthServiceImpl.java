@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.auth.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import edu.xjtlu.cpt202.backend.common.constant.SecurityConstant;
+import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
@@ -186,7 +187,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(role)
-                .status("ACTIVE")
+                .status(AccountStatusEnum.ACTIVE.name())
                 .loginFailCount(0)
                 .lockTime(now)
                 .build();
@@ -223,7 +224,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // 3. 检查账户是否被锁定
-        if ("LOCKED".equals(user.getStatus())) {
+        if (AccountStatusEnum.LOCKED.name().equals(user.getStatus())) {
             // 检查锁定时间是否已过（如果 lockTime + 锁定分钟数 > 当前时间，则仍锁定）
             if (user.getLockTime() != null) {
                 LocalDateTime unlockTime = user.getLockTime().plusMinutes(SecurityConstant.ACCOUNT_LOCK_DURATION_MINUTES);
@@ -232,7 +233,7 @@ public class AuthServiceImpl implements AuthService {
                         "Account is locked, please try again later.");
                 } else {
                     // 锁定已过期，自动解锁并重置失败计数
-                    user.setStatus("ACTIVE");
+                    user.setStatus(AccountStatusEnum.ACTIVE.name());
                     user.setLoginFailCount(0);
                     user.setLockTime(null);
                     userMapper.updateById(user);
@@ -244,7 +245,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // 4. 检查账户是否被注销
-        if ("DEACTIVATED".equals(user.getStatus())) {
+        if (AccountStatusEnum.DEACTIVATED.name().equals(user.getStatus())) {
             throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), "Account has been deactivated.");
         }
 
@@ -255,7 +256,7 @@ public class AuthServiceImpl implements AuthService {
             user.setLoginFailCount(newFailCount);
             if (newFailCount >= SecurityConstant.MAX_LOGIN_ATTEMPTS) {
                 // 锁定账户
-                user.setStatus("LOCKED");
+                user.setStatus(AccountStatusEnum.LOCKED.name());
                 user.setLockTime(LocalDateTime.now());
                 userMapper.updateById(user);
                 throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), 

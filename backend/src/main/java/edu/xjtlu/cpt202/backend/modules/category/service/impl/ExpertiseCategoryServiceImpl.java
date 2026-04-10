@@ -8,6 +8,8 @@ import edu.xjtlu.cpt202.backend.modules.category.mapper.ExpertiseCategoryMapper;
 import edu.xjtlu.cpt202.backend.modules.category.model.dto.CategoryRequest;
 import edu.xjtlu.cpt202.backend.modules.category.model.vo.CategoryVO;
 import edu.xjtlu.cpt202.backend.modules.category.service.ExpertiseCategoryService;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +19,14 @@ import java.util.List;
 public class ExpertiseCategoryServiceImpl implements ExpertiseCategoryService {
 
     private final ExpertiseCategoryMapper expertiseCategoryMapper;
+    private final SpecialistProfileMapper specialistProfileMapper;
 
-    public ExpertiseCategoryServiceImpl(ExpertiseCategoryMapper expertiseCategoryMapper) {
+    public ExpertiseCategoryServiceImpl(
+            ExpertiseCategoryMapper expertiseCategoryMapper,
+            SpecialistProfileMapper specialistProfileMapper
+    ) {
         this.expertiseCategoryMapper = expertiseCategoryMapper;
+        this.specialistProfileMapper = specialistProfileMapper;
     }
 
     @Override
@@ -60,6 +67,7 @@ public class ExpertiseCategoryServiceImpl implements ExpertiseCategoryService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteCategory(Long id) {
         ExpertiseCategory existingCategory = getCategoryOrThrow(id);
+        ensureCategoryNotUsed(existingCategory.getId());
         expertiseCategoryMapper.deleteById(existingCategory.getId());
     }
 
@@ -87,6 +95,17 @@ public class ExpertiseCategoryServiceImpl implements ExpertiseCategoryService {
 
     private String normalizeCategoryName(String categoryName) {
         return categoryName == null ? "" : categoryName.trim();
+    }
+
+    private void ensureCategoryNotUsed(Long categoryId) {
+        Long specialistCount = specialistProfileMapper.selectCount(
+                new LambdaQueryWrapper<SpecialistProfile>()
+                        .eq(SpecialistProfile::getCategoryId, categoryId)
+        );
+        if (specialistCount != null && specialistCount > 0) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(),
+                    "Category is already assigned to specialists and cannot be deleted");
+        }
     }
 
     private CategoryVO toCategoryVO(ExpertiseCategory category) {

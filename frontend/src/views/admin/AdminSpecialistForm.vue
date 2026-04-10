@@ -13,11 +13,11 @@
             v-model="form.categoryId"
             placeholder="Please select category"
             clearable
-            :loading="categoryLoading"
+            :loading="categoryStore.loading"
             style="width: 100%"
           >
             <el-option
-              v-for="item in categoryOptions"
+              v-for="item in categoryStore.categories"
               :key="item.id"
               :label="item.categoryName"
               :value="item.id"
@@ -65,7 +65,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { getCategoryList } from '@/api/adminCategory'
+import { useCategoryStore } from '@/stores/category'
 import {
   createSpecialist,
   getSpecialistDetail,
@@ -73,11 +73,6 @@ import {
   type SpecialistPayload,
   type SpecialistStatus
 } from '@/api/adminSpecialist'
-
-interface CategoryOption {
-  id: number
-  categoryName: string
-}
 
 interface SpecialistFormModel {
   name: string
@@ -90,12 +85,11 @@ interface SpecialistFormModel {
 
 const route = useRoute()
 const router = useRouter()
+const categoryStore = useCategoryStore()
 const formRef = ref<FormInstance>()
 
 const pageLoading = ref(false)
-const categoryLoading = ref(false)
 const submitLoading = ref(false)
-const categoryOptions = ref<CategoryOption[]>([])
 
 const specialistId = computed<number | null>(() => {
   const raw = route.params.id
@@ -124,15 +118,10 @@ const rules: FormRules<SpecialistFormModel> = {
 }
 
 async function fetchCategories() {
-  categoryLoading.value = true
   try {
-    const data = await getCategoryList()
-    categoryOptions.value = Array.isArray(data) ? data : []
+    await categoryStore.fetchCategories()
   } catch (error) {
     console.error('Failed to fetch categories:', error)
-    categoryOptions.value = []
-  } finally {
-    categoryLoading.value = false
   }
 }
 

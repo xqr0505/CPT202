@@ -17,7 +17,7 @@
         class="toolbar-item"
       >
         <el-option
-          v-for="item in categoryOptions"
+          v-for="item in categoryStore.categoryOptions"
           :key="item.value"
           :label="item.label"
           :value="item.value"
@@ -77,6 +77,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCategoryStore } from '@/stores/category'
 import {
   getSpecialistList,
   updateSpecialistStatus,
@@ -84,15 +85,10 @@ import {
   type SpecialistItem
 } from '@/api/adminSpecialist'
 
-interface CategoryOption {
-  label: string
-  value: number
-}
-
 const router = useRouter()
+const categoryStore = useCategoryStore()
 const loading = ref(false)
 const tableData = ref<SpecialistItem[]>([])
-const categoryOptions = ref<CategoryOption[]>([])
 
 const filters = reactive({
   keyword: '',
@@ -143,38 +139,29 @@ async function handleToggleStatus(row: SpecialistItem) {
   }
 }
 
-function buildCategoryOptions(list: SpecialistItem[]) {
-  const map = new Map<number, string>()
-  list.forEach(item => {
-    if (item.categoryId && item.categoryName) {
-      map.set(item.categoryId, item.categoryName)
-    }
-  })
-
-  categoryOptions.value = Array.from(map.entries()).map(([value, label]) => ({
-    value,
-    label
-  }))
-}
-
 async function fetchSpecialistList() {
   loading.value = true
   try {
     const data = await getSpecialistList()
     const rows = Array.isArray(data) ? data : data.list
     tableData.value = rows
-    buildCategoryOptions(tableData.value)
   } catch (error) {
     console.error('Failed to fetch specialist list:', error)
     tableData.value = []
-    categoryOptions.value = []
   } finally {
     loading.value = false
   }
 }
 
+async function initializePage() {
+  await Promise.all([
+    categoryStore.fetchCategories(),
+    fetchSpecialistList()
+  ])
+}
+
 onMounted(() => {
-  void fetchSpecialistList()
+  void initializePage()
 })
 </script>
 

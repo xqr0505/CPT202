@@ -49,17 +49,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createCategory,
   deleteCategory,
-  getCategoryList,
   updateCategory
 } from '@/api/adminCategory'
+import { useCategoryStore, type CategoryItem } from '@/stores/category'
 
-interface CategoryItem {
-  id: number
-  categoryName: string
-  createTime: string
-}
-
-const tableData = ref<CategoryItem[]>([])
+const categoryStore = useCategoryStore()
+const tableData = computed(() => categoryStore.categories)
 
 const dialogVisible = ref(false)
 const isEditMode = ref(false)
@@ -73,11 +68,9 @@ const dialogTitle = computed(() => (isEditMode.value ? 'Edit Category' : 'New Ca
 
 async function fetchCategoryList() {
   try {
-    const data = await getCategoryList()
-    tableData.value = Array.isArray(data) ? data : []
+    await categoryStore.fetchCategories()
   } catch (error) {
     console.error('Failed to fetch category list:', error)
-    tableData.value = []
   }
 }
 

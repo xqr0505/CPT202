@@ -119,14 +119,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     public BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId) {
-        // Fetch booking detail from mapper (includes all joined information)
         BookingDetailVO detail = bookingMapper.selectBookingDetailById(bookingId)
                 .orElseThrow(() -> {
                     log.warn("Booking not found: bookingId={}", bookingId);
                     return new BusinessException(ResultCodeEnum.NOT_FOUND);
                 });
 
-        // AC4: Data Isolation Check - Verify that the booking belongs to the current customer
         Booking booking = bookingMapper.selectById(bookingId);
         if (booking == null || !booking.getCustomerId().equals(currentCustomerId)) {
             log.warn("Data isolation violation detected: customerId={}, bookingId={}, actual customerId={}",

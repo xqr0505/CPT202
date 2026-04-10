@@ -28,8 +28,6 @@ public interface BookingMapper extends BaseMapper<Booking> {
 
     /**
      * Select booking detail by booking ID.
-     * Joins bookings, time_slots, specialist_profiles, and users tables.
-     *
      * @param bookingId the booking ID
      * @return Optional containing BookingDetailVO if found, empty otherwise
      */
@@ -37,7 +35,7 @@ public interface BookingMapper extends BaseMapper<Booking> {
             SELECT
                 b.id AS bookingId,
                 b.status AS status,
-                sp.user_id AS specialistId,
+                b.specialist_id AS specialistId,
                 COALESCE(NULLIF(u.full_name, ''), u.email) AS specialistName,
                 COALESCE(sp.avatar_url, '') AS specialistAvatar,
                 DATE_FORMAT(ts.slot_date, '%Y-%m-%d') AS slotDate,
@@ -48,7 +46,7 @@ public interface BookingMapper extends BaseMapper<Booking> {
                 b.customer_notes AS customerNotes
             FROM bookings b
             INNER JOIN time_slots ts ON b.slot_id = ts.id
-            INNER JOIN specialist_profiles sp ON b.specialist_id = sp.user_id
+            INNER JOIN specialist_profiles sp ON b.specialist_id = sp.id
             INNER JOIN users u ON sp.user_id = u.id
             WHERE b.id = #{bookingId}
             LIMIT 1

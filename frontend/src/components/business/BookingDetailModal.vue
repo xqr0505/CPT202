@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     title="Booking Details"
-    width="640px"
+    :width="dialogWidth"
     @close="handleClose"
     :destroy-on-close="true"
     class="custom-booking-dialog"
@@ -93,6 +93,11 @@ const visible = ref(props.modelValue);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const bookingDetail = ref<BookingDetail | null>(null);
+const dialogWidth = ref(window.innerWidth < 768 ? '90%' : '640px');
+
+window.addEventListener('resize', () => {
+  dialogWidth.value = window.innerWidth < 768 ? '90%' : '640px';
+});
 
 watch(() => props.modelValue, (newVal) => {
   visible.value = newVal;
@@ -250,5 +255,25 @@ const formatPrice = (price: number) => {
 :deep(.el-divider--horizontal) {
   margin: 0 0 var(--space-6) 0;
   display: none; // Hiding the divider as we use card-based layout
+}
+
+@media (max-width: 768px) {
+  .booking-detail-modal {
+    padding: var(--space-4);
+
+    .header-section {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-4);
+    }
+
+    .body-section {
+      gap: var(--space-3);
+
+      .info-block {
+        padding: var(--space-4);
+      }
+    }
+  }
 }
 </style>

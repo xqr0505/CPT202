@@ -1,6 +1,8 @@
 package edu.xjtlu.cpt202.backend.modules.specialist.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import org.junit.jupiter.api.Test;
@@ -15,8 +17,10 @@ import java.math.BigDecimal;
 import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,6 +30,9 @@ class AdminSpecialistControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockBean
     private AdminSpecialistService adminSpecialistService;
@@ -80,5 +87,23 @@ class AdminSpecialistControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("status must be Active or Inactive"));
+    }
+
+    @Test
+    void createSpecialist_success() throws Exception {
+        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        request.setName("Dr. Test Specialist");
+        request.setCategoryId(1L);
+        request.setLevel("SENIOR");
+        request.setConsultationFee(new BigDecimal("220.00"));
+        request.setStatus("Active");
+
+        doNothing().when(adminSpecialistService).createSpecialist(any(AdminSpecialistUpdateDTO.class));
+
+        mockMvc.perform(post("/admin/specialists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
     }
 }

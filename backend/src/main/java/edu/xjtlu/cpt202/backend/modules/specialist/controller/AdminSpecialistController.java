@@ -1,5 +1,6 @@
 package edu.xjtlu.cpt202.backend.modules.specialist.controller;
 
+import edu.xjtlu.cpt202.backend.common.enums.SpecialistLevelEnum;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
@@ -7,16 +8,22 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistStat
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistLevelOptionVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 @RestController
 @RequestMapping("/admin/specialists")
@@ -28,6 +35,26 @@ public class AdminSpecialistController {
     @GetMapping
     public Result<PageResult<AdminSpecialistListVO>> listSpecialists(@Valid AdminSpecialistListQueryDTO query) {
         return Result.success(adminSpecialistService.listSpecialists(query));
+    }
+
+    @GetMapping("/levels")
+    public Result<List<SpecialistLevelOptionVO>> listSpecialistLevels() {
+        List<SpecialistLevelOptionVO> levels = Arrays.stream(SpecialistLevelEnum.values())
+                .sorted(Comparator.comparing(SpecialistLevelEnum::getCode))
+                .map(level -> new SpecialistLevelOptionVO(
+                        level.name(),
+                        level.name(),
+                        level.getMinFee(),
+                        level.getMaxFee()
+                ))
+                .toList();
+        return Result.success(levels);
+    }
+
+    @PostMapping
+    public Result<Void> createSpecialist(@Valid @RequestBody AdminSpecialistUpdateDTO request) {
+        adminSpecialistService.createSpecialist(request);
+        return Result.success();
     }
 
     @GetMapping("/{id}")

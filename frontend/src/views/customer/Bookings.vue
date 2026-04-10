@@ -125,10 +125,11 @@
       </PaginationTable>
     </div>
   </div>
+  <BookingDetailModal v-model="showDetailModal" />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Calendar } from '@element-plus/icons-vue'
 import { getBookingList } from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
@@ -136,8 +137,9 @@ import type { FetchDataParams, FetchDataResult, TableColumn } from '@/components
 import PaginationTable from '@/components/business/PaginationTable.vue'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
+import BookingDetailModal from '@/components/business/BookingDetailModal.vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { BOOKING_STATUS } from '@/constants/booking';
 
 defineOptions({ name: 'CustomerBookings' })
@@ -146,6 +148,19 @@ const activeTab = ref<'UPCOMING' | 'HISTORY'>('UPCOMING')
 const activeStatus = ref<string>('null')
 const tableRef = ref<InstanceType<typeof PaginationTable> | null>(null)
 const router = useRouter();
+const route = useRoute();
+
+const showDetailModal = ref(false);
+
+const checkQueryAndOpenModal = () => {
+  if (route.query.bookingId) {
+    showDetailModal.value = true;
+  }
+};
+
+onMounted(() => {
+  checkQueryAndOpenModal();
+});
 
 const statusOptions = [
   { label: 'All', value: 'null' },
@@ -216,6 +231,11 @@ const formatDateTime = (dtStr: string) => {
 
 const handleAction = (action: string, row: BookingListItem) => {
   switch (action) {
+    case 'view':
+      router.push({ query: { ...route.query, bookingId: row.id } }).then(() => {
+        showDetailModal.value = true;
+      });
+      break;
     case 'reschedule':
       router.push(`/customer/bookings/${row.id}/reschedule`);
       break;

@@ -74,12 +74,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCategoryStore } from '@/stores/category'
 import {
   getSpecialistList,
+  type SpecialistListParams,
   updateSpecialistStatus,
   type SpecialistStatus,
   type SpecialistItem
@@ -92,7 +93,7 @@ const tableData = ref<SpecialistItem[]>([])
 
 const filters = reactive({
   keyword: '',
-  categoryId: undefined as number | undefined,
+  categoryId: undefined as number | string | undefined,
   status: undefined as 'Active' | 'Inactive' | undefined
 })
 
@@ -142,7 +143,24 @@ async function handleToggleStatus(row: SpecialistItem) {
 async function fetchSpecialistList() {
   loading.value = true
   try {
-    const data = await getSpecialistList()
+    const params: SpecialistListParams = {}
+    const keyword = filters.keyword.trim()
+    const categoryId =
+      filters.categoryId === undefined || filters.categoryId === null || filters.categoryId === ''
+        ? undefined
+        : Number(filters.categoryId)
+
+    if (keyword) {
+      params.keyword = keyword
+    }
+    if (categoryId !== undefined && !Number.isNaN(categoryId)) {
+      params.categoryId = categoryId
+    }
+    if (filters.status) {
+      params.status = filters.status
+    }
+
+    const data = await getSpecialistList(params)
     const rows = Array.isArray(data) ? data : data.list
     tableData.value = rows
   } catch (error) {
@@ -163,6 +181,13 @@ async function initializePage() {
 onMounted(() => {
   void initializePage()
 })
+
+watch(
+  () => [filters.keyword, filters.categoryId, filters.status],
+  () => {
+    void fetchSpecialistList()
+  }
+)
 </script>
 
 <style scoped>

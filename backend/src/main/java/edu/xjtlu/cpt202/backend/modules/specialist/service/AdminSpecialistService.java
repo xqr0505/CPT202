@@ -10,6 +10,8 @@ public interface AdminSpecialistService {
 
     PageResult<AdminSpecialistListVO> listSpecialists(AdminSpecialistListQueryDTO query);
 
+    void createSpecialist(AdminSpecialistUpdateDTO request);
+
     AdminSpecialistDetailVO getSpecialistDetail(Long id);
 
     void updateSpecialist(Long id, AdminSpecialistUpdateDTO request);

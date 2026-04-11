@@ -42,6 +42,14 @@
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
 
+      <!-- 新增：记住我的邮箱 -->
+      <div class="form-group remember-me">
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="rememberEmail" />
+          <span>Remember my email</span>
+        </label>
+      </div>
+
       <button 
         class="login-btn"
         :disabled="isLoading"
@@ -63,16 +71,20 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { login, type LoginPayload } from '@/api/auth';
+import { saveRememberedEmail, getRememberedEmail } from '@/api/request';
 
 defineOptions({ name: 'AuthLogin' });
 
 const router = useRouter();
 const isLoading = ref(false);
+const rememberEmail = ref(false);
 
 onMounted(() => {
-  // if (import.meta.env.DEV) {
-  //   router.replace('/specialist/schedule');
-  // }
+  const remembered = getRememberedEmail();
+  if (remembered) {
+    form.email = remembered;
+    rememberEmail.value = true;
+  }
 });
 
 const roles = [
@@ -128,6 +140,13 @@ async function handleLogin() {
     };
 
     const response = await login(payload, false);
+
+    if (rememberEmail.value) {
+      saveRememberedEmail(form.email);
+    } else {
+      // 如果未勾选，清除之前保存的邮箱（可选）
+      saveRememberedEmail('');
+    }
     
     ElMessage.success('Login successful');
 

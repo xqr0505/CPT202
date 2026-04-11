@@ -5,6 +5,9 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistList
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
+
+import java.util.List;
 
 public interface AdminSpecialistService {
 
@@ -13,6 +16,8 @@ public interface AdminSpecialistService {
     void createSpecialist(AdminSpecialistUpdateDTO request);
 
     AdminSpecialistDetailVO getSpecialistDetail(Long id);
+
+    List<SpecialistFeeChangeRecordVO> listFeeChangeRecords(Long id);
 
     void updateSpecialist(Long id, AdminSpecialistUpdateDTO request);
 

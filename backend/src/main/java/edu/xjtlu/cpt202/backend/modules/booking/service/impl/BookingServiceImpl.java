@@ -1,8 +1,6 @@
 package edu.xjtlu.cpt202.backend.modules.booking.service.impl;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import edu.xjtlu.cpt202.backend.common.constant.CommonConstant;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
@@ -19,6 +17,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
@@ -58,9 +57,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         List<UpcomingBookingVO> result = bookingMapper.selectUpcomingBookings(customerId, BookingStatusEnum.CONFIRMED.name(), now, limit);
 
         if (result != null) {
-            result.forEach(booking -> {
-                booking.setToday(booking.getStartTime().toLocalDate().isEqual(now.toLocalDate()));
-            });
+            result.forEach(booking -> booking.setToday(booking.getStartTime().toLocalDate().isEqual(now.toLocalDate())));
         }
 
         return result != null ? result : List.of();
@@ -151,6 +148,23 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         summary.setTotalConsultationHours(Optional.ofNullable(summary.getTotalConsultationHours()).orElse((double) CommonConstant.NO));
         summary.setConsultedExperts(consultedExperts);
         return summary;
+    }
+
+    public BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId) {
+        BookingDetailVO detail = bookingMapper.selectBookingDetailById(bookingId)
+                .orElseThrow(() -> {
+                    log.warn("Booking not found: bookingId={}", bookingId);
+                    return new BusinessException(ResultCodeEnum.NOT_FOUND);
+                });
+
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null || !booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Data isolation violation detected: customerId={}, bookingId={}, actual customerId={}",
+                    currentCustomerId, bookingId, booking != null ? booking.getCustomerId() : "N/A");
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+        return detail;
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

@@ -2,15 +2,19 @@ package edu.xjtlu.cpt202.backend.modules.booking.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+
 /**
  * @author QiranXiao
  * @date 2026/4/1
@@ -27,4 +31,31 @@ public interface BookingMapper extends BaseMapper<Booking> {
     UsageSummaryVO selectUsageSummary(@Param("customerId") Long customerId, @Param("status") String status, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     List<UsageSummaryVO.ConsultedExpertVO> selectConsultedExperts(@Param("customerId") Long customerId, @Param("status") String status, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+    /**
+     * Select booking detail by booking ID.
+     * @param bookingId the booking ID
+     * @return Optional containing BookingDetailVO if found, empty otherwise
+     */
+    @Select("""
+            SELECT
+                b.id AS bookingId,
+                b.status AS status,
+                b.specialist_id AS specialistId,
+                COALESCE(NULLIF(u.full_name, ''), u.email) AS specialistName,
+                COALESCE(sp.avatar_url, '') AS specialistAvatar,
+                DATE_FORMAT(ts.slot_date, '%Y-%m-%d') AS slotDate,
+                DATE_FORMAT(ts.start_time, '%H:%i') AS startTime,
+                DATE_FORMAT(ts.end_time, '%H:%i') AS endTime,
+                b.price AS price,
+                b.topic AS topic,
+                b.customer_notes AS customerNotes
+            FROM bookings b
+            INNER JOIN time_slots ts ON b.slot_id = ts.id
+            INNER JOIN specialist_profiles sp ON b.specialist_id = sp.id
+            INNER JOIN users u ON sp.user_id = u.id
+            WHERE b.id = #{bookingId}
+            LIMIT 1
+            """)
+    Optional<BookingDetailVO> selectBookingDetailById(@Param("bookingId") Long bookingId);
+
 }

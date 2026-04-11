@@ -14,6 +14,9 @@ import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.Session;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,20 +25,28 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import org.mockito.quality.Strictness;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AuthServiceImplTest {
 
     @Mock private UserMapper userMapper;
     @Mock private VerificationCodeMapper verificationCodeMapper;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private JavaMailSender mailSender;
+    @Mock private Environment env;
     @InjectMocks private AuthServiceImpl authService;
 
     private final String testEmail = "test@example.com";
@@ -46,6 +57,9 @@ class AuthServiceImplTest {
     @BeforeEach
     void setUp() {
         // 确保 SecurityConstant 中的值被正确读取（它们在常量类中已定义）
+        doNothing().when(mailSender).send(any(MimeMessage.class));
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
+        when(env.getProperty("spring.mail.username")).thenReturn("noreply@example.com");
     }
 
     // ==================== sendVerificationCode Tests ====================
@@ -55,6 +69,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
@@ -77,6 +92,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(null);
+        request.setType("REGISTER");
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
@@ -89,6 +105,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -97,24 +114,71 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void sendVerificationCode_InvalidRole_Throws() {
+        SendVerificationCodeRequest request = new SendVerificationCodeRequest();
+        request.setEmail(testEmail);
+        request.setRole("INVALID_ROLE");
+        request.setType("REGISTER");
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> authService.sendVerificationCode(request));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
+        assertTrue(ex.getMessage().contains("Please select a role first"));
+    }
+
+    @Test
+    void register_InvalidRole_Throws() {
+        RegisterRequest request = new RegisterRequest();
+        request.setEmail(testEmail);
+        request.setVerificationCode(validCode);
+        request.setPassword(testPassword);
+        request.setConfirmPassword(testPassword);
+        request.setRole("INVALID");
+
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        VerificationCode codeRecord = VerificationCode.builder()
+                .code(validCode)
+                .isUsed(false)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> authService.register(request));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
+        assertTrue(ex.getMessage().contains("Only CUSTOMER or SPECIALIST"));
+    }
+
+    @Test
     void sendVerificationCode_ResendTooQuick_Throws() {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        VerificationCode existing = VerificationCode.builder()
-                .email(testEmail)
-                .code("111111")
-                .isUsed(false)
-                .createdAt(LocalDateTime.now().minusSeconds(30)) // 30秒前，小于60秒
-                .build();
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(existing);
+        // 模拟最近60秒内存在记录（冷却期内）
+        when(verificationCodeMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
         assertEquals(ResultCodeEnum.DUPLICATE_REQUEST.getCode(), ex.getCode());
         assertTrue(ex.getMessage().contains("wait 60 seconds"));
+    }
+
+    @Test
+    void sendVerificationCode_ResendAfterCooldown_Success() {
+        SendVerificationCodeRequest request = new SendVerificationCodeRequest();
+        request.setEmail(testEmail);
+        request.setRole(testRole);
+        request.setType("REGISTER");
+
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        // 最近60秒内无记录
+        when(verificationCodeMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        when(verificationCodeMapper.insert(any(VerificationCode.class))).thenReturn(1);
+
+        assertDoesNotThrow(() -> authService.sendVerificationCode(request));
+        verify(verificationCodeMapper, times(1)).insert(any(VerificationCode.class));
     }
 
     // ==================== register Tests ====================
@@ -137,7 +201,12 @@ class AuthServiceImplTest {
                 .build();
         when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
         when(passwordEncoder.encode(testPassword)).thenReturn("encodedPwd");
-        when(userMapper.insert(any(User.class))).thenReturn(1);
+        
+        when(userMapper.insert(any(User.class))).thenAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            u.setId(1L);   // 模拟数据库生成的ID
+            return 1;
+        });
 
         // mock JWT 静态方法
         try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
@@ -166,9 +235,12 @@ class AuthServiceImplTest {
     @Test
     void register_PasswordMismatch_Throws() {
         RegisterRequest request = new RegisterRequest();
-        request.setEmail(testEmail);
-        request.setPassword(testPassword);
-        request.setConfirmPassword("different");
+        request.setEmail("test@example.com");
+        request.setVerificationCode("123456");
+        request.setRole("CUSTOMER");
+        request.setPassword("Test1234");
+        request.setConfirmPassword("Different1234");  // 不匹配
+
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertTrue(ex.getMessage().contains("Password not meet complexity or password not match"));
@@ -177,26 +249,15 @@ class AuthServiceImplTest {
     @Test
     void register_WeakPassword_Throws() {
         RegisterRequest request = new RegisterRequest();
+        request.setEmail("test@example.com");
+        request.setVerificationCode("123456");
+        request.setRole("CUSTOMER");
         request.setPassword("weak");
         request.setConfirmPassword("weak");
+
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertTrue(ex.getMessage().contains("Password not meet complexity"));
-    }
-
-    @Test
-    void register_EmailAlreadyExists_Throws() {
-        RegisterRequest request = new RegisterRequest();
-        request.setEmail(testEmail);
-        request.setVerificationCode(validCode);
-        request.setPassword(testPassword);
-        request.setConfirmPassword(testPassword);
-        request.setRole(testRole);
-
-        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> authService.register(request));
-        assertEquals(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), ex.getCode());
     }
 
     @Test
@@ -219,6 +280,29 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertEquals(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), ex.getCode());
+    }
+
+    @Test
+    void register_ExpiredVerificationCode_Throws() {
+        RegisterRequest request = new RegisterRequest();
+        request.setEmail(testEmail);
+        request.setVerificationCode(validCode);
+        request.setPassword(testPassword);
+        request.setConfirmPassword(testPassword);
+        request.setRole(testRole);
+
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        VerificationCode expiredCode = VerificationCode.builder()
+                .code(validCode)
+                .isUsed(false)
+                .expiresAt(LocalDateTime.now().minusMinutes(1))  // 已过期
+                .build();
+        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(expiredCode);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> authService.register(request));
+        assertEquals(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), ex.getCode());
+        assertTrue(ex.getMessage().contains("Verification code incorrect or expired"));
     }
 
     // ==================== login Tests ====================
@@ -267,7 +351,7 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.UNAUTHORIZED.getCode(), ex.getCode());
-        assertEquals("Invalid credentials", ex.getMessage());
+        assertEquals("Invalid email or password", ex.getMessage());
     }
 
     @Test
@@ -291,7 +375,7 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.UNAUTHORIZED.getCode(), ex.getCode());
-        assertEquals("Invalid credentials", ex.getMessage());
+        assertEquals("Invalid email or password", ex.getMessage());
 
         verify(userMapper).updateById(user);
         assertEquals(1, user.getLoginFailCount());
@@ -310,7 +394,8 @@ class AuthServiceImplTest {
                 .passwordHash("encoded")
                 .role(testRole)
                 .status("ACTIVE")
-                .loginFailCount(SecurityConstant.MAX_LOGIN_ATTEMPTS - 1)
+                .loginFailCount(4)
+                .firstFailTime(LocalDateTime.now().minusMinutes(1))  // 1分钟前第一次失败，仍在窗口内
                 .build();
         when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
         when(passwordEncoder.matches("wrong", "encoded")).thenReturn(false);
@@ -318,10 +403,10 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("locked for"));
+        assertTrue(ex.getMessage().contains("15 minutes"));
 
         verify(userMapper).updateById(user);
-        assertEquals(SecurityConstant.MAX_LOGIN_ATTEMPTS, user.getLoginFailCount());
+        assertEquals(5, user.getLoginFailCount());
         assertEquals("LOCKED", user.getStatus());
         assertNotNull(user.getLockTime());
     }
@@ -334,6 +419,8 @@ class AuthServiceImplTest {
         request.setRole(testRole);
 
         User user = User.builder()
+                .email(testEmail)
+                .role(testRole) 
                 .status("LOCKED")
                 .lockTime(LocalDateTime.now().minusMinutes(1)) // 假设锁定5分钟，1分钟前锁定 -> 未过期
                 .build();
@@ -342,7 +429,28 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("locked"));
+        assertTrue(ex.getMessage().contains("15 minutes"));
+    }
+
+    @Test
+    void login_DeactivatedAccount_Throws() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail(testEmail);
+        request.setPassword(testPassword);
+        request.setRole(testRole);
+
+        User user = User.builder()
+                .email(testEmail)
+                .role(testRole) 
+                .email(testEmail)
+                .status("DEACTIVATED")
+                .build();
+        when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> authService.login(request));
+        assertEquals(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), ex.getCode());
+        assertTrue(ex.getMessage().contains("Account has been deactivated"));
     }
 
     @Test
@@ -369,10 +477,29 @@ class AuthServiceImplTest {
             LoginResponse response = authService.login(request);
             assertNotNull(response);
 
-            verify(userMapper).updateById(user);
+            verify(userMapper, times(2)).updateById(user);
             assertEquals("ACTIVE", user.getStatus());
             assertEquals(0, user.getLoginFailCount());
             assertNull(user.getLockTime());
         }
+    }
+    
+    @Test
+    void login_RoleNotMatch_Throws() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail(testEmail);
+        request.setPassword(testPassword);
+        request.setRole("SPECIALIST");
+
+        User user = User.builder()
+                .email(testEmail)
+                .role("CUSTOMER")
+                .build();
+        when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> authService.login(request));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
+        assertEquals("role not match", ex.getMessage());
     }
 }

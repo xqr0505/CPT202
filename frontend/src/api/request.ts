@@ -72,8 +72,14 @@ export const getUser = (): any => {
   }
 };
 
+export const triggerLogoutEvent = () => {
+  localStorage.setItem('logout-event', Date.now().toString());
+  setTimeout(() => localStorage.removeItem('logout-event'), 100);
+};
+
 export const logout = () => {
   clearAuthData();
+  triggerLogoutEvent();
   router.push({ name: 'Login' }).catch(() => null);
 };
 

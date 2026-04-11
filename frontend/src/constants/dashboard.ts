@@ -11,6 +11,7 @@ export const DASHBOARD_DATE_VALUE_FORMAT = 'YYYY-MM-DD'
 export const DASHBOARD_DATE_RANGE_SEPARATOR = 'To'
 export const DASHBOARD_DATE_START_PLACEHOLDER = 'Start date'
 export const DASHBOARD_DATE_END_PLACEHOLDER = 'End date'
+export const DASHBOARD_DATE_FILTER_HINT = 'Date filter is optional'
 
 
 export const DASHBOARD_STATISTIC_LABELS = {

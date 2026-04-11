@@ -69,4 +69,49 @@
         </if>
     </select>
 
+    <select id="selectUsageSummary" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO">
+        SELECT
+            COALESCE(COUNT(1), 0) AS totalCompletedAppointments,
+            COALESCE(SUM(b.price), 0) AS totalAmountSpent,
+            COALESCE(
+                SUM(
+                    TIMESTAMPDIFF(
+                        MINUTE,
+                        TIMESTAMP(ts.slot_date, ts.start_time),
+                        TIMESTAMP(ts.slot_date, ts.end_time)
+                    )
+                ) / 60.0,
+                0
+            ) AS totalConsultationHours
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        WHERE b.customer_id = #{customerId}
+        AND b.status = #{status}
+        <if test="startDate != null">
+            AND ts.slot_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND ts.slot_date &lt;= #{endDate}
+        </if>
+    </select>
+
+    <select id="selectConsultedExperts" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO$ConsultedExpertVO">
+        SELECT DISTINCT
+            sp.id AS specialistId,
+            u.full_name AS specialistName
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        JOIN users u ON sp.user_id = u.id
+        WHERE b.customer_id = #{customerId}
+        AND b.status = #{status}
+        <if test="startDate != null">
+            AND ts.slot_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND ts.slot_date &lt;= #{endDate}
+        </if>
+        ORDER BY sp.id ASC
+    </select>
+
 </mapper>

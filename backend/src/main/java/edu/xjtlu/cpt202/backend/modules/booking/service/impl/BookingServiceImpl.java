@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import edu.xjtlu.cpt202.backend.common.constant.CommonConstant;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
@@ -14,10 +16,12 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
@@ -28,8 +32,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @author QiranXiao
@@ -120,6 +127,32 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return new PageResult<>(total, list);
     }
 
+    @Override
+    public UsageSummaryVO getUsageSummary(UsageSummaryQueryDTO queryDTO) {
+        validateUsageSummaryDateRange(queryDTO);
+
+        Long customerId = SecurityUtils.getCurrentUserId();
+        String completedStatus = BookingStatusEnum.COMPLETED.name();
+        LocalDate startDate = queryDTO == null ? null : queryDTO.getStartDate();
+        LocalDate endDate = queryDTO == null ? null : queryDTO.getEndDate();
+
+        UsageSummaryVO summary = Optional.ofNullable(
+                        bookingMapper.selectUsageSummary(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(UsageSummaryVO::new);
+
+        List<UsageSummaryVO.ConsultedExpertVO> consultedExperts = Optional.ofNullable(
+                        bookingMapper.selectConsultedExperts(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(ArrayList::new);
+
+        summary.setTotalCompletedAppointments(Optional.ofNullable(summary.getTotalCompletedAppointments()).orElse(CommonConstant.NO));
+        summary.setTotalAmountSpent(Optional.ofNullable(summary.getTotalAmountSpent()).orElse(BigDecimal.ZERO));
+        summary.setTotalConsultationHours(Optional.ofNullable(summary.getTotalConsultationHours()).orElse((double) CommonConstant.NO));
+        summary.setConsultedExperts(consultedExperts);
+        return summary;
+    }
+
     private BigDecimal resolvePrice(BigDecimal consultationFee) {
         return consultationFee == null ? BigDecimal.ZERO : consultationFee;
     }
@@ -140,6 +173,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         Long allowedTopicCount = bookingTopicMapper.countActiveTopicByName(topic);
         if (allowedTopicCount == null || allowedTopicCount == 0) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Topic is not available for this specialist");
+        }
+    }
+
+    private void validateUsageSummaryDateRange(UsageSummaryQueryDTO queryDTO) {
+        if (queryDTO == null || queryDTO.getStartDate() == null || queryDTO.getEndDate() == null) {
+            return;
+        }
+        if (queryDTO.getStartDate().isAfter(queryDTO.getEndDate())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR);
         }
     }
 }

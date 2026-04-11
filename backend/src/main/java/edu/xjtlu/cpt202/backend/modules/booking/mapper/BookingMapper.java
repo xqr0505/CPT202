@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 /**
@@ -22,4 +24,7 @@ public interface BookingMapper extends BaseMapper<Booking> {
 
     Long selectBookingListCount(@Param("customerId") Long customerId, @Param("tab") String tab, @Param("status") String status, @Param("currentTime") LocalDateTime currentTime);
 
+    UsageSummaryVO selectUsageSummary(@Param("customerId") Long customerId, @Param("status") String status, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    List<UsageSummaryVO.ConsultedExpertVO> selectConsultedExperts(@Param("customerId") Long customerId, @Param("status") String status, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

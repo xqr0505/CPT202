@@ -50,12 +50,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (userId != null && role != null) {
                     User user = userMapper.selectById(userId);
 
-                    if (user != null && !AccountStatusEnum.DEACTIVATED.name().equalsIgnoreCase(user.getStatus())) {
+                    if (user != null && AccountStatusEnum.ACTIVE.name().equalsIgnoreCase(user.getStatus())) {
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(userId, null, null);
-
                         SecurityContextHolder.getContext().setAuthentication(authentication);
-
                         UserContextHolder.setUserId(userId);
                         UserContextHolder.setRole(role);
                     } else {

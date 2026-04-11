@@ -35,6 +35,7 @@ public class User {
     private String phoneNumber;
     private Integer loginFailCount;
     private LocalDateTime lockTime;
+    private LocalDateTime firstFailTime;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

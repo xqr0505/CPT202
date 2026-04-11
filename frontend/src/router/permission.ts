@@ -3,7 +3,7 @@ import type { Router, RouteLocationNormalized } from 'vue-router';
 import { getAuthToken, getUser } from '@/api/request';
 
 // WhiteList
-const whiteList = ['/auth/login', '/register', '/error/403', '/error/404', '/error/500'];
+const whiteList = ['/auth/login', '/register','/forgot-password', '/error/403', '/error/404', '/error/500'];
 
 const getDefaultHomePath = (role: string): string => {
   switch (role) {

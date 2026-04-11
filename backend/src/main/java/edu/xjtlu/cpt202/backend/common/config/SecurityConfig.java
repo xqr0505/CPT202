@@ -11,6 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -55,29 +57,23 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Swagger
                         .requestMatchers(
-                                "/doc.html",
-                                "/webjars/**",
-                                "/v3/api-docs/**",
-                                "/swagger-resources/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
-
-                        // auth
-                        .requestMatchers(
+                                "/swagger-ui.html",        
+                                "/auth/refresh-token",
                                 "/auth/login",
                                 "/auth/register",
-                                "/auth/logout",
                                 "/auth/verify-email",
-                                "/auth/reset-password",
-                                "/auth/refresh-token"
+                                "/auth/logout",           
+                                "/auth/reset-password/**", 
+                                "/doc.html",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-resources/**",
+                                "/webjars/**",
+                                "/error/**"
                         ).permitAll()
 
-                        // FIXME: 暂时允许所有请求直接通过！
-                        // .anyRequest().authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
 
 
@@ -92,6 +88,11 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable());
 
         return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
 

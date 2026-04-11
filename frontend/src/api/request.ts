@@ -196,3 +196,16 @@ service.interceptors.response.use(
 );
 
 export default service;
+
+// ========== 新增：记住邮箱功能 ==========
+export const saveRememberedEmail = (email: string) => {
+  if (email) {
+    localStorage.setItem('rememberedEmail', email);
+  } else {
+    localStorage.removeItem('rememberedEmail');
+  }
+};
+
+export const getRememberedEmail = (): string | null => {
+  return localStorage.getItem('rememberedEmail');
+};

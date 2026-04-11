@@ -4,7 +4,10 @@ import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.VerifyResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,5 +39,27 @@ public class AuthController {
     @PostMapping("/auth/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return Result.success(authService.login(request));
+    }
+    @PostMapping("/auth/logout")
+    public Result<Void> logout() {
+        return Result.success();
+    }
+
+    @PostMapping("/auth/reset-password/send-code")
+    public Result<Void> sendResetCode(@Valid @RequestBody SendResetCodeRequest request) {
+        authService.sendResetPasswordCode(request);
+        return Result.success();
+    }
+
+    @PostMapping("/auth/reset-password/verify")
+    public Result<Void> verifyResetCode(@Valid @RequestBody VerifyResetCodeRequest request) {
+        authService.verifyResetCode(request);
+        return Result.success();
+    }
+
+    @PostMapping("/auth/reset-password/update")
+    public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return Result.success();
     }
 }

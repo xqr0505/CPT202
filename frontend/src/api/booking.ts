@@ -48,8 +48,32 @@ export interface BookingListQuery {
 
 export type BookingItem = BookingListItem;
 
+export interface ConsultedExpertSummary {
+  specialistId: string;
+  specialistName: string;
+  specialistAvatar?: string;
+}
+
+export interface CustomerDashboardSummary {
+  totalCompletedAppointments: number;
+  totalAmountSpent: number;
+  totalConsultationHours: number;
+  consultedExperts: ConsultedExpertSummary[];
+}
+
+export interface CustomerDashboardSummaryQuery {
+  startDate?: string;
+  endDate?: string;
+}
+
 export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
+}
+
+export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQuery) => {
+  return request
+    .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
+    .then((response) => response as unknown as CustomerDashboardSummary)
 }
 
 export const createBooking = (data: CreateBookingRequest) => {

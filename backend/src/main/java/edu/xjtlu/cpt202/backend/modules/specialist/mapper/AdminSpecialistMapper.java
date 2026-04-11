@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -96,6 +97,27 @@ public interface AdminSpecialistMapper {
             WHERE id = #{specialistId}
             """)
     Long selectUserIdBySpecialistId(@Param("specialistId") Long specialistId);
+
+    @Select("""
+            SELECT
+                u.id,
+                u.email,
+                u.password_hash,
+                u.role,
+                u.status,
+                u.full_name,
+                u.phone_number,
+                u.login_fail_count,
+                u.lock_time,
+                u.first_fail_time,
+                u.created_at,
+                u.updated_at,
+                u.deleted_at
+            FROM users u
+            INNER JOIN specialist_profiles sp ON sp.user_id = u.id
+            WHERE sp.id = #{specialistId}
+            """)
+    User selectUserBySpecialistId(@Param("specialistId") Long specialistId);
 
     @Update("""
             UPDATE specialist_profiles

@@ -37,6 +37,26 @@
       <el-button type="primary" @click="goCreatePage">Add Specialist</el-button>
     </div>
 
+    <div class="pagination-wrapper">
+      <div class="pagination-summary">
+        Total {{ pagination.total }} specialists, Page {{ totalPages === 0 ? 0 : pagination.pageNo }} / {{ totalPages }}
+      </div>
+      <div class="pagination-actions">
+        <el-select v-model="pagination.pageSize" class="page-size-select">
+          <el-option :value="10" label="10 / page" />
+          <el-option :value="20" label="20 / page" />
+          <el-option :value="50" label="50 / page" />
+          <el-option :value="100" label="100 / page" />
+        </el-select>
+        <el-button :disabled="pagination.pageNo <= 1" @click="pagination.pageNo -= 1">
+          Previous
+        </el-button>
+        <el-button :disabled="pagination.pageNo >= totalPages" type="primary" @click="pagination.pageNo += 1">
+          Next
+        </el-button>
+      </div>
+    </div>
+
     <el-table :data="tableData" v-loading="loading" style="width: 100%">
       <el-table-column label="Avatar" width="100">
         <template #default="{ row }">
@@ -70,11 +90,12 @@
         </template>
       </el-table-column>
     </el-table>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCategoryStore } from '@/stores/category'
@@ -90,6 +111,12 @@ const router = useRouter()
 const categoryStore = useCategoryStore()
 const loading = ref(false)
 const tableData = ref<SpecialistItem[]>([])
+const pagination = reactive({
+  pageNo: 1,
+  pageSize: 10,
+  total: 0
+})
+const totalPages = computed(() => Math.ceil(pagination.total / pagination.pageSize))
 
 const filters = reactive({
   keyword: '',
@@ -143,7 +170,10 @@ async function handleToggleStatus(row: SpecialistItem) {
 async function fetchSpecialistList() {
   loading.value = true
   try {
-    const params: SpecialistListParams = {}
+    const params: SpecialistListParams = {
+      pageNo: pagination.pageNo,
+      pageSize: pagination.pageSize
+    }
     const keyword = filters.keyword.trim()
     const categoryId =
       filters.categoryId === undefined || filters.categoryId === null || filters.categoryId === ''
@@ -161,11 +191,12 @@ async function fetchSpecialistList() {
     }
 
     const data = await getSpecialistList(params)
-    const rows = Array.isArray(data) ? data : data.list
-    tableData.value = rows
+    tableData.value = Array.isArray(data) ? data : (data.list ?? [])
+    pagination.total = Array.isArray(data) ? tableData.value.length : (data.total ?? 0)
   } catch (error) {
     console.error('Failed to fetch specialist list:', error)
     tableData.value = []
+    pagination.total = 0
   } finally {
     loading.value = false
   }
@@ -184,6 +215,14 @@ onMounted(() => {
 
 watch(
   () => [filters.keyword, filters.categoryId, filters.status],
+  () => {
+    pagination.pageNo = 1
+    void fetchSpecialistList()
+  }
+)
+
+watch(
+  () => [pagination.pageNo, pagination.pageSize],
   () => {
     void fetchSpecialistList()
   }
@@ -208,5 +247,32 @@ watch(
 
 .keyword-input {
   width: 260px;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: #f8fbff;
+  border: 1px solid #dbe7f3;
+  border-radius: 12px;
+}
+
+.pagination-summary {
+  color: #475467;
+  font-size: 14px;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-size-select {
+  width: 120px;
 }
 </style>

@@ -31,6 +31,7 @@
             placeholder="Please select level"
             clearable
             :loading="levelLoading"
+            @change="handleLevelChange"
             style="width: 100%"
           >
             <el-option
@@ -43,15 +44,14 @@
         </el-form-item>
 
         <el-form-item label="Consultation Fee" prop="consultationFee">
-          <el-input-number
-            v-model="form.consultationFee"
-            :min="selectedLevelOption?.minFee ?? 0"
-            :max="selectedLevelOption?.maxFee"
-            :precision="2"
-            :step="10"
+          <el-input
+            :model-value="consultationFeeInput"
+            inputmode="decimal"
+            @update:model-value="handleConsultationFeeInput"
+            @blur="handleConsultationFeeBlur"
             style="width: 100%"
           />
-          <div v-if="selectedLevelOption" class="field-hint">
+          <div v-if="selectedLevelOption && !isEditMode" class="field-hint">
             Allowed range: ${{ formatFee(selectedLevelOption.minFee) }} - ${{ formatFee(selectedLevelOption.maxFee) }}
           </div>
         </el-form-item>
@@ -75,14 +75,56 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-card v-if="isEditMode" class="history-card" shadow="never">
+      <template #header>
+        <div class="history-header">Fee Change Record</div>
+      </template>
+
+      <el-table v-loading="historyLoading" :data="feeChangeRecords" empty-text="No fee change records yet.">
+        <el-table-column prop="createdAt" label="Changed At" min-width="180" />
+        <el-table-column prop="changedByName" label="Changed By" min-width="140">
+          <template #default="{ row }">
+            {{ row.changedByName || 'System' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="oldFee" label="Old Fee" min-width="110">
+          <template #default="{ row }">
+            ${{ formatFee(Number(row.oldFee || 0)) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="newFee" label="New Fee" min-width="110">
+          <template #default="{ row }">
+            ${{ formatFee(Number(row.newFee || 0)) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="level" label="Level" min-width="110" />
+        <el-table-column label="Range Snapshot" min-width="180">
+          <template #default="{ row }">
+            ${{ formatFee(Number(row.rangeMin || 0)) }} - ${{ formatFee(Number(row.rangeMax || 0)) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="outOfRange" label="Abnormal" min-width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.outOfRange ? 'danger' : 'success'">
+              {{ row.outOfRange ? 'Yes' : 'No' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useCategoryStore } from '@/stores/category'
+import {
+  getSpecialistFeeChangeRecords,
+  type SpecialistFeeChangeRecord
+} from '@/api/adminSpecialistFeeRecord'
 import {
   createSpecialist,
   getSpecialistDetail,
@@ -110,8 +152,10 @@ const formRef = ref<FormInstance>()
 const pageLoading = ref(false)
 const levelLoading = ref(false)
 const submitLoading = ref(false)
+const historyLoading = ref(false)
 const levelOptions = ref<SpecialistLevelOption[]>([])
-const suppressFeeAutoSync = ref(false)
+const consultationFeeInput = ref('0.00')
+const feeChangeRecords = ref<SpecialistFeeChangeRecord[]>([])
 
 const specialistId = computed<number | null>(() => {
   const raw = route.params.id
@@ -138,6 +182,42 @@ function formatFee(fee: number) {
   return fee.toFixed(2)
 }
 
+function normalizeConsultationFee(value: string) {
+  const sanitized = value.replace(/[^\d.]/g, '')
+  const segments = sanitized.split('.')
+  if (segments.length <= 1) {
+    return sanitized
+  }
+
+  return `${segments[0]}.${segments.slice(1).join('')}`
+}
+
+function clampConsultationFeeToLevelRange(value: number) {
+  if (isEditMode.value || !selectedLevelOption.value) {
+    return value
+  }
+
+  if (value < selectedLevelOption.value.minFee) {
+    return selectedLevelOption.value.minFee
+  }
+
+  if (value > selectedLevelOption.value.maxFee) {
+    return selectedLevelOption.value.maxFee
+  }
+
+  return value
+}
+
+function showFeeAdjustedMessage(originalValue: number, adjustedValue: number) {
+  if (isEditMode.value || originalValue === adjustedValue || !selectedLevelOption.value) {
+    return
+  }
+
+  ElMessage.warning(
+    `Fee has been adjusted to ${formatFee(adjustedValue)} to match the allowed ${form.level} range (${formatFee(selectedLevelOption.value.minFee)} - ${formatFee(selectedLevelOption.value.maxFee)}).`
+  )
+}
+
 const rules: FormRules<SpecialistFormModel> = {
   name: [{ required: true, message: 'Please enter name', trigger: 'blur' }],
   categoryId: [{ required: true, message: 'Please select category', trigger: 'change' }],
@@ -148,18 +228,6 @@ const rules: FormRules<SpecialistFormModel> = {
       validator: (_rule, value, callback) => {
         if (value === undefined || value === null) {
           callback(new Error('Please enter consultation fee'))
-          return
-        }
-
-        if (!selectedLevelOption.value) {
-          callback()
-          return
-        }
-
-        if (value < selectedLevelOption.value.minFee || value > selectedLevelOption.value.maxFee) {
-          callback(new Error(
-            `Consultation fee for ${selectedLevelOption.value.value} must be between ${formatFee(selectedLevelOption.value.minFee)} and ${formatFee(selectedLevelOption.value.maxFee)}`
-          ))
           return
         }
 
@@ -196,14 +264,13 @@ async function fetchSpecialistDetail() {
 
   try {
     const detail = await getSpecialistDetail(specialistId.value)
-    suppressFeeAutoSync.value = true
     form.name = detail.name ?? ''
     form.categoryId = detail.categoryId
     form.level = detail.level ?? ''
     form.consultationFee = detail.consultationFee ?? 0
+    consultationFeeInput.value = Number(form.consultationFee).toFixed(2)
     form.status = detail.status ?? 'Active'
     form.avatarUrl = detail.avatarUrl ?? ''
-    suppressFeeAutoSync.value = false
   } catch (error) {
     console.error('Failed to fetch specialist detail:', error)
     ElMessage.error('Failed to load specialist detail')
@@ -211,22 +278,105 @@ async function fetchSpecialistDetail() {
   }
 }
 
-watch(
-  () => form.level,
-  level => {
-    if (!level || suppressFeeAutoSync.value) {
-      return
-    }
+async function fetchFeeChangeRecords() {
+  if (!isEditMode.value || specialistId.value === null) return
 
-    const option = levelOptions.value.find(item => item.value === level)
-    if (!option) {
-      return
-    }
-
-    form.consultationFee = option.minFee
-    void formRef.value?.validateField('consultationFee')
+  historyLoading.value = true
+  try {
+    feeChangeRecords.value = await getSpecialistFeeChangeRecords(specialistId.value)
+  } catch (error) {
+    console.error('Failed to fetch fee change records:', error)
+    feeChangeRecords.value = []
+  } finally {
+    historyLoading.value = false
   }
-)
+}
+
+function handleLevelChange(level: string) {
+  if (!level || isEditMode.value) {
+    return
+  }
+
+  const option = levelOptions.value.find(item => item.value === level)
+  if (!option) {
+    return
+  }
+
+  form.consultationFee = option.minFee
+  consultationFeeInput.value = option.minFee.toFixed(2)
+  void formRef.value?.validateField('consultationFee')
+}
+
+function handleConsultationFeeInput(value: string) {
+  consultationFeeInput.value = value
+  const normalized = normalizeConsultationFee(value)
+  if (!normalized) {
+    form.consultationFee = 0
+    return
+  }
+
+  const parsed = Number(normalized)
+  if (!Number.isNaN(parsed)) {
+    form.consultationFee = parsed
+  }
+}
+
+function handleConsultationFeeBlur(event: FocusEvent) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) {
+    return
+  }
+
+  const normalized = normalizeConsultationFee(target.value)
+  if (!normalized) {
+    form.consultationFee = 0
+    target.value = '0.00'
+    void formRef.value?.validateField('consultationFee')
+    return
+  }
+
+  const parsed = Number(normalized)
+  if (Number.isNaN(parsed)) {
+    return
+  }
+
+  const finalValue = clampConsultationFeeToLevelRange(parsed)
+  form.consultationFee = finalValue
+  consultationFeeInput.value = finalValue.toFixed(2)
+  target.value = consultationFeeInput.value
+  showFeeAdjustedMessage(parsed, finalValue)
+  void formRef.value?.validateField('consultationFee')
+}
+
+function isConsultationFeeOutOfRange() {
+  if (!selectedLevelOption.value) {
+    return false
+  }
+
+  return form.consultationFee < selectedLevelOption.value.minFee
+    || form.consultationFee > selectedLevelOption.value.maxFee
+}
+
+async function confirmOutOfRangeFeeIfNeeded() {
+  if (!selectedLevelOption.value || !isConsultationFeeOutOfRange()) {
+    return true
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `The current consultation fee is ${formatFee(form.consultationFee)}, which is outside the ${form.level} range (${formatFee(selectedLevelOption.value.minFee)} - ${formatFee(selectedLevelOption.value.maxFee)}). Do you want to keep this price and continue saving?`,
+      'Confirm Consultation Fee',
+      {
+        confirmButtonText: 'Confirm and Save',
+        cancelButtonText: 'Back to Edit',
+        type: 'warning'
+      }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
 
 function buildPayload(): SpecialistPayload {
   return {
@@ -242,14 +392,23 @@ function buildPayload(): SpecialistPayload {
 async function handleSubmit() {
   if (!formRef.value) return
 
+  const originalFee = form.consultationFee
+  form.consultationFee = clampConsultationFeeToLevelRange(form.consultationFee)
+  consultationFeeInput.value = form.consultationFee.toFixed(2)
+  showFeeAdjustedMessage(originalFee, form.consultationFee)
+
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+
+    const confirmed = await confirmOutOfRangeFeeIfNeeded()
+    if (!confirmed) return
 
     submitLoading.value = true
     try {
       const payload = buildPayload()
       if (isEditMode.value && specialistId.value !== null) {
         await updateSpecialist(specialistId.value, payload)
+        await fetchFeeChangeRecords()
         ElMessage.success('Specialist updated successfully')
       } else {
         await createSpecialist(payload)
@@ -276,6 +435,7 @@ onMounted(async () => {
       fetchLevels()
     ])
     await fetchSpecialistDetail()
+    await fetchFeeChangeRecords()
   } finally {
     pageLoading.value = false
   }
@@ -290,6 +450,14 @@ onMounted(async () => {
 .form-card {
   margin-top: 16px;
   max-width: 760px;
+}
+
+.history-card {
+  margin-top: 16px;
+}
+
+.history-header {
+  font-weight: 600;
 }
 
 .field-hint {

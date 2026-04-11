@@ -23,7 +23,9 @@ export const useCategoryStore = defineStore('category', () => {
     loading.value = true
     try {
       const data = await getCategoryList()
-      categories.value = Array.isArray(data) ? data : []
+      categories.value = Array.isArray(data)
+        ? [...data].sort((a, b) => a.categoryName.localeCompare(b.categoryName, 'en', { sensitivity: 'base' }))
+        : []
       return categories.value
     } finally {
       loading.value = false

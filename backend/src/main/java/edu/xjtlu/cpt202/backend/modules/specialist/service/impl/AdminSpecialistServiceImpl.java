@@ -8,11 +8,15 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
+import edu.xjtlu.cpt202.backend.modules.specialist.mapper.SpecialistFeeChangeRecordMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.entity.SpecialistFeeChangeRecord;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
@@ -25,12 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
     private final AdminSpecialistMapper adminSpecialistMapper;
+    private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
     private final UserMapper userMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
 
@@ -60,8 +66,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
-
-        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+        validateSpecialistLevel(normalizedLevel);
 
         User user = User.builder()
                 .email(buildGeneratedSpecialistEmail(normalizedName))
@@ -95,6 +100,15 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     }
 
     @Override
+    public List<SpecialistFeeChangeRecordVO> listFeeChangeRecords(Long id) {
+        AdminSpecialistDetailVO existing = adminSpecialistMapper.selectSpecialistDetailById(id);
+        if (existing == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        return specialistFeeChangeRecordMapper.selectBySpecialistId(id);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateSpecialist(Long id, AdminSpecialistUpdateDTO request) {
         AdminSpecialistDetailVO existing = adminSpecialistMapper.selectSpecialistDetailById(id);
@@ -116,8 +130,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
-
-        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+        validateSpecialistLevel(normalizedLevel);
 
         int updatedProfileRows = adminSpecialistMapper.updateSpecialistProfileById(
                 id,
@@ -131,6 +144,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
 
+        saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
         adminSpecialistMapper.updateUserFullNameById(userId, normalizedName);
     }
 
@@ -149,24 +163,53 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         }
     }
 
-    private void validateConsultationFeeRange(String level, BigDecimal consultationFee) {
-        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
-        if (specialistLevel == null) {
+    private void validateSpecialistLevel(String level) {
+        if (SpecialistLevelEnum.fromName(level) == null) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid specialist level");
         }
+    }
 
-        if (consultationFee.compareTo(specialistLevel.getMinFee()) < 0
-                || consultationFee.compareTo(specialistLevel.getMaxFee()) > 0) {
-            throw new BusinessException(
-                    ResultCodeEnum.BAD_REQUEST.getCode(),
-                    String.format(
-                            "Consultation fee for %s must be between %s and %s",
-                            specialistLevel.name(),
-                            specialistLevel.getMinFee().toPlainString(),
-                            specialistLevel.getMaxFee().toPlainString()
-                    )
-            );
+    private void saveFeeChangeRecordIfNeeded(
+            Long specialistId,
+            AdminSpecialistDetailVO existing,
+            String level,
+            BigDecimal newFee
+    ) {
+        BigDecimal oldFee = existing.getConsultationFee();
+        if (oldFee == null || newFee == null || oldFee.compareTo(newFee) == 0) {
+            return;
         }
+
+        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
+        if (specialistLevel == null) {
+            return;
+        }
+
+        Long changedByUserId = null;
+        String changedByName = null;
+        try {
+            changedByUserId = SecurityUtils.getCurrentUserId();
+            User operator = userMapper.selectById(changedByUserId);
+            changedByName = operator == null ? null : operator.getFullName();
+        } catch (BusinessException ignored) {
+            // Preserve the fee update even if operator identity is not available.
+        }
+
+        boolean outOfRange = newFee.compareTo(specialistLevel.getMinFee()) < 0
+                || newFee.compareTo(specialistLevel.getMaxFee()) > 0;
+
+        SpecialistFeeChangeRecord record = SpecialistFeeChangeRecord.builder()
+                .specialistId(specialistId)
+                .oldFee(oldFee)
+                .newFee(newFee)
+                .level(level)
+                .rangeMin(specialistLevel.getMinFee())
+                .rangeMax(specialistLevel.getMaxFee())
+                .outOfRange(outOfRange)
+                .changedByUserId(changedByUserId)
+                .changedByName(changedByName)
+                .build();
+        specialistFeeChangeRecordMapper.insert(record);
     }
 
     private String buildGeneratedSpecialistEmail(String fullName) {

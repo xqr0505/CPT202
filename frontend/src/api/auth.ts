@@ -1,25 +1,12 @@
-/**
- * 认证 API 模块
- * 
- * 所有认证相关的 API 调用函数都在这里
- * 使用 request 模块统一处理 Token 和异常
- */
-
 import request, { saveToken, saveUser } from './request';
 import { logout as clearAndRedirect } from './request';
 
-/**
- * 登录请求参数类型
- */
 export interface LoginPayload {
   email: string;
   password: string;
   role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN';
 }
 
-/**
- * 登录响应数据类型
- */
 export interface LoginResponse {
   token: string;
   userId: number;
@@ -29,9 +16,6 @@ export interface LoginResponse {
   expiresIn: number;
 }
 
-/**
- * 注册请求参数类型
- */
 export interface RegisterPayload {
   email: string;
   verificationCode: string;
@@ -40,9 +24,6 @@ export interface RegisterPayload {
   role: 'CUSTOMER' | 'SPECIALIST';
 }
 
-/**
- * 发送验证码参数
- */
 export interface SendVerificationCodePayload {
   email: string;
   role?: 'CUSTOMER' | 'SPECIALIST';
@@ -67,10 +48,9 @@ export interface SendVerificationCodePayload {
  */
 export function login(payload: LoginPayload, rememberMe: boolean = false): Promise<LoginResponse> {
   return request.post<any, LoginResponse>('/auth/login', payload).then(res => {
-    // 保存 Token 到本地存储
+  
     saveToken(res.token, rememberMe);
     
-    // 保存用户信息
     saveUser({
       userId: res.userId,
       role: res.role,

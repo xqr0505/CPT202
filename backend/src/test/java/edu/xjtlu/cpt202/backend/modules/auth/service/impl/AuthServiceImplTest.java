@@ -69,6 +69,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
@@ -91,6 +92,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(null);
+        request.setType("REGISTER");
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
@@ -103,6 +105,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -115,6 +118,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole("INVALID_ROLE");
+        request.setType("REGISTER");
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
@@ -149,6 +153,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         // 模拟最近60秒内存在记录（冷却期内）
@@ -165,6 +170,7 @@ class AuthServiceImplTest {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(testRole);
+        request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         // 最近60秒内无记录

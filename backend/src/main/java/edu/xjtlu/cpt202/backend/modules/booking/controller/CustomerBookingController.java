@@ -6,11 +6,11 @@ import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * @author QiranXiao
- * @date 2026/4/1
+ * @since 2026/4/1
  */
 @Slf4j
 @RestController
@@ -51,6 +51,16 @@ public class CustomerBookingController {
     public Result<PageResult<BookingItemVO>> getBookingList(@ModelAttribute BookingPageQueryDTO dto) {
         Long customerId = SecurityUtils.getCurrentUserId();
         PageResult<BookingItemVO> result = bookingService.getBookingList(customerId, dto);
+        return Result.success(result);
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get booking detail", description = "Get detailed information about a specific booking by ID. " +
+            "The booking must belong to the current logged-in customer (AC4: data isolation).")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingDetailVO> getBookingDetail(@PathVariable("id") Long bookingId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingDetailVO result = bookingService.getBookingDetailById(bookingId, currentCustomerId);
         return Result.success(result);
     }
 

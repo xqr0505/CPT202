@@ -48,6 +48,20 @@ export interface BookingListQuery {
 
 export type BookingItem = BookingListItem;
 
+export interface BookingDetail {
+  bookingId: number;
+  status: string;
+  specialistId: number;
+  specialistName: string;
+  specialistAvatar: string;
+  slotDate: string;
+  startTime: string;
+  endTime: string;
+  price: number;
+  topic: string;
+  customerNotes: string;
+}
+
 export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
 }
@@ -58,4 +72,8 @@ export const createBooking = (data: CreateBookingRequest) => {
 
 export const getBookingList = (params: BookingListQuery) => {
   return request.get<BookingListResponse>('/api/v1/customer/bookings/list', { params });
+}
+
+export const getBookingDetail = (bookingId: number | string) => {
+  return request.get<BookingDetail>(`/api/v1/customer/bookings/${bookingId}`);
 }

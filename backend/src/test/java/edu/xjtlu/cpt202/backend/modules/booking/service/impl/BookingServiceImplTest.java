@@ -8,10 +8,12 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
@@ -29,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -48,6 +51,9 @@ public class BookingServiceImplTest {
     private BookingMapper bookingMapper;
 
     @Mock
+    private BookingTopicMapper bookingTopicMapper;
+
+    @Mock
     private TimeSlotMapper timeSlotMapper;
 
     @Mock
@@ -61,12 +67,13 @@ public class BookingServiceImplTest {
         // Arrange
         Long customerId = 1L;
         int limit = 3;
+        LocalDateTime now = LocalDateTime.now();
         List<UpcomingBookingVO> mockResponse = List.of(
                 UpcomingBookingVO.builder()
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(LocalDateTime.of(2026, 4, 8, 10, 0, 0))
+                        .startTime(now)
                         .today(true)
                         .status("CONFIRMED")
                         .build(),
@@ -74,7 +81,7 @@ public class BookingServiceImplTest {
                         .id(2L)
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
-                        .startTime(LocalDateTime.of(2026, 4, 8, 14, 0, 0))
+                        .startTime(now.plusHours(4))
                         .today(true)
                         .status("CONFIRMED")
                         .build(),
@@ -82,7 +89,7 @@ public class BookingServiceImplTest {
                         .id(3L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(LocalDateTime.of(2026, 4, 9, 9, 0, 0))
+                        .startTime(now.plusDays(1))
                         .today(false)
                         .status("CONFIRMED")
                         .build()
@@ -98,17 +105,17 @@ public class BookingServiceImplTest {
         assertEquals(3, result.size());
         assertEquals("Schedule Dev Specialist", result.get(0).getSpecialistName());
         assertEquals("Counseling", result.get(0).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 8, 10, 0, 0), result.get(0).getStartTime());
+        assertEquals(now, result.get(0).getStartTime());
         assertTrue(result.get(0).getToday());
         assertEquals("CONFIRMED", result.get(0).getStatus());
         assertEquals("Dr. Adam Smith", result.get(1).getSpecialistName());
         assertEquals("Career Planning", result.get(1).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 8, 14, 0, 0), result.get(1).getStartTime());
+        assertEquals(now.plusHours(4), result.get(1).getStartTime());
         assertTrue(result.get(1).getToday());
         assertEquals("CONFIRMED", result.get(1).getStatus());
         assertEquals("Schedule Dev Specialist", result.get(2).getSpecialistName());
         assertEquals("Counseling", result.get(2).getServiceName());
-        assertEquals(LocalDateTime.of(2026, 4, 9, 9, 0, 0), result.get(2).getStartTime());
+        assertEquals(now.plusDays(1), result.get(2).getStartTime());
         assertFalse(result.get(2).getToday());
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }
@@ -133,6 +140,7 @@ public class BookingServiceImplTest {
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
         when(specialistQueryService.getSpecialistDetail(1L)).thenReturn(specialist);
+        when(bookingTopicMapper.countActiveTopicByName("Career Planning")).thenReturn(1L);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
 
         ArgumentCaptor<Booking> bookingCaptor = ArgumentCaptor.forClass(Booking.class);
@@ -229,6 +237,8 @@ public class BookingServiceImplTest {
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
+        // explicitly mark this topic as not allowed
+        when(bookingTopicMapper.countActiveTopicByName("Stress Management")).thenReturn(0L);
 
         BusinessException exception = assertThrows(BusinessException.class, () ->
                 bookingService.createBooking(1L, createDTO));
@@ -254,6 +264,7 @@ public class BookingServiceImplTest {
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
         when(specialistQueryService.getSpecialistDetail(1L)).thenReturn(specialist);
+        when(bookingTopicMapper.countActiveTopicByName("Career Planning")).thenReturn(1L);
         when(bookingMapper.insert(any(Booking.class))).thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(0);
 
@@ -377,4 +388,65 @@ public class BookingServiceImplTest {
         verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class), eq(0L), eq(5));
         verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq("UPCOMING"), eq("PENDING"), any(LocalDateTime.class));
     }
+
+
+    @Test
+    void testGetBookingDetail_Success() {
+        Long bookingId = 100L;
+
+        BookingDetailVO vo = new BookingDetailVO();
+        vo.setBookingId(bookingId);
+        vo.setStatus("CONFIRMED");
+        vo.setSpecialistId(10L);
+        vo.setSpecialistName("Dr. Test");
+        vo.setSpecialistAvatar("http://example.com/a.png");
+        vo.setSlotDate("2026-04-15");
+        vo.setStartTime("10:00");
+        vo.setEndTime("11:00");
+        vo.setPrice(new BigDecimal("100.00"));
+        vo.setTopic("Topic");
+        vo.setCustomerNotes("Notes");
+
+        when(bookingMapper.selectBookingDetailById(eq(bookingId))).thenReturn(Optional.of(vo));
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        when(bookingMapper.selectById(eq(bookingId))).thenReturn(booking);
+
+        BookingDetailVO result = bookingService.getBookingDetailById(bookingId, 1L);
+
+        assertNotNull(result);
+        assertEquals(bookingId, result.getBookingId());
+        assertEquals("CONFIRMED", result.getStatus());
+        assertEquals("Dr. Test", result.getSpecialistName());
+        assertEquals(new BigDecimal("100.00"), result.getPrice());
+    }
+
+    @Test
+    void testGetBookingDetail_NotFound() {
+        Long bookingId = 101L;
+        when(bookingMapper.selectBookingDetailById(eq(bookingId))).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getBookingDetailById(bookingId, 1L));
+        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    void testGetBookingDetail_Forbidden() {
+        Long bookingId = 102L;
+
+        BookingDetailVO vo = new BookingDetailVO();
+        vo.setBookingId(bookingId);
+        when(bookingMapper.selectBookingDetailById(eq(bookingId))).thenReturn(Optional.of(vo));
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(999L); // belongs to another user
+        when(bookingMapper.selectById(eq(bookingId))).thenReturn(booking);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getBookingDetailById(bookingId, 1L));
+        assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
 }

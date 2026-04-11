@@ -6,6 +6,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 
@@ -21,4 +22,15 @@ public interface BookingService extends IService<Booking> {
     BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO);
 
     PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto);
+
+    /**
+     * Get booking detail by booking ID.
+     * Validates that the booking belongs to the current logged-in customer (AC4: data isolation).
+     *
+     * @param bookingId the booking ID
+     * @param currentCustomerId the current logged-in customer ID
+     * @return BookingDetailVO with all booking information
+     * @throws BusinessException if booking not found (404) or customer doesn't own the booking (403)
+     */
+    BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId);
 }

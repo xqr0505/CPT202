@@ -22,7 +22,13 @@ import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,15 +36,20 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
 public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminSpecialistServiceImpl.class);
+
     private final AdminSpecialistMapper adminSpecialistMapper;
     private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
     private final UserMapper userMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
+    private final JavaMailSender mailSender;
+    private final Environment env;
 
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
     private static final String DEFAULT_SPECIALIST_PASSWORD = "ChangeMe123!";
@@ -161,6 +172,8 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         if (updatedRows == 0) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
+
+        CompletableFuture.runAsync(() -> sendSpecialistStatusNotification(id, existing.getName(), status));
     }
 
     private void validateSpecialistLevel(String level) {
@@ -230,5 +243,87 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
             return "INACTIVE";
         }
         throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Invalid status");
+    }
+
+    private void sendSpecialistStatusNotification(Long specialistId, String specialistName, String status) {
+        User specialistUser = adminSpecialistMapper.selectUserBySpecialistId(specialistId);
+        if (specialistUser == null || specialistUser.getEmail() == null || specialistUser.getEmail().isBlank()) {
+            log.warn("Skip specialist status notification: specialistId={} has no user email", specialistId);
+            return;
+        }
+
+        String normalizedStatus = status == null ? "" : status.trim();
+        String displayName = specialistName == null || specialistName.isBlank()
+                ? specialistUser.getEmail()
+                : specialistName;
+
+        String subject;
+        String content;
+        if ("Inactive".equalsIgnoreCase(normalizedStatus)) {
+            subject = "Your specialist account has been deactivated";
+            content = String.format(
+                    "Hello %s,%n%nYour specialist account has been deactivated by an administrator. You may be unable to use specialist features until the account is reactivated.%n%nIf you believe this was a mistake, please contact the platform administrator.",
+                    displayName
+            );
+        } else if ("Active".equalsIgnoreCase(normalizedStatus)) {
+            subject = "Your specialist account has been reactivated";
+            content = String.format(
+                    "Hello %s,%n%nYour specialist account has been reactivated by an administrator. You can now continue using specialist features on the platform.%n%nThank you.",
+                    displayName
+            );
+        } else {
+            log.warn("Skip specialist status notification: unsupported status={}, specialistId={}", status, specialistId);
+            return;
+        }
+
+        log.info(
+                "Preparing specialist status notification: specialistId={}, specialistName={}, email={}, newStatus={}",
+                specialistId,
+                displayName,
+                specialistUser.getEmail(),
+                normalizedStatus
+        );
+
+        try {
+            if (mailSender == null) {
+                log.error("Mail sender not configured for specialist status notification");
+                return;
+            }
+
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            if (mimeMessage == null) {
+                log.error("Mail sender returned null MimeMessage for specialistId={}", specialistId);
+                return;
+            }
+
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+
+            String fromAddress = env == null ? null : env.getProperty("spring.mail.username");
+            if (fromAddress == null || fromAddress.isBlank()) {
+                fromAddress = "noreply@example.com";
+            }
+
+            helper.setFrom("ExpertLink <" + fromAddress + ">");
+            helper.setTo(specialistUser.getEmail());
+            helper.setSubject(subject);
+            helper.setText(content);
+            mailSender.send(mimeMessage);
+
+            log.info(
+                    "Specialist status notification sent successfully: specialistId={}, email={}, newStatus={}",
+                    specialistId,
+                    specialistUser.getEmail(),
+                    normalizedStatus
+            );
+        } catch (Exception ex) {
+            log.error(
+                    "Failed to send specialist status notification: specialistId={}, email={}, newStatus={}, reason={}",
+                    specialistId,
+                    specialistUser.getEmail(),
+                    normalizedStatus,
+                    ex.getMessage(),
+                    ex
+            );
+        }
     }
 }

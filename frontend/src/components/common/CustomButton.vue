@@ -19,7 +19,7 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables.scss';
+@use '@/styles/variables' as *;
 
 .custom-button {
   border-radius: var(--radius-md);
@@ -52,7 +52,7 @@ withDefaults(defineProps<Props>(), {
 
     &:hover {
       border-color: var(--color-btn-border-default-hover);
-      color: var(--color-btn-text-default-hover);
+      color: var(--color-text-inverse);
       background-color: var(--color-btn-bg-default-hover);
       box-shadow: 0 4px 12px var(--color-btn-shadow-default, var(--color-shadow));
     }

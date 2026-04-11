@@ -17,7 +17,7 @@
         class="toolbar-item"
       >
         <el-option
-          v-for="item in categoryOptions"
+          v-for="item in categoryStore.categoryOptions"
           :key="item.value"
           :label="item.label"
           :value="item.value"
@@ -74,29 +74,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCategoryStore } from '@/stores/category'
 import {
   getSpecialistList,
+  type SpecialistListParams,
   updateSpecialistStatus,
   type SpecialistStatus,
   type SpecialistItem
 } from '@/api/adminSpecialist'
 
-interface CategoryOption {
-  label: string
-  value: number
-}
-
 const router = useRouter()
+const categoryStore = useCategoryStore()
 const loading = ref(false)
 const tableData = ref<SpecialistItem[]>([])
-const categoryOptions = ref<CategoryOption[]>([])
 
 const filters = reactive({
   keyword: '',
-  categoryId: undefined as number | undefined,
+  categoryId: undefined as number | string | undefined,
   status: undefined as 'Active' | 'Inactive' | undefined
 })
 
@@ -143,39 +140,54 @@ async function handleToggleStatus(row: SpecialistItem) {
   }
 }
 
-function buildCategoryOptions(list: SpecialistItem[]) {
-  const map = new Map<number, string>()
-  list.forEach(item => {
-    if (item.categoryId && item.categoryName) {
-      map.set(item.categoryId, item.categoryName)
-    }
-  })
-
-  categoryOptions.value = Array.from(map.entries()).map(([value, label]) => ({
-    value,
-    label
-  }))
-}
-
 async function fetchSpecialistList() {
   loading.value = true
   try {
-    const data = await getSpecialistList()
+    const params: SpecialistListParams = {}
+    const keyword = filters.keyword.trim()
+    const categoryId =
+      filters.categoryId === undefined || filters.categoryId === null || filters.categoryId === ''
+        ? undefined
+        : Number(filters.categoryId)
+
+    if (keyword) {
+      params.keyword = keyword
+    }
+    if (categoryId !== undefined && !Number.isNaN(categoryId)) {
+      params.categoryId = categoryId
+    }
+    if (filters.status) {
+      params.status = filters.status
+    }
+
+    const data = await getSpecialistList(params)
     const rows = Array.isArray(data) ? data : data.list
     tableData.value = rows
-    buildCategoryOptions(tableData.value)
   } catch (error) {
     console.error('Failed to fetch specialist list:', error)
     tableData.value = []
-    categoryOptions.value = []
   } finally {
     loading.value = false
   }
 }
 
+async function initializePage() {
+  await Promise.all([
+    categoryStore.fetchCategories(),
+    fetchSpecialistList()
+  ])
+}
+
 onMounted(() => {
-  void fetchSpecialistList()
+  void initializePage()
 })
+
+watch(
+  () => [filters.keyword, filters.categoryId, filters.status],
+  () => {
+    void fetchSpecialistList()
+  }
+)
 </script>
 
 <style scoped>

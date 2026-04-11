@@ -2,7 +2,10 @@ package edu.xjtlu.cpt202.backend.modules.specialist.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
+import edu.xjtlu.cpt202.backend.common.enums.SpecialistLevelEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
@@ -11,15 +14,28 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpda
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
     private final AdminSpecialistMapper adminSpecialistMapper;
+    private final UserMapper userMapper;
+    private final SpecialistProfileMapper specialistProfileMapper;
+
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
+    private static final String DEFAULT_SPECIALIST_PASSWORD = "ChangeMe123!";
 
     @Override
     public PageResult<AdminSpecialistListVO> listSpecialists(AdminSpecialistListQueryDTO query) {
@@ -30,6 +46,43 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         IPage<AdminSpecialistListVO> resultPage = adminSpecialistMapper.pageSpecialists(page, query);
 
         return new PageResult<>(resultPage.getTotal(), resultPage.getRecords());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void createSpecialist(AdminSpecialistUpdateDTO request) {
+        Long categoryCount = adminSpecialistMapper.selectCategoryCountById(request.getCategoryId());
+        if (categoryCount == null || categoryCount == 0) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Category not found");
+        }
+
+        String normalizedName = request.getName().trim();
+        String normalizedLevel = request.getLevel().trim();
+        String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
+        String mappedStatus = mapToDbStatus(request.getStatus());
+
+        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+
+        User user = User.builder()
+                .email(buildGeneratedSpecialistEmail(normalizedName))
+                .passwordHash(PASSWORD_ENCODER.encode(DEFAULT_SPECIALIST_PASSWORD))
+                .role(UserRoleEnum.SPECIALIST.name())
+                .status(AccountStatusEnum.ACTIVE.name())
+                .fullName(normalizedName)
+                .loginFailCount(0)
+                .lockTime(LocalDateTime.now())
+                .build();
+        userMapper.insert(user);
+
+        SpecialistProfile specialistProfile = SpecialistProfile.builder()
+                .userId(user.getId())
+                .categoryId(request.getCategoryId())
+                .level(normalizedLevel)
+                .consultationFee(request.getConsultationFee())
+                .avatarUrl(normalizedAvatarUrl)
+                .status(mappedStatus)
+                .build();
+        specialistProfileMapper.insert(specialistProfile);
     }
 
     @Override
@@ -64,6 +117,8 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
 
+        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+
         int updatedProfileRows = adminSpecialistMapper.updateSpecialistProfileById(
                 id,
                 request.getCategoryId(),
@@ -92,6 +147,36 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         if (updatedRows == 0) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
+    }
+
+    private void validateConsultationFeeRange(String level, BigDecimal consultationFee) {
+        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
+        if (specialistLevel == null) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid specialist level");
+        }
+
+        if (consultationFee.compareTo(specialistLevel.getMinFee()) < 0
+                || consultationFee.compareTo(specialistLevel.getMaxFee()) > 0) {
+            throw new BusinessException(
+                    ResultCodeEnum.BAD_REQUEST.getCode(),
+                    String.format(
+                            "Consultation fee for %s must be between %s and %s",
+                            specialistLevel.name(),
+                            specialistLevel.getMinFee().toPlainString(),
+                            specialistLevel.getMaxFee().toPlainString()
+                    )
+            );
+        }
+    }
+
+    private String buildGeneratedSpecialistEmail(String fullName) {
+        String normalized = fullName.toLowerCase()
+                .replaceAll("[^a-z0-9]+", ".")
+                .replaceAll("^\\.+|\\.+$", "");
+        if (normalized.isBlank()) {
+            normalized = "specialist";
+        }
+        return normalized + "." + System.currentTimeMillis() + "@admin-created.local";
     }
 
     private String mapToDbStatus(String status) {

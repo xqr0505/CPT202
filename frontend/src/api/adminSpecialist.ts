@@ -36,12 +36,26 @@ export interface SpecialistPayload {
   avatarUrl?: string
 }
 
+export interface SpecialistLevelOption {
+  value: string
+  label: string
+  minFee: number
+  maxFee: number
+}
+
 export function getSpecialistList(params?: SpecialistListParams) {
   return request({
     url: '/admin/specialists',
     method: 'get',
     params
   }) as Promise<SpecialistListResponse>
+}
+
+export function getSpecialistLevels() {
+  return request({
+    url: '/admin/specialists/levels',
+    method: 'get'
+  }) as Promise<SpecialistLevelOption[]>
 }
 
 export function getSpecialistDetail(id: number) {

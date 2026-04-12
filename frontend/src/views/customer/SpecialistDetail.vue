@@ -149,10 +149,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { createBooking } from '@/api/booking'
+import { createBooking, getBookingTopics } from '@/api/booking'
 import { fetchSpecialistAvailability, fetchSpecialistDetail } from '@/api/specialist'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
@@ -168,6 +168,7 @@ const availability = ref<SpecialistAvailabilitySlot[]>([])
 const loading = ref(false)
 const availabilityLoading = ref(false)
 const bookingSubmitting = ref(false)
+const bookingTopics = ref<string[]>([])
 
 const bookingForm = ref({
   slotId: null as number | null,
@@ -191,7 +192,7 @@ const specialistId = computed(() => Number(route.params.id))
 const selectedSlot = computed(
   () => availability.value.find((slot) => slot.id === bookingForm.value.slotId) ?? null,
 )
-const specialistTopics = computed(() => getSpecialistTopics(specialistId.value))
+const specialistTopics = computed(() => bookingTopics.value)
 
 const loadDetail = async () => {
   if (!Number.isInteger(specialistId.value) || specialistId.value <= 0) {
@@ -222,6 +223,10 @@ const loadAvailability = async () => {
   } finally {
     availabilityLoading.value = false
   }
+}
+
+const loadBookingTopics = async () => {
+  bookingTopics.value = await getBookingTopics()
 }
 
 const selectSlot = (slot: SpecialistAvailabilitySlot) => {
@@ -273,14 +278,9 @@ const formatLevel = (level: string) => level.charAt(0).toUpperCase() + level.sli
 const formatStatus = (status: string) =>
   status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
 
-const SPECIALIST_TOPICS: Record<number, string[]> = {
-  1: ['Career Planning', 'Study Abroad'],
-  201: ['Career Planning', 'Study Abroad'],
-  202: ['Mental Wellness', 'Stress Management'],
-  203: ['Study Abroad', 'Career Planning'],
-}
-
-const getSpecialistTopics = (id: number) => SPECIALIST_TOPICS[id] || []
+onMounted(async () => {
+  await loadBookingTopics()
+})
 
 watch(
   () => [route.params.id, route.query.date],

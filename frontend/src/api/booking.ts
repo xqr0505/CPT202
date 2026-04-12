@@ -66,6 +66,10 @@ export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
 }
 
+export const getBookingTopics = (): Promise<string[]> => {
+  return request.get<any, string[]>('/api/v1/booking-topics')
+}
+
 export const createBooking = (data: CreateBookingRequest) => {
   return request.post<CreateBookingResponse>('/api/v1/customer/bookings', data)
 }

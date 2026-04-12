@@ -89,6 +89,9 @@ export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQue
     .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
     .then((response) => response as unknown as CustomerDashboardSummary)
 }
+export const getBookingTopics = (): Promise<string[]> => {
+  return request.get<any, string[]>('/api/v1/booking-topics')
+}
 
 export const createBooking = (data: CreateBookingRequest) => {
   return request.post<CreateBookingResponse>('/api/v1/customer/bookings', data)

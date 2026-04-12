@@ -143,11 +143,17 @@ function goEditPage(id: number) {
 async function handleToggleStatus(row: SpecialistItem) {
   const nextStatus: SpecialistStatus = row.status === 'Active' ? 'Inactive' : 'Active'
   const actionText = nextStatus === 'Active' ? 'activate' : 'deactivate'
+  const hasActiveBookings = nextStatus === 'Inactive' && row.hasActiveBookings
+  const activeBookingCount = row.activeBookingCount ?? 0
+  const confirmMessage = hasActiveBookings
+    ? `Specialist "${row.name}" still has ${activeBookingCount} pending or confirmed booking${activeBookingCount === 1 ? '' : 's'}. Are you sure you want to deactivate this specialist?`
+    : `Are you sure you want to ${actionText} specialist "${row.name}"?`
+  const confirmTitle = hasActiveBookings ? 'Existing Bookings Found' : 'Confirm Status Change'
 
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to ${actionText} specialist "${row.name}"?`,
-      'Confirm Status Change',
+      confirmMessage,
+      confirmTitle,
       {
         type: 'warning',
         confirmButtonText: 'Confirm',
@@ -159,9 +165,18 @@ async function handleToggleStatus(row: SpecialistItem) {
   }
 
   try {
-    await updateSpecialistStatus(row.id, nextStatus)
-    ElMessage.success('Status updated successfully')
-    await fetchSpecialistList()
+    const cancelledBookingCount = await updateSpecialistStatus(row.id, nextStatus)
+    row.status = nextStatus
+    if (nextStatus === 'Inactive') {
+      row.hasActiveBookings = false
+      row.activeBookingCount = 0
+    }
+    if (nextStatus === 'Inactive' && cancelledBookingCount > 0) {
+      ElMessage.success(`${cancelledBookingCount} bookings were cancelled and affected customers have been notified.`)
+    } else {
+      ElMessage.success('Status updated successfully')
+    }
+    void fetchSpecialistList()
   } catch (error) {
     console.error('Failed to update specialist status:', error)
   }

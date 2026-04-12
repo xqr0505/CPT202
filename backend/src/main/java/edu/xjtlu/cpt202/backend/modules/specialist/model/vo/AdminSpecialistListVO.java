@@ -24,5 +24,9 @@ public class AdminSpecialistListVO {
 
     private String status;
 
+    private Boolean hasActiveBookings;
+
+    private Integer activeBookingCount;
+
     private LocalDateTime createTime;
 }

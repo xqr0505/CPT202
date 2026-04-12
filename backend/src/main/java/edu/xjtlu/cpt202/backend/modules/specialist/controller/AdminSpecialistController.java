@@ -75,11 +75,10 @@ public class AdminSpecialistController {
     }
 
     @PatchMapping("/{id}/status")
-    public Result<Void> updateSpecialistStatus(
+    public Result<Integer> updateSpecialistStatus(
             @PathVariable Long id,
             @Valid @RequestBody AdminSpecialistStatusUpdateDTO request
     ) {
-        adminSpecialistService.updateSpecialistStatus(id, request.getStatus());
-        return Result.success();
+        return Result.success(adminSpecialistService.updateSpecialistStatus(id, request.getStatus()));
     }
 }

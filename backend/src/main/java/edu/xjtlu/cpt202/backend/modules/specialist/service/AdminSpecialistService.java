@@ -21,5 +21,5 @@ public interface AdminSpecialistService {
 
     void updateSpecialist(Long id, AdminSpecialistUpdateDTO request);
 
-    void updateSpecialistStatus(Long id, String status);
+    int updateSpecialistStatus(Long id, String status);
 }

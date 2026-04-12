@@ -31,6 +31,18 @@ public interface AdminSpecialistMapper {
                     WHEN COALESCE(sp.status, '') = 'Inactive' THEN 'Inactive'
                     ELSE 'Inactive'
                 END AS status,
+                EXISTS(
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.specialist_id = sp.id
+                      AND b.status IN ('PENDING', 'CONFIRMED')
+                ) AS hasActiveBookings,
+                (
+                    SELECT COUNT(1)
+                    FROM bookings b
+                    WHERE b.specialist_id = sp.id
+                      AND b.status IN ('PENDING', 'CONFIRMED')
+                ) AS activeBookingCount,
                 sp.created_at AS createTime
             FROM specialist_profiles sp
             INNER JOIN users u ON u.id = sp.user_id

@@ -78,6 +78,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
         validateSpecialistLevel(normalizedLevel);
+        validateFeeWithinRange(normalizedLevel, request.getConsultationFee());
 
         User user = User.builder()
                 .email(buildGeneratedSpecialistEmail(normalizedName))
@@ -179,6 +180,24 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     private void validateSpecialistLevel(String level) {
         if (SpecialistLevelEnum.fromName(level) == null) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid specialist level");
+        }
+    }
+
+    private void validateFeeWithinRange(String level, BigDecimal fee) {
+        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
+        if (specialistLevel == null || fee == null) {
+            return;
+        }
+        if (fee.compareTo(specialistLevel.getMinFee()) < 0 || fee.compareTo(specialistLevel.getMaxFee()) > 0) {
+            throw new BusinessException(
+                    ResultCodeEnum.BAD_REQUEST.getCode(),
+                    String.format(
+                            "Consultation fee for %s must be between %s and %s",
+                            level,
+                            specialistLevel.getMinFee(),
+                            specialistLevel.getMaxFee()
+                    )
+            );
         }
     }
 

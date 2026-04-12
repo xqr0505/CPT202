@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.SpecialistFeeChangeRecordMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
@@ -50,6 +53,9 @@ class AdminSpecialistServiceImplTest {
 
     @Mock
     private SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
+
+    @Mock
+    private BookingMapper bookingMapper;
 
     @Mock
     private JavaMailSender mailSender;
@@ -320,9 +326,41 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectSpecialistDetailById(1L)).thenReturn(existing);
         when(adminSpecialistMapper.updateSpecialistStatusById(1L, "ACTIVE")).thenReturn(1);
 
-        adminSpecialistService.updateSpecialistStatus(1L, "Active");
+        int cancelledBookingCount = adminSpecialistService.updateSpecialistStatus(1L, "Active");
 
         verify(adminSpecialistMapper).updateSpecialistStatusById(1L, "ACTIVE");
+        assertEquals(0, cancelledBookingCount);
+    }
+
+    @Test
+    void updateSpecialistStatus_returnsCancelledBookingCount_whenDeactivatingWithBookings() {
+        AdminSpecialistDetailVO existing = new AdminSpecialistDetailVO();
+        existing.setId(1L);
+        existing.setName("Dr. Emily Chen");
+
+        Booking booking1 = new Booking();
+        booking1.setId(101L);
+        booking1.setSpecialistId(1L);
+        booking1.setCustomerId(201L);
+        booking1.setStatus(BookingStatusEnum.PENDING.name());
+
+        Booking booking2 = new Booking();
+        booking2.setId(102L);
+        booking2.setSpecialistId(1L);
+        booking2.setCustomerId(202L);
+        booking2.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        when(adminSpecialistMapper.selectSpecialistDetailById(1L)).thenReturn(existing);
+        when(adminSpecialistMapper.updateSpecialistStatusById(1L, "INACTIVE")).thenReturn(1);
+        when(bookingMapper.selectList(any())).thenReturn(List.of(booking1, booking2));
+
+        int cancelledBookingCount = adminSpecialistService.updateSpecialistStatus(1L, "Inactive");
+
+        assertEquals(2, cancelledBookingCount);
+        assertEquals(BookingStatusEnum.CANCELLED.name(), booking1.getStatus());
+        assertEquals(BookingStatusEnum.CANCELLED.name(), booking2.getStatus());
+        verify(bookingMapper).updateById(booking1);
+        verify(bookingMapper).updateById(booking2);
     }
 
     @Test

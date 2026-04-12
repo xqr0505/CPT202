@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
@@ -11,15 +12,18 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,7 +32,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +67,11 @@ public class BookingServiceImplTest {
 
     @InjectMocks
     private BookingServiceImpl bookingService;
+
+    @AfterEach
+    void clearUserContext() {
+        UserContextHolder.clear();
+    }
 
     @Test
     public void getUpcomingBookingsByCustomer_Success() {
@@ -447,6 +458,85 @@ public class BookingServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getBookingDetailById(bookingId, 1L));
         assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
+    @Test
+    void testGetUsageSummary_AllTime_DefaultsWhenMapperReturnsNull() {
+        Long customerId = 1L;
+        UserContextHolder.setUserId(customerId);
+
+        when(bookingMapper.selectUsageSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(null);
+        when(bookingMapper.selectConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(null);
+
+        UsageSummaryVO result = bookingService.getUsageSummary(null);
+
+        assertNotNull(result);
+        assertEquals(0, result.getTotalCompletedAppointments());
+        assertEquals(0, result.getTotalConsultationHours());
+        assertNotNull(result.getTotalAmountSpent());
+        assertEquals(0, result.getTotalAmountSpent().compareTo(BigDecimal.ZERO));
+        assertNotNull(result.getConsultedExperts());
+        assertTrue(result.getConsultedExperts().isEmpty());
+
+        verify(bookingMapper, times(1)).selectUsageSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull());
+        verify(bookingMapper, times(1)).selectConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull());
+    }
+
+    @Test
+    void testGetUsageSummary_WithDateRange_PropagatesDatesAndNormalizesNullTotals() {
+        Long customerId = 2L;
+        UserContextHolder.setUserId(customerId);
+
+        UsageSummaryQueryDTO queryDTO = new UsageSummaryQueryDTO();
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        LocalDate endDate = LocalDate.of(2026, 1, 31);
+        queryDTO.setStartDate(startDate);
+        queryDTO.setEndDate(endDate);
+
+        UsageSummaryVO mapperSummary = new UsageSummaryVO();
+        mapperSummary.setTotalCompletedAppointments(null);
+        mapperSummary.setTotalAmountSpent(null);
+        mapperSummary.setTotalConsultationHours(null);
+
+        UsageSummaryVO.ConsultedExpertVO expert = new UsageSummaryVO.ConsultedExpertVO();
+        expert.setSpecialistId(10L);
+        expert.setSpecialistName("specialist1");
+        List<UsageSummaryVO.ConsultedExpertVO> experts = new ArrayList<>();
+        experts.add(expert);
+
+        when(bookingMapper.selectUsageSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(mapperSummary);
+        when(bookingMapper.selectConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(experts);
+
+        UsageSummaryVO result = bookingService.getUsageSummary(queryDTO);
+
+        assertNotNull(result);
+        assertEquals(0, result.getTotalCompletedAppointments());
+        assertEquals(0, result.getTotalConsultationHours());
+        assertNotNull(result.getTotalAmountSpent());
+        assertEquals(0, result.getTotalAmountSpent().compareTo(BigDecimal.ZERO));
+        assertNotNull(result.getConsultedExperts());
+        assertEquals(1, result.getConsultedExperts().size());
+        assertEquals(10L, result.getConsultedExperts().get(0).getSpecialistId());
+        assertEquals("specialist1", result.getConsultedExperts().get(0).getSpecialistName());
+
+        verify(bookingMapper, times(1)).selectUsageSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate));
+        verify(bookingMapper, times(1)).selectConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate));
+    }
+
+    @Test
+    void testGetUsageSummary_InvalidDateRange_ThrowsParamError() {
+        UserContextHolder.setUserId(3L);
+
+        UsageSummaryQueryDTO queryDTO = new UsageSummaryQueryDTO();
+        queryDTO.setStartDate(LocalDate.of(2026, 2, 1));
+        queryDTO.setEndDate(LocalDate.of(2026, 1, 1));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getUsageSummary(queryDTO));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
     }
 
 }

@@ -12,10 +12,12 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
@@ -28,7 +30,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +62,9 @@ public class BookingServiceImplTest {
 
     @Mock
     private SpecialistQueryService specialistQueryService;
+
+    @Mock
+    private CustomerBookingChangePolicyService customerBookingChangePolicyService;
 
     @InjectMocks
     private BookingServiceImpl bookingService;
@@ -446,6 +453,63 @@ public class BookingServiceImplTest {
         when(bookingMapper.selectById(eq(bookingId))).thenReturn(booking);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getBookingDetailById(bookingId, 1L));
+        assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
+    @Test
+    void customerCancellationQuote_DelegatesToPolicy() {
+        Long bookingId = 200L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(55L);
+        booking.setStatus("CONFIRMED");
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(55L);
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .bookingStartAt(LocalDateTime.of(2026, 5, 1, 14, 0))
+                .orderAmount(new BigDecimal("120.00"))
+                .refundAmount(new BigDecimal("120.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(55L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                eq("CONFIRMED"),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("120.00"))))
+                .thenReturn(quoted);
+
+        BookingCancelQuoteVO result = bookingService.customerCancellationQuote(bookingId, 1L);
+        assertTrue(result.isAllowed());
+        assertEquals("FULL_REFUND", result.getPolicyType());
+    }
+
+    @Test
+    void customerCancellationQuote_BookingNotFound() {
+        when(bookingMapper.selectById(201L)).thenReturn(null);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationQuote(201L, 1L));
+        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    void customerCancellationQuote_Forbidden() {
+        Booking booking = new Booking();
+        booking.setId(202L);
+        booking.setCustomerId(99L);
+        when(bookingMapper.selectById(202L)).thenReturn(booking);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationQuote(202L, 1L));
         assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
     }
 

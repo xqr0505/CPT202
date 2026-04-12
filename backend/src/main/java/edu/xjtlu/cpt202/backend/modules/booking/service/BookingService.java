@@ -5,6 +5,7 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -33,4 +34,9 @@ public interface BookingService extends IService<Booking> {
      * @throws BusinessException if booking not found (404) or customer doesn't own the booking (403)
      */
     BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId);
+
+    /**
+     * 客户取消前的试算：校验归属后按规则返回是否可取消及退款/违约金（不写库）。
+     */
+    BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId);
 }

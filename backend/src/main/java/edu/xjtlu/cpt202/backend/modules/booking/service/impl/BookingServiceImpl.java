@@ -9,7 +9,9 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
@@ -27,7 +29,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -43,6 +47,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private final BookingTopicMapper bookingTopicMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistQueryService specialistQueryService;
+    private final CustomerBookingChangePolicyService customerBookingChangePolicyService;
 
     @Override
     public List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit) {
@@ -133,6 +138,39 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         return detail;
+    }
+
+    @Override
+    public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            log.warn("Booking not found for cancel quote: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Cancel quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+        LocalDateTime slotStart = resolveSlotStart(slot);
+        return customerBookingChangePolicyService.customerCancellationQuote(
+                booking.getStatus(),
+                slotStart,
+                LocalDateTime.now(),
+                booking.getPrice()
+        );
+    }
+
+    private static LocalDateTime resolveSlotStart(TimeSlot slot) {
+        LocalDate date = slot.getSlotDate();
+        LocalTime start = slot.getStartTime();
+        if (date == null || start == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Time slot has no start time");
+        }
+        return LocalDateTime.of(date, start);
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

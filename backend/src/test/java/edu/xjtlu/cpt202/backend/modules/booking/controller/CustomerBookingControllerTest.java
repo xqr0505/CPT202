@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import static org.mockito.ArgumentMatchers.eq;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -74,5 +77,26 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.message").value("topic is required"));
     }
 
+    @Test
+    @WithMockUser(roles = "CUSTOMER")
+    public void customerCancellationQuote_Success() throws Exception {
+        BookingCancelQuoteVO vo = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, full refund")
+                .bookingStartAt(LocalDateTime.of(2026, 6, 1, 9, 0))
+                .orderAmount(new BigDecimal("100.00"))
+                .refundAmount(new BigDecimal("100.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+        when(bookingService.customerCancellationQuote(eq(55L), anyLong())).thenReturn(vo);
+
+        mockMvc.perform(post("/api/v1/customer/bookings/55/cancel/quote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.allowed").value(true))
+                .andExpect(jsonPath("$.data.policyType").value("FULL_REFUND"))
+                .andExpect(jsonPath("$.data.refundAmount").value(100.0));
+    }
 
 }

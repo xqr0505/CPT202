@@ -5,6 +5,7 @@ import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -61,6 +62,15 @@ public class CustomerBookingController {
     public Result<BookingDetailVO> getBookingDetail(@PathVariable("id") Long bookingId) {
         Long currentCustomerId = SecurityUtils.getCurrentUserId();
         BookingDetailVO result = bookingService.getBookingDetailById(bookingId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/cancel/quote")
+    @Operation(summary = "Quote customer cancellation", description = "Quote customer cancellation for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingCancelQuoteVO> customerCancellationQuote(@PathVariable("id") Long bookingId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingCancelQuoteVO result = bookingService.customerCancellationQuote(bookingId, currentCustomerId);
         return Result.success(result);
     }
 

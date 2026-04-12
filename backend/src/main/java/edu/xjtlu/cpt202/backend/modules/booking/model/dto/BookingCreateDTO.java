@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.model.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -24,6 +25,10 @@ public class BookingCreateDTO {
     private String topic;
 
     @Size(max = 500, message = "customerNotes must be at most 500 characters")
+    @Pattern(
+            regexp = "^[\\p{L}\\p{N}\\p{P}\\p{Z}\\r\\n]*$",
+            message = "customerNotes contains unsupported characters"
+    )
     @Schema(description = "Optional medical notes", example = "Intermittent chest pain for two weeks.")
     private String customerNotes;
 }

@@ -142,7 +142,7 @@ public interface SpecialistQueryMapper {
             FROM time_slots ts
             WHERE ts.specialist_id = #{specialistId}
               AND ts.slot_date = #{date}
-              AND ts.status = 'AVAILABLE'
+              AND ts.status IN ('AVAILABLE', 'BOOKED', 'LOCKED')
             ORDER BY ts.start_time ASC
             """)
     List<SpecialistAvailabilityVO> listAvailabilityByDate(@Param("specialistId") Long specialistId,

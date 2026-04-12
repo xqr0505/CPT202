@@ -81,8 +81,8 @@
             </el-radio-group>
           </el-form-item>
 
-          <el-form-item label="Avatar URL">
-            <el-input v-model="form.avatarUrl" placeholder="https://example.com/avatar.png" />
+          <el-form-item label="Avatar">
+            <ImageUploader v-model="form.avatarUrl" />
           </el-form-item>
 
           <el-form-item class="action-row">
@@ -130,7 +130,7 @@
             </div>
           </div>
         </el-card>
-        <el-card v-if="!isEditMode" class="summary-card accent-card" shadow="never">
+        <el-card class="summary-card accent-card" shadow="never">
           <template #header>
             <div class="card-header compact">
               <div>
@@ -197,33 +197,6 @@
           </el-table-column>
         </el-table>
       </el-card>
-
-      <el-card class="summary-card accent-card pricing-side-card" shadow="never">
-        <template #header>
-          <div class="card-header compact">
-            <div>
-              <h3>Pricing Guidance</h3>
-              <p>Use the level range as the benchmark for new specialist pricing.</p>
-            </div>
-          </div>
-        </template>
-
-        <div v-if="selectedLevelOption" class="range-panel">
-          <div class="range-value">
-            ${{ formatFee(selectedLevelOption.minFee) }} - ${{ formatFee(selectedLevelOption.maxFee) }}
-          </div>
-          <div class="range-caption">Recommended range for {{ selectedLevelOption.label }}</div>
-        </div>
-        <div v-else class="empty-tip">
-          Select a level to see the recommended consultation fee range.
-        </div>
-
-        <ul class="tips-list">
-          <li>New specialists are clamped to the selected level range when pricing is entered manually.</li>
-          <li>Inactive specialists are hidden from booking discovery on the frontend.</li>
-          <li>Edit mode allows out-of-range fees, but records the change in history.</li>
-        </ul>
-      </el-card>
     </div>
   </div>
 </template>
@@ -232,6 +205,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 import { useCategoryStore } from '@/stores/category'
 import {
   getSpecialistFeeChangeRecords,
@@ -750,16 +724,7 @@ onMounted(async () => {
 }
 
 .edit-bottom-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
-  gap: 24px;
-  align-items: start;
   margin-top: 24px;
-}
-
-.pricing-side-card {
-  position: sticky;
-  top: 24px;
 }
 
 .field-hint {
@@ -783,11 +748,7 @@ onMounted(async () => {
   }
 
   .edit-bottom-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .pricing-side-card {
-    position: static;
+    margin-top: 24px;
   }
 }
 

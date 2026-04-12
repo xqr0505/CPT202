@@ -1,5 +1,6 @@
 package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
+import edu.xjtlu.cpt202.backend.common.annotation.Idempotent;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
@@ -37,6 +38,7 @@ public class CustomerBookingController {
     private final BookingService bookingService;
 
     @PostMapping
+    @Idempotent(message = "Booking request is being processed. Please do not submit it again.")
     @Operation(summary = "Create booking", description = "Create a booking for a specialist time slot.")
     @PreAuthorize("hasRole('CUSTOMER')")
     public Result<BookingCreateVO> createBooking(@Valid @RequestBody BookingCreateDTO createDTO) {

@@ -93,8 +93,10 @@ export const getBookingTopics = (): Promise<string[]> => {
   return request.get<any, string[]>('/api/v1/booking-topics')
 }
 
-export const createBooking = (data: CreateBookingRequest) => {
-  return request.post<CreateBookingResponse>('/api/v1/customer/bookings', data)
+export const createBooking = (data: CreateBookingRequest, suppressErrorMessage = false) => {
+  return request.post<any, CreateBookingResponse>('/api/v1/customer/bookings', data, suppressErrorMessage
+    ? ({ suppressErrorMessage: true } as any)
+    : undefined)
 }
 
 export const getBookingList = (params: BookingListQuery) => {

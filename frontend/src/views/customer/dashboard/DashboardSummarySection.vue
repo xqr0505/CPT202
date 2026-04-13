@@ -123,6 +123,18 @@
       :date-range="dateRange"
       @retry="loadDashboardStatistics"
     />
+
+    <DashboardDepartmentChart
+      :category-data="statistics.categoryData"
+      :view-state="viewState"
+      @retry="loadDashboardStatistics"
+    />
+
+    <DashboardHabitChart
+      :habit-data="statistics.habitData"
+      :view-state="viewState"
+      @retry="loadDashboardStatistics"
+    />
   </section>
 </template>
 
@@ -136,6 +148,8 @@ import {
 } from '@/api/booking'
 import CustomButton from '@/components/common/CustomButton.vue'
 import DashboardTrendChart from './DashboardTrendChart.vue'
+import DashboardDepartmentChart from './DashboardDepartmentChart.vue'
+import DashboardHabitChart from './DashboardHabitChart.vue'
 import {
   createEmptyDashboardStatistics,
   DASHBOARD_AMOUNT_PRECISION,

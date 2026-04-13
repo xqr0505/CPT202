@@ -49,17 +49,23 @@ The `docker-compose.yml` file defines the following services:
    cd expertlink-consult-system
    ```
 
-2. Start the services:
+2. Create the environment file:
+   ```bash
+   cp .env.example .env
+   ```
+   Then fill in the real values for `DB_PASSWORD`, `MAIL_PASSWORD`, and `JWT_SECRET`.
+
+3. Start the services:
    ```bash
    docker-compose up -d
    ```
 
-3. Access the services:
+4. Access the services:
    - **phpMyAdmin**: [http://localhost:8080](http://localhost:8080)
    - **Frontend**: [http://localhost:8082](http://localhost:8082)
    - **Backend**: [http://localhost:8081](http://localhost:8081)
 
-4. Stop the services:
+5. Stop the services:
    ```bash
    docker-compose down
    ```

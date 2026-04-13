@@ -305,6 +305,31 @@ class AuthServiceImplTest {
         assertTrue(ex.getMessage().contains("Verification code incorrect or expired"));
     }
 
+    @Test
+    void register_UserInsertFails_DoesNotConsumeVerificationCode() {
+        RegisterRequest request = new RegisterRequest();
+        request.setEmail(testEmail);
+        request.setVerificationCode(validCode);
+        request.setPassword(testPassword);
+        request.setConfirmPassword(testPassword);
+        request.setRole(testRole);
+
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        VerificationCode codeRecord = VerificationCode.builder()
+                .email(testEmail)
+                .code(validCode)
+                .isUsed(false)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+        when(passwordEncoder.encode(testPassword)).thenReturn("encodedPwd");
+        when(userMapper.insert(any(User.class))).thenThrow(new RuntimeException("insert failed"));
+
+        assertThrows(RuntimeException.class, () -> authService.register(request));
+        verify(verificationCodeMapper, never()).updateById(any(VerificationCode.class));
+        assertFalse(codeRecord.getIsUsed());
+    }
+
     // ==================== login Tests ====================
 
     @Test

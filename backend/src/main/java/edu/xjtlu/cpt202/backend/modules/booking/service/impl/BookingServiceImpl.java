@@ -10,6 +10,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
@@ -162,6 +163,68 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 LocalDateTime.now(),
                 booking.getPrice()
         );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId) {
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            log.warn("Booking not found for cancel confirm: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Cancel confirm forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        TimeSlot slotToUpdate = new TimeSlot();
+        
+        //customer cancellation quote
+        BookingCancelQuoteVO quote = customerBookingChangePolicyService.customerCancellationQuote(
+                booking.getStatus(),
+                resolveSlotStart(slot),
+                now,
+                booking.getPrice()
+        );
+        
+        if (!quote.isAllowed()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
+        }
+
+        booking.setStatus(BookingStatusEnum.CANCELLED.name());
+        booking.setCancelledBy("CUSTOMER");
+        booking.setChangeType("CANCEL");
+        booking.setDecisionTime(now);
+        bookingMapper.updateById(booking);
+
+        slotToUpdate.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        int updated = timeSlotMapper.update(
+                slotToUpdate,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, slot.getId())
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
+        );
+
+        if (updated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
+        }
+
+        return BookingCancelConfirmVO.builder()
+                .bookingId(bookingId)
+                .bookingStatus(BookingStatusEnum.CANCELLED.name())
+                .policyType(quote.getPolicyType())
+                .refundAmount(quote.getRefundAmount())
+                .penaltyAmount(quote.getPenaltyAmount())
+                .message(quote.getMessage())
+                .build();
     }
 
     private static LocalDateTime resolveSlotStart(TimeSlot slot) {

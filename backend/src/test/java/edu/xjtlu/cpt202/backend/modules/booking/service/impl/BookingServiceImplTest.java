@@ -13,6 +13,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -511,6 +512,84 @@ public class BookingServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> bookingService.customerCancellationQuote(202L, 1L));
         assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
+    @Test
+    void customerCancellationConfirm_Success() {
+        Long bookingId = 300L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(88L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(88L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, full refund")
+                .refundAmount(new BigDecimal("120.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(88L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("120.00")))).thenReturn(quoted);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        BookingCancelConfirmVO result = bookingService.customerCancellationConfirm(bookingId, 1L);
+
+        assertEquals(bookingId, result.getBookingId());
+        assertEquals(BookingStatusEnum.CANCELLED.name(), result.getBookingStatus());
+        assertEquals(new BigDecimal("120.00"), result.getRefundAmount());
+        assertEquals(new BigDecimal("0.00"), result.getPenaltyAmount());
+        verify(bookingMapper).updateById(argThat(updated ->
+                BookingStatusEnum.CANCELLED.name().equals(updated.getStatus())
+                        && "CUSTOMER".equals(updated.getCancelledBy())
+                        && "CANCEL".equals(updated.getChangeType())
+        ));
+    }
+
+    @Test
+    void customerCancellationConfirm_NotAllowedByPolicy() {
+        Long bookingId = 301L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(89L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(89L);
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(9, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(false)
+                .message("Less than 2 hours to start, cannot cancel or reschedule")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(89L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationConfirm(bookingId, 1L));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        verify(bookingMapper, times(0)).updateById(any(Booking.class));
     }
 
 }

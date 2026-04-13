@@ -1,15 +1,22 @@
 package edu.xjtlu.cpt202.backend.modules.schedule.controller;
 
+import edu.xjtlu.cpt202.backend.common.exception.GlobalExceptionHandler;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.TimeSlotVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.ScheduleService;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -26,15 +33,30 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@ExtendWith(MockitoExtension.class)
 class ScheduleControllerTest {
 
-    @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @Mock
     private ScheduleService scheduleService;
+
+    @InjectMocks
+    private ScheduleController scheduleController;
+
+    @BeforeEach
+    void setUp() {
+        MappingJackson2HttpMessageConverter jacksonConverter = new MappingJackson2HttpMessageConverter(
+                Jackson2ObjectMapperBuilder.json()
+                        .modules(new JavaTimeModule())
+                        .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                        .build()
+        );
+        mockMvc = MockMvcBuilders.standaloneSetup(scheduleController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .setMessageConverters(jacksonConverter)
+                .build();
+    }
 
     @Test
     void createSlot_success() throws Exception {

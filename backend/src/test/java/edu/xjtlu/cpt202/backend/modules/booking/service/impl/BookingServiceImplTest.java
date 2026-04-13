@@ -12,11 +12,14 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
@@ -43,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,13 +82,14 @@ public class BookingServiceImplTest {
         // Arrange
         Long customerId = 1L;
         int limit = 3;
-        LocalDateTime now = LocalDateTime.of(2026, 4, 12, 10, 0, 0);
+        LocalDateTime now = LocalDate.now().atTime(10, 0, 0);
         List<UpcomingBookingVO> mockResponse = List.of(
                 UpcomingBookingVO.builder()
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
                         .startTime(now)
+                        .today(null)
                         .status("CONFIRMED")
                         .build(),
                 UpcomingBookingVO.builder()
@@ -92,6 +97,7 @@ public class BookingServiceImplTest {
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
                         .startTime(now.plusHours(4))
+                        .today(null)
                         .status("CONFIRMED")
                         .build(),
                 UpcomingBookingVO.builder()
@@ -99,6 +105,7 @@ public class BookingServiceImplTest {
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
                         .startTime(now.plusDays(1))
+                        .today(null)
                         .status("CONFIRMED")
                         .build()
         );
@@ -533,6 +540,117 @@ public class BookingServiceImplTest {
         queryDTO.setEndDate(LocalDate.of(2026, 1, 1));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getUsageSummary(queryDTO));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+    }
+
+    @Test
+    void testGetDashboardStatistics_AllTime_UsesMonthlyTrendAndPadsHabitData() {
+        Long customerId = 11L;
+        UserContextHolder.setUserId(customerId);
+
+        DashboardStatisticsVO summary = new DashboardStatisticsVO();
+        summary.setTotalCompletedAppointments(null);
+        summary.setTotalAmountSpent(null);
+        summary.setTotalConsultationHours(null);
+
+        DashboardStatisticsVO.ConsultedExpertVO expert = new DashboardStatisticsVO.ConsultedExpertVO();
+        expert.setSpecialistId(20L);
+        expert.setSpecialistName("Dr. Alpha");
+
+        DashboardStatisticsVO.TrendChartVO monthTrend = new DashboardStatisticsVO.TrendChartVO();
+        monthTrend.setDateLabel("2026-04");
+        monthTrend.setCount(2);
+        monthTrend.setHours(1.5D);
+
+        DashboardStatisticsVO.CategoryChartVO category = new DashboardStatisticsVO.CategoryChartVO();
+        category.setCategoryName("Psychology");
+        category.setAmount(new BigDecimal("120.00"));
+        category.setCount(2);
+
+        DashboardHabitRawVO mondayRaw = new DashboardHabitRawVO();
+        mondayRaw.setDayOfWeek(2);
+        mondayRaw.setCount(3);
+        DashboardHabitRawVO sundayRaw = new DashboardHabitRawVO();
+        sundayRaw.setDayOfWeek(1);
+        sundayRaw.setCount(1);
+
+        when(bookingMapper.selectDashboardSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(summary);
+        when(bookingMapper.selectDashboardConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(List.of(expert));
+        when(bookingMapper.selectDashboardTrendByMonth(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(List.of(monthTrend));
+        when(bookingMapper.selectDashboardCategoryData(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(List.of(category));
+        when(bookingMapper.selectDashboardHabitData(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull()))
+                .thenReturn(List.of(mondayRaw, sundayRaw));
+
+        DashboardStatisticsVO result = bookingService.getDashboardStatistics(null);
+
+        assertNotNull(result);
+        assertEquals(0, result.getTotalCompletedAppointments());
+        assertEquals(0, result.getTotalAmountSpent().compareTo(BigDecimal.ZERO));
+        assertEquals(0.0D, result.getTotalConsultationHours());
+        assertEquals(1, result.getConsultedExperts().size());
+        assertEquals(1, result.getTrendData().size());
+        assertEquals(1, result.getCategoryData().size());
+        assertEquals(7, result.getHabitData().size());
+        assertEquals("Mon", result.getHabitData().get(0).getDayOfWeek());
+        assertEquals(3, result.getHabitData().get(0).getCount());
+        assertEquals("Sun", result.getHabitData().get(6).getDayOfWeek());
+        assertEquals(1, result.getHabitData().get(6).getCount());
+        assertEquals(0, result.getHabitData().get(1).getCount());
+
+        verify(bookingMapper, times(1)).selectDashboardTrendByMonth(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull());
+        verify(bookingMapper, never()).selectDashboardTrendByDay(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), isNull(), isNull());
+    }
+
+    @Test
+    void testGetDashboardStatistics_WithShortDateRange_UsesDailyTrend() {
+        Long customerId = 12L;
+        UserContextHolder.setUserId(customerId);
+
+        DashboardQueryDTO queryDTO = new DashboardQueryDTO();
+        LocalDate startDate = LocalDate.of(2026, 4, 1);
+        LocalDate endDate = LocalDate.of(2026, 4, 14);
+        queryDTO.setStartDate(startDate);
+        queryDTO.setEndDate(endDate);
+
+        DashboardStatisticsVO.TrendChartVO dayTrend = new DashboardStatisticsVO.TrendChartVO();
+        dayTrend.setDateLabel("04-14");
+        dayTrend.setCount(1);
+        dayTrend.setHours(0.5D);
+
+        when(bookingMapper.selectDashboardSummary(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(new DashboardStatisticsVO());
+        when(bookingMapper.selectDashboardConsultedExperts(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(List.of());
+        when(bookingMapper.selectDashboardTrendByDay(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(List.of(dayTrend));
+        when(bookingMapper.selectDashboardCategoryData(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(List.of());
+        when(bookingMapper.selectDashboardHabitData(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate)))
+                .thenReturn(List.of());
+
+        DashboardStatisticsVO result = bookingService.getDashboardStatistics(queryDTO);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTrendData().size());
+        assertEquals("04-14", result.getTrendData().get(0).getDateLabel());
+
+        verify(bookingMapper, times(1)).selectDashboardTrendByDay(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate));
+        verify(bookingMapper, never()).selectDashboardTrendByMonth(eq(customerId), eq(BookingStatusEnum.COMPLETED.name()), eq(startDate), eq(endDate));
+    }
+
+    @Test
+    void testGetDashboardStatistics_InvalidDateRange_ThrowsParamError() {
+        UserContextHolder.setUserId(13L);
+
+        DashboardQueryDTO queryDTO = new DashboardQueryDTO();
+        queryDTO.setStartDate(LocalDate.of(2026, 4, 20));
+        queryDTO.setEndDate(LocalDate.of(2026, 4, 10));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getDashboardStatistics(queryDTO));
         assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
     }
 

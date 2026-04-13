@@ -78,14 +78,13 @@ public class BookingServiceImplTest {
         // Arrange
         Long customerId = 1L;
         int limit = 3;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.of(2026, 4, 12, 10, 0, 0);
         List<UpcomingBookingVO> mockResponse = List.of(
                 UpcomingBookingVO.builder()
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
                         .startTime(now)
-                        .today(true)
                         .status("CONFIRMED")
                         .build(),
                 UpcomingBookingVO.builder()
@@ -93,7 +92,6 @@ public class BookingServiceImplTest {
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
                         .startTime(now.plusHours(4))
-                        .today(true)
                         .status("CONFIRMED")
                         .build(),
                 UpcomingBookingVO.builder()
@@ -101,7 +99,6 @@ public class BookingServiceImplTest {
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
                         .startTime(now.plusDays(1))
-                        .today(false)
                         .status("CONFIRMED")
                         .build()
         );

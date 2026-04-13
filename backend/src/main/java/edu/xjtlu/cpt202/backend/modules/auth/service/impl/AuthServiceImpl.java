@@ -29,6 +29,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.core.env.Environment;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -158,6 +159,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest request) {
         // 8/9/10 校验
         if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword(), request.getRole())) {
@@ -192,9 +194,6 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), "Verification code incorrect or expired. Please request a new one.");
         }
 
-        codeRecord.setIsUsed(true);
-        verificationCodeMapper.updateById(codeRecord);
-
         String role = request.getRole().trim().toUpperCase(Locale.ROOT);
         if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER or SPECIALIST can register.");
@@ -210,6 +209,9 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         userMapper.insert(newUser);
+
+        codeRecord.setIsUsed(true);
+        verificationCodeMapper.updateById(codeRecord);
 
         String token = JwtUtils.generateToken(newUser.getId(), newUser.getRole());
 

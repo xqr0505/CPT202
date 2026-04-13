@@ -1,14 +1,34 @@
 <template>
-  <div style="padding: 20px">
+  <div class="admin-category-page">
     <h2>Category Management</h2>
 
     <el-button
       type="primary"
-      style="margin-bottom: 20px"
+      class="create-button"
       @click="openCreateDialog"
     >
       New Category
     </el-button>
+
+    <div class="pagination-wrapper">
+      <div class="pagination-summary">
+        Total {{ totalItems }} categories, Page {{ totalPages === 0 ? 0 : pagination.pageNo }} / {{ totalPages }}
+      </div>
+      <div class="pagination-actions">
+        <el-select v-model="pagination.pageSize" class="page-size-select">
+          <el-option :value="10" label="10 / page" />
+          <el-option :value="20" label="20 / page" />
+          <el-option :value="50" label="50 / page" />
+          <el-option :value="100" label="100 / page" />
+        </el-select>
+        <el-button :disabled="pagination.pageNo <= 1" @click="pagination.pageNo -= 1">
+          Previous
+        </el-button>
+        <el-button :disabled="pagination.pageNo >= totalPages" type="primary" @click="pagination.pageNo += 1">
+          Next
+        </el-button>
+      </div>
+    </div>
 
     <el-table :data="tableData" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
@@ -44,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createCategory,
@@ -54,7 +74,19 @@ import {
 import { useCategoryStore, type CategoryItem } from '@/stores/category'
 
 const categoryStore = useCategoryStore()
-const tableData = computed(() => categoryStore.categories)
+const pagination = reactive({
+  pageNo: 1,
+  pageSize: 10
+})
+const totalItems = computed(() => categoryStore.categories.length)
+const totalPages = computed(() =>
+  totalItems.value === 0 ? 0 : Math.ceil(totalItems.value / pagination.pageSize)
+)
+const tableData = computed(() => {
+  const start = (pagination.pageNo - 1) * pagination.pageSize
+  const end = start + pagination.pageSize
+  return categoryStore.categories.slice(start, end)
+})
 
 const dialogVisible = ref(false)
 const isEditMode = ref(false)
@@ -69,6 +101,9 @@ const dialogTitle = computed(() => (isEditMode.value ? 'Edit Category' : 'New Ca
 async function fetchCategoryList() {
   try {
     await categoryStore.fetchCategories()
+    if (totalPages.value > 0 && pagination.pageNo > totalPages.value) {
+      pagination.pageNo = totalPages.value
+    }
   } catch (error) {
     console.error('Failed to fetch category list:', error)
   }
@@ -146,4 +181,60 @@ async function handleDelete(row: CategoryItem) {
 onMounted(() => {
   void fetchCategoryList()
 })
+
+watch(
+  () => pagination.pageSize,
+  () => {
+    pagination.pageNo = 1
+  }
+)
 </script>
+
+<style scoped>
+.admin-category-page {
+  padding: 20px;
+}
+
+.create-button {
+  margin-bottom: 20px;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: #f8fbff;
+  border: 1px solid #dbe7f3;
+  border-radius: 12px;
+}
+
+.pagination-summary {
+  color: #475467;
+  font-size: 14px;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-size-select {
+  width: 120px;
+}
+
+@media (max-width: 768px) {
+  .pagination-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-actions {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+</style>

@@ -66,6 +66,38 @@ export interface CustomerDashboardSummaryQuery {
   endDate?: string;
 }
 
+export interface DashboardTrendItem {
+  dateLabel: string;
+  count: number;
+  hours: number;
+}
+
+export interface DashboardCategoryItem {
+  categoryName: string;
+  amount: number;
+  count: number;
+}
+
+export interface DashboardHabitItem {
+  dayOfWeek: string;
+  count: number;
+}
+
+export interface DashboardStatistics {
+  totalCompletedAppointments: number;
+  totalAmountSpent: number;
+  totalConsultationHours: number;
+  consultedExperts: ConsultedExpertSummary[];
+  trendData: DashboardTrendItem[];
+  categoryData: DashboardCategoryItem[];
+  habitData: DashboardHabitItem[];
+}
+
+export interface DashboardStatisticsQuery {
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface BookingDetail {
   bookingId: number;
   status: string;
@@ -88,6 +120,12 @@ export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQue
   return request
     .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
     .then((response) => response as unknown as CustomerDashboardSummary)
+}
+
+export const getCustomerDashboardStatistics = (params?: DashboardStatisticsQuery) => {
+  return request
+    .get<DashboardStatistics>('/api/v1/customer/dashboard/statistics', { params })
+    .then((response) => response as unknown as DashboardStatistics)
 }
 export const getBookingTopics = (): Promise<string[]> => {
   return request.get<any, string[]>('/api/v1/booking-topics')

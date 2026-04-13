@@ -1,6 +1,7 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import { logout as apiLogout } from '@/api/auth'
+import { getUser } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -16,6 +17,45 @@ export interface UserInfo {
 
 export type UserRole = UserRoleType | null
 
+interface StoredUser {
+  userId?: number
+  role?: string
+  email?: string
+  displayName?: string
+}
+
+const normalizeRole = (role?: string | null): UserRole => {
+  if (!role) return null
+
+  switch (role.toUpperCase()) {
+    case 'CUSTOMER':
+      return USER_ROLES.CUSTOMER
+    case 'SPECIALIST':
+      return USER_ROLES.SPECIALIST
+    case 'ADMIN':
+      return USER_ROLES.ADMIN
+    default:
+      return null
+  }
+}
+
+const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; role: UserRole } => {
+  const storedUser = getUser() as StoredUser | null
+
+  return {
+    token: localStorage.getItem('token') || sessionStorage.getItem('token'),
+    userInfo: storedUser
+      ? {
+          id: storedUser.userId || 0,
+          username: storedUser.email || storedUser.displayName || 'mockuser',
+          nickname: storedUser.displayName || storedUser.email || 'Mock User',
+          email: storedUser.email
+        }
+      : null,
+    role: normalizeRole(storedUser?.role)
+  }
+}
+
 const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
   id: user.id,
   username: user.username,
@@ -27,20 +67,22 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 })
 
 export const useUserStore = defineStore('user', () => {
-  // FIXME: Mock 阶段，强行塞入假 token
-  const token = ref<string | null>('fake-jwt-token-12345')
+  const storedSession = getStoredSession()
 
-  // FIXME: Mock 阶段，强行写死一个用户信息
-  const userInfo = ref<UserInfo | null>({
-    id: 1,
-    username: 'mockuser',
-    nickname: 'Mock Customer'
-  })
-  const userRole = ref<UserRole>(USER_ROLES.CUSTOMER)
+  const token = ref<string | null>(storedSession.token || 'fake-jwt-token-12345')
+  const userInfo = ref<UserInfo | null>(
+    storedSession.userInfo || {
+      id: 1,
+      username: 'mockuser',
+      nickname: 'Mock Customer'
+    }
+  )
+  const userRole = ref<UserRole>(storedSession.role || USER_ROLES.CUSTOMER)
 
   const isLoggedIn = computed(() => !!token.value)
   const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)
   const isSpecialist = computed(() => userRole.value === USER_ROLES.SPECIALIST)
+  const isAdmin = computed(() => userRole.value === USER_ROLES.ADMIN)
 
   const setToken = (newToken: string) => {
     token.value = newToken
@@ -71,7 +113,6 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-
   const fetchAndSetUserProfile = async () => {
     try {
       const user = await fetchUserProfile()
@@ -90,6 +131,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     isCustomer,
     isSpecialist,
+    isAdmin,
     setToken,
     setUserInfo,
     syncUserProfile,

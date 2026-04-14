@@ -2,12 +2,12 @@
   <div class="login-container">
     <div class="login-form-card">
       <h1 class="login-title">Appointment Platform Login</h1>
-      
+
       <!-- Role selection -->
       <div class="form-group">
         <label>Select Role</label>
         <div class="role-selector">
-          <button 
+          <button
             v-for="roleOption in roles"
             :key="roleOption.value"
             :class="['role-btn', { active: form.role === roleOption.value }]"
@@ -22,7 +22,7 @@
       <!-- Email input -->
       <div class="form-group">
         <label>Email Address</label>
-        <input 
+        <input
           v-model="form.email"
           type="email"
           placeholder="Enter your email"
@@ -34,7 +34,7 @@
       <!-- Password input -->
       <div class="form-group">
         <label>Password</label>
-        <input 
+        <input
           v-model="form.password"
           type="password"
           placeholder="Enter your password"
@@ -50,7 +50,7 @@
         </label>
       </div>
 
-      <button 
+      <button
         class="login-btn"
         :disabled="isLoading"
         @click="handleLogin"
@@ -132,7 +132,7 @@ async function handleLogin() {
     }
 
     isLoading.value = true;
-    
+
     const payload: LoginPayload = {
       email: form.email,
       password: form.password,
@@ -147,7 +147,7 @@ async function handleLogin() {
       // 如果未勾选，清除之前保存的邮箱（可选）
       saveRememberedEmail('');
     }
-    
+
     ElMessage.success('Login successful');
 
     const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :

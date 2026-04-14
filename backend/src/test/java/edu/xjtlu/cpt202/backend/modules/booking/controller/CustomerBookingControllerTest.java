@@ -10,7 +10,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -22,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,12 +40,12 @@ public class CustomerBookingControllerTest {
 
 
     @Test
-    @WithMockUser(roles = "CUSTOMER")
     public void createBooking_Success() throws Exception {
         when(bookingService.createBooking(anyLong(), any()))
                 .thenReturn(new BookingCreateVO(101L, "PENDING"));
 
         mockMvc.perform(post("/api/v1/customer/bookings")
+                        .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -59,9 +62,9 @@ public class CustomerBookingControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "CUSTOMER")
     public void createBooking_ValidationError() throws Exception {
         mockMvc.perform(post("/api/v1/customer/bookings")
+                        .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -74,6 +77,7 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("topic is required"));
     }
+
 
     @Test
     @WithMockUser(roles = "CUSTOMER")
@@ -116,6 +120,14 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.data.bookingId").value(55))
                 .andExpect(jsonPath("$.data.bookingStatus").value("CANCELLED"))
                 .andExpect(jsonPath("$.data.refundAmount").value(100.0));
+    }
+
+    private Authentication customerAuthentication() {
+        return new UsernamePasswordAuthenticationToken(
+                1L,
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_CUSTOMER")
+        );
     }
 
 }

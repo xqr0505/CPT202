@@ -305,6 +305,31 @@ class AuthServiceImplTest {
         assertTrue(ex.getMessage().contains("Verification code incorrect or expired"));
     }
 
+    @Test
+    void register_UserInsertFails_DoesNotConsumeVerificationCode() {
+        RegisterRequest request = new RegisterRequest();
+        request.setEmail(testEmail);
+        request.setVerificationCode(validCode);
+        request.setPassword(testPassword);
+        request.setConfirmPassword(testPassword);
+        request.setRole(testRole);
+
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+        VerificationCode codeRecord = VerificationCode.builder()
+                .email(testEmail)
+                .code(validCode)
+                .isUsed(false)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+        when(passwordEncoder.encode(testPassword)).thenReturn("encodedPwd");
+        when(userMapper.insert(any(User.class))).thenThrow(new RuntimeException("insert failed"));
+
+        assertThrows(RuntimeException.class, () -> authService.register(request));
+        verify(verificationCodeMapper, never()).updateById(any(VerificationCode.class));
+        assertFalse(codeRecord.getIsUsed());
+    }
+
     // ==================== login Tests ====================
 
     @Test
@@ -501,5 +526,125 @@ class AuthServiceImplTest {
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
         assertEquals("role not match", ex.getMessage());
+    }
+    // ==================== Additional tests for first_fail_time and lock_time ====================
+
+    @Test
+    void login_FailCountResetsAfterWindowExpires() {
+        LocalDateTime firstAttemptTime = LocalDateTime.of(2025, 4, 1, 10, 0, 0);
+        try (MockedStatic<LocalDateTime> dateTimeMock = mockStatic(LocalDateTime.class)) {
+            dateTimeMock.when(LocalDateTime::now).thenReturn(firstAttemptTime);
+
+            LoginRequest request = new LoginRequest();
+            request.setEmail(testEmail);
+            request.setPassword("wrong");
+            request.setRole(testRole);
+
+            User user = User.builder()
+                    .id(1L)
+                    .email(testEmail)
+                    .passwordHash("encoded")
+                    .role(testRole)
+                    .status("ACTIVE")
+                    .loginFailCount(0)
+                    .firstFailTime(null)
+                    .build();
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());
+            assertEquals(firstAttemptTime, user.getFirstFailTime());
+
+            LocalDateTime laterTime = firstAttemptTime.plusMinutes(3).plusSeconds(1);
+            dateTimeMock.when(LocalDateTime::now).thenReturn(laterTime);
+
+            reset(userMapper);
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());          
+            assertEquals(laterTime, user.getFirstFailTime());   
+        }
+    }
+
+    @Test
+    void login_SuccessResetsFirstFailTime() {
+        LocalDateTime failTime = LocalDateTime.now().minusMinutes(1);
+        User user = User.builder()
+                .id(1L)
+                .email(testEmail)
+                .passwordHash("encoded")
+                .role(testRole)
+                .status("ACTIVE")
+                .loginFailCount(3)
+                .firstFailTime(failTime)
+                .lockTime(null)
+                .build();
+        when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+        when(passwordEncoder.matches(testPassword, "encoded")).thenReturn(true);
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail(testEmail);
+        request.setPassword(testPassword);
+        request.setRole(testRole);
+
+        try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
+            jwtUtils.when(() -> JwtUtils.generateToken(1L, testRole)).thenReturn("jwt");
+
+            LoginResponse response = authService.login(request);
+            assertNotNull(response);
+
+            verify(userMapper, times(1)).updateById(user);
+            assertEquals(0, user.getLoginFailCount());
+            assertNull(user.getFirstFailTime());   
+            assertNull(user.getLockTime());
+            assertEquals("ACTIVE", user.getStatus());
+        }
+    }
+
+    @Test
+    void login_FailCountAccumulatesWithinWindow() {
+        LocalDateTime firstFailTime = LocalDateTime.of(2025, 4, 1, 10, 0, 0);
+        try (MockedStatic<LocalDateTime> dateTimeMock = mockStatic(LocalDateTime.class)) {
+            dateTimeMock.when(LocalDateTime::now).thenReturn(firstFailTime);
+
+            LoginRequest request = new LoginRequest();
+            request.setEmail(testEmail);
+            request.setPassword("wrong");
+            request.setRole(testRole);
+
+            User user = User.builder()
+                    .id(1L)
+                    .email(testEmail)
+                    .passwordHash("encoded")
+                    .role(testRole)
+                    .status("ACTIVE")
+                    .loginFailCount(0)
+                    .firstFailTime(null)
+                    .build();
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());
+            assertEquals(firstFailTime, user.getFirstFailTime());
+
+            LocalDateTime secondFailTime = firstFailTime.plusMinutes(2);
+            dateTimeMock.when(LocalDateTime::now).thenReturn(secondFailTime);
+
+            reset(userMapper);
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(2, user.getLoginFailCount());
+            assertEquals(firstFailTime, user.getFirstFailTime());
+        }
     }
 }

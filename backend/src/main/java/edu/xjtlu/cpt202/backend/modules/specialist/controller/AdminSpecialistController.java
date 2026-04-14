@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistStat
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistLevelOptionVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import jakarta.validation.Valid;
@@ -62,6 +63,11 @@ public class AdminSpecialistController {
         return Result.success(adminSpecialistService.getSpecialistDetail(id));
     }
 
+    @GetMapping("/{id}/fee-change-records")
+    public Result<List<SpecialistFeeChangeRecordVO>> listFeeChangeRecords(@PathVariable Long id) {
+        return Result.success(adminSpecialistService.listFeeChangeRecords(id));
+    }
+
     @PutMapping("/{id}")
     public Result<Void> updateSpecialist(@PathVariable Long id, @Valid @RequestBody AdminSpecialistUpdateDTO request) {
         adminSpecialistService.updateSpecialist(id, request);
@@ -69,11 +75,10 @@ public class AdminSpecialistController {
     }
 
     @PatchMapping("/{id}/status")
-    public Result<Void> updateSpecialistStatus(
+    public Result<Integer> updateSpecialistStatus(
             @PathVariable Long id,
             @Valid @RequestBody AdminSpecialistStatusUpdateDTO request
     ) {
-        adminSpecialistService.updateSpecialistStatus(id, request.getStatus());
-        return Result.success();
+        return Result.success(adminSpecialistService.updateSpecialistStatus(id, request.getStatus()));
     }
 }

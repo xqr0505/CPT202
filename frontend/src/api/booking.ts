@@ -48,6 +48,56 @@ export interface BookingListQuery {
 
 export type BookingItem = BookingListItem;
 
+export interface ConsultedExpertSummary {
+  specialistId: string;
+  specialistName: string;
+  specialistAvatar?: string;
+}
+
+export interface CustomerDashboardSummary {
+  totalCompletedAppointments: number;
+  totalAmountSpent: number;
+  totalConsultationHours: number;
+  consultedExperts: ConsultedExpertSummary[];
+}
+
+export interface CustomerDashboardSummaryQuery {
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface DashboardTrendItem {
+  dateLabel: string;
+  count: number;
+  hours: number;
+}
+
+export interface DashboardCategoryItem {
+  categoryName: string;
+  amount: number;
+  count: number;
+}
+
+export interface DashboardHabitItem {
+  dayOfWeek: string;
+  count: number;
+}
+
+export interface DashboardStatistics {
+  totalCompletedAppointments: number;
+  totalAmountSpent: number;
+  totalConsultationHours: number;
+  consultedExperts: ConsultedExpertSummary[];
+  trendData: DashboardTrendItem[];
+  categoryData: DashboardCategoryItem[];
+  habitData: DashboardHabitItem[];
+}
+
+export interface DashboardStatisticsQuery {
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface BookingDetail {
   bookingId: number;
   status: string;
@@ -66,8 +116,25 @@ export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
 }
 
-export const createBooking = (data: CreateBookingRequest) => {
-  return request.post<CreateBookingResponse>('/api/v1/customer/bookings', data)
+export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQuery) => {
+  return request
+    .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
+    .then((response) => response as unknown as CustomerDashboardSummary)
+}
+
+export const getCustomerDashboardStatistics = (params?: DashboardStatisticsQuery) => {
+  return request
+    .get<DashboardStatistics>('/api/v1/customer/dashboard/statistics', { params })
+    .then((response) => response as unknown as DashboardStatistics)
+}
+export const getBookingTopics = (): Promise<string[]> => {
+  return request.get<any, string[]>('/api/v1/booking-topics')
+}
+
+export const createBooking = (data: CreateBookingRequest, suppressErrorMessage = false) => {
+  return request.post<any, CreateBookingResponse>('/api/v1/customer/bookings', data, suppressErrorMessage
+    ? ({ suppressErrorMessage: true } as any)
+    : undefined)
 }
 
 export const getBookingList = (params: BookingListQuery) => {

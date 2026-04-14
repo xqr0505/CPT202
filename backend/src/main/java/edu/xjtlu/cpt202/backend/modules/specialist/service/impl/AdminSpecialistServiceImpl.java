@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.specialist.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.SpecialistLevelEnum;
@@ -8,31 +9,53 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.CancelReasonEnum;
+import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
+import edu.xjtlu.cpt202.backend.modules.specialist.mapper.SpecialistFeeChangeRecordMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.entity.SpecialistFeeChangeRecord;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
 public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminSpecialistServiceImpl.class);
+
     private final AdminSpecialistMapper adminSpecialistMapper;
+    private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
+    private final BookingMapper bookingMapper;
     private final UserMapper userMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
+    private final JavaMailSender mailSender;
+    private final Environment env;
 
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
     private static final String DEFAULT_SPECIALIST_PASSWORD = "ChangeMe123!";
@@ -60,8 +83,8 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
-
-        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+        validateSpecialistLevel(normalizedLevel);
+        validateFeeWithinRange(normalizedLevel, request.getConsultationFee());
 
         User user = User.builder()
                 .email(buildGeneratedSpecialistEmail(normalizedName))
@@ -95,6 +118,15 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     }
 
     @Override
+    public List<SpecialistFeeChangeRecordVO> listFeeChangeRecords(Long id) {
+        AdminSpecialistDetailVO existing = adminSpecialistMapper.selectSpecialistDetailById(id);
+        if (existing == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        return specialistFeeChangeRecordMapper.selectBySpecialistId(id);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateSpecialist(Long id, AdminSpecialistUpdateDTO request) {
         AdminSpecialistDetailVO existing = adminSpecialistMapper.selectSpecialistDetailById(id);
@@ -116,8 +148,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
-
-        validateConsultationFeeRange(normalizedLevel, request.getConsultationFee());
+        validateSpecialistLevel(normalizedLevel);
 
         int updatedProfileRows = adminSpecialistMapper.updateSpecialistProfileById(
                 id,
@@ -131,12 +162,13 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
 
+        saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
         adminSpecialistMapper.updateUserFullNameById(userId, normalizedName);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateSpecialistStatus(Long id, String status) {
+    public int updateSpecialistStatus(Long id, String status) {
         AdminSpecialistDetailVO existing = adminSpecialistMapper.selectSpecialistDetailById(id);
         if (existing == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
@@ -147,26 +179,106 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         if (updatedRows == 0) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
-    }
 
-    private void validateConsultationFeeRange(String level, BigDecimal consultationFee) {
-        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
-        if (specialistLevel == null) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid specialist level");
+        List<Booking> impactedBookings = List.of();
+        if ("INACTIVE".equals(mappedStatus)) {
+            impactedBookings = cancelAffectedBookings(id);
         }
 
-        if (consultationFee.compareTo(specialistLevel.getMinFee()) < 0
-                || consultationFee.compareTo(specialistLevel.getMaxFee()) > 0) {
+        List<Booking> finalImpactedBookings = impactedBookings;
+        CompletableFuture.runAsync(() -> {
+            sendSpecialistStatusNotification(id, existing.getName(), status);
+            if (!finalImpactedBookings.isEmpty()) {
+                sendBookingChangeNotifications(existing.getName(), finalImpactedBookings);
+            }
+        });
+
+        return impactedBookings.size();
+    }
+
+    private void validateSpecialistLevel(String level) {
+        if (SpecialistLevelEnum.fromName(level) == null) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid specialist level");
+        }
+    }
+
+    private void validateFeeWithinRange(String level, BigDecimal fee) {
+        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
+        if (specialistLevel == null || fee == null) {
+            return;
+        }
+        if (fee.compareTo(specialistLevel.getMinFee()) < 0 || fee.compareTo(specialistLevel.getMaxFee()) > 0) {
             throw new BusinessException(
                     ResultCodeEnum.BAD_REQUEST.getCode(),
                     String.format(
                             "Consultation fee for %s must be between %s and %s",
-                            specialistLevel.name(),
-                            specialistLevel.getMinFee().toPlainString(),
-                            specialistLevel.getMaxFee().toPlainString()
+                            level,
+                            specialistLevel.getMinFee(),
+                            specialistLevel.getMaxFee()
                     )
             );
         }
+    }
+
+    private void saveFeeChangeRecordIfNeeded(
+            Long specialistId,
+            AdminSpecialistDetailVO existing,
+            String level,
+            BigDecimal newFee
+    ) {
+        BigDecimal oldFee = existing.getConsultationFee();
+        if (oldFee == null || newFee == null || oldFee.compareTo(newFee) == 0) {
+            return;
+        }
+
+        SpecialistLevelEnum specialistLevel = SpecialistLevelEnum.fromName(level);
+        if (specialistLevel == null) {
+            return;
+        }
+
+        Long changedByUserId = null;
+        String changedByName = null;
+        try {
+            changedByUserId = SecurityUtils.getCurrentUserId();
+            User operator = userMapper.selectById(changedByUserId);
+            changedByName = operator == null ? null : operator.getFullName();
+        } catch (BusinessException ignored) {
+            // Preserve the fee update even if operator identity is not available.
+        }
+
+        boolean outOfRange = newFee.compareTo(specialistLevel.getMinFee()) < 0
+                || newFee.compareTo(specialistLevel.getMaxFee()) > 0;
+
+        SpecialistFeeChangeRecord record = SpecialistFeeChangeRecord.builder()
+                .specialistId(specialistId)
+                .oldFee(oldFee)
+                .newFee(newFee)
+                .level(level)
+                .rangeMin(specialistLevel.getMinFee())
+                .rangeMax(specialistLevel.getMaxFee())
+                .outOfRange(outOfRange)
+                .changedByUserId(changedByUserId)
+                .changedByName(changedByName)
+                .build();
+        specialistFeeChangeRecordMapper.insert(record);
+    }
+
+    private List<Booking> cancelAffectedBookings(Long specialistId) {
+        List<Booking> impactedBookings = bookingMapper.selectList(
+                Wrappers.<Booking>lambdaQuery()
+                        .eq(Booking::getSpecialistId, specialistId)
+                        .in(Booking::getStatus, BookingStatusEnum.PENDING.name(), BookingStatusEnum.CONFIRMED.name())
+        );
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Booking booking : impactedBookings) {
+            booking.setStatus(BookingStatusEnum.CANCELLED.name());
+            booking.setCancelledBy("ADMIN");
+            booking.setCancelReason(CancelReasonEnum.BY_SPECIALIST_FORCE_MAJEURE.getDesc());
+            booking.setDecisionTime(now);
+            bookingMapper.updateById(booking);
+        }
+        return impactedBookings;
     }
 
     private String buildGeneratedSpecialistEmail(String fullName) {
@@ -187,5 +299,112 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
             return "INACTIVE";
         }
         throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Invalid status");
+    }
+
+    private void sendSpecialistStatusNotification(Long specialistId, String specialistName, String status) {
+        User specialistUser = adminSpecialistMapper.selectUserBySpecialistId(specialistId);
+        if (specialistUser == null || specialistUser.getEmail() == null || specialistUser.getEmail().isBlank()) {
+            log.warn("Skip specialist status notification: specialistId={} has no user email", specialistId);
+            return;
+        }
+
+        String normalizedStatus = status == null ? "" : status.trim();
+        String displayName = specialistName == null || specialistName.isBlank()
+                ? specialistUser.getEmail()
+                : specialistName;
+
+        String subject;
+        String content;
+        if ("Inactive".equalsIgnoreCase(normalizedStatus)) {
+            subject = "Your specialist account has been deactivated";
+            content = String.format(
+                    "Hello %s,%n%nYour specialist account has been deactivated by an administrator. You may be unable to use specialist features until the account is reactivated.%n%nIf you believe this was a mistake, please contact the platform administrator.",
+                    displayName
+            );
+        } else if ("Active".equalsIgnoreCase(normalizedStatus)) {
+            subject = "Your specialist account has been reactivated";
+            content = String.format(
+                    "Hello %s,%n%nYour specialist account has been reactivated by an administrator. You can now continue using specialist features on the platform.%n%nThank you.",
+                    displayName
+            );
+        } else {
+            log.warn("Skip specialist status notification: unsupported status={}, specialistId={}", status, specialistId);
+            return;
+        }
+
+        log.info(
+                "Preparing specialist status notification: specialistId={}, specialistName={}, email={}, newStatus={}",
+                specialistId,
+                displayName,
+                specialistUser.getEmail(),
+                normalizedStatus
+        );
+
+        try {
+            sendEmail(specialistUser.getEmail(), subject, content, "specialist status notification", specialistId);
+
+            log.info(
+                "Specialist status notification sent successfully: specialistId={}, email={}, newStatus={}",
+                specialistId,
+                specialistUser.getEmail(),
+                    normalizedStatus
+            );
+        } catch (Exception ex) {
+            log.error(
+                    "Failed to send specialist status notification: specialistId={}, email={}, newStatus={}, reason={}",
+                    specialistId,
+                    specialistUser.getEmail(),
+                    normalizedStatus,
+                    ex.getMessage(),
+                    ex
+            );
+        }
+    }
+
+    private void sendBookingChangeNotifications(String specialistName, List<Booking> impactedBookings) {
+        for (Booking booking : impactedBookings) {
+            User customer = userMapper.selectById(booking.getCustomerId());
+            if (customer == null) {
+                log.warn("Skip booking change notification: bookingId={} customer not found", booking.getId());
+                continue;
+            }
+            log.info(
+                    "Affected customer notified for cancelled booking: bookingId={}, customerId={}, customerName={}, specialistName={}",
+                    booking.getId(),
+                    customer.getId(),
+                    customer.getFullName(),
+                    specialistName
+            );
+        }
+    }
+
+    private void sendEmail(String to, String subject, String content, String logContext, Long referenceId) {
+        try {
+            if (mailSender == null) {
+                log.error("Mail sender not configured for {} referenceId={}", logContext, referenceId);
+                return;
+            }
+
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            if (mimeMessage == null) {
+                log.error("Mail sender returned null MimeMessage for {} referenceId={}", logContext, referenceId);
+                return;
+            }
+
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+
+            String fromAddress = env == null ? null : env.getProperty("spring.mail.username");
+            if (fromAddress == null || fromAddress.isBlank()) {
+                fromAddress = "noreply@example.com";
+            }
+
+            helper.setFrom("ExpertLink <" + fromAddress + ">");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(content);
+            mailSender.send(mimeMessage);
+        } catch (Exception ex) {
+            log.error("Failed to send {} referenceId={}, reason={}", logContext, referenceId, ex.getMessage(), ex);
+        }
     }
 }

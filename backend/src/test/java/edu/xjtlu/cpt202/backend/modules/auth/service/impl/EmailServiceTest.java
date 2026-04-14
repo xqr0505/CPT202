@@ -18,10 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.Disabled;
 
-
-
 @SpringBootTest
-@Transactional  // 测试结束后自动回滚数据库操作，避免产生垃圾数据
+@Transactional  
 public class EmailServiceTest {
 
     @Autowired
@@ -35,12 +33,6 @@ public class EmailServiceTest {
 
     @Autowired
     private UserMapper userMapper;
-
-    /**
-     * 测试1：直接使用 JavaMailSender 发送简单邮件
-     * 目的：验证 SMTP 配置、授权码、网络连接是否正确
-     */
-    
 
     @Test
     @DisplayName("Test JavaMailSender with display name")
@@ -60,11 +52,6 @@ public class EmailServiceTest {
         }, "Failed to send email. Check SMTP configuration.");
     }
 
-    /**
-     * 测试2：完整调用 AuthService.sendVerificationCode
-     * 目的：验证验证码生成、数据库存储、邮件发送整个链路
-     * 注意：因为添加了 @Transactional，测试结束后插入的验证码记录会被回滚，不会污染数据库
-     */
     @Test
     @DisplayName("Test full verification code sending flow")
     void testSendVerificationCode() {

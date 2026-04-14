@@ -10,6 +10,8 @@ export interface SpecialistItem {
   level: string
   consultationFee: number
   status: SpecialistStatus
+  hasActiveBookings?: boolean
+  activeBookingCount?: number
   avatarUrl?: string
   createTime?: string
 }
@@ -86,5 +88,5 @@ export function updateSpecialistStatus(id: number, status: SpecialistStatus) {
     url: `/admin/specialists/${id}/status`,
     method: 'patch',
     data: { status }
-  })
+  }) as Promise<number>
 }

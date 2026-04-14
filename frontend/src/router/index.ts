@@ -54,6 +54,11 @@ const routes = [
         path: 'specialists/:id',
         component: () => import('../views/customer/SpecialistDetail.vue')
       },
+      {
+        name: 'CustomerSpecialistBooking',
+        path: 'specialists/:id/book',
+        component: () => import('../views/customer/SpecialistBooking.vue')
+      },
       { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
       { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
       { path: 'profile', component: () => import('../views/customer/Profile.vue') },
@@ -93,4 +98,3 @@ const router = createRouter({
 setupRouterGuard(router);
 
 export default router;
-

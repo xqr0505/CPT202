@@ -4,6 +4,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/15
+ */
 @Data
 @Schema(description = "AI chat request")
 public class ChatRequestDTO {

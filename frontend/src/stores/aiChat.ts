@@ -7,7 +7,6 @@ import {
   AI_CHAT_EMPTY_RESPONSE_TEXT,
   AI_CHAT_STATE,
   AI_CHAT_STORE_ID,
-  AI_CHAT_THINKING_TEXT,
   type AiChatState
 } from '@/constants/ai'
 
@@ -58,11 +57,29 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
     state.value = AI_CHAT_STATE.loading
     errorMessage.value = ''
-    answerMessage.value = AI_CHAT_THINKING_TEXT
+    answerMessage.value = ''
 
     try {
-      const reply = await postChatMessage(message)
-      answerMessage.value = reply?.trim() ? reply : AI_CHAT_EMPTY_RESPONSE_TEXT
+      let hasDoneEvent = false
+      await postChatMessage(message, {
+        onChunk: (chunk: string) => {
+          answerMessage.value += chunk
+        },
+        onDone: () => {
+          hasDoneEvent = true
+        }
+      })
+
+      if (!answerMessage.value.trim()) {
+        answerMessage.value = AI_CHAT_EMPTY_RESPONSE_TEXT
+      }
+
+      if (hasDoneEvent || answerMessage.value.trim()) {
+        state.value = AI_CHAT_STATE.success
+        return
+      }
+
+      answerMessage.value = AI_CHAT_EMPTY_RESPONSE_TEXT
       state.value = AI_CHAT_STATE.success
     } catch (error) {
       answerMessage.value = ''

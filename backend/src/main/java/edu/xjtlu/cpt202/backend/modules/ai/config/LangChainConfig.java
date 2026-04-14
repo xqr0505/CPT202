@@ -1,7 +1,9 @@
 package edu.xjtlu.cpt202.backend.modules.ai.config;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
@@ -9,6 +11,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/15
+ */
 @Configuration
 public class LangChainConfig {
 
@@ -40,7 +46,33 @@ public class LangChainConfig {
     }
 
     @Bean
-    public Assistant assistant(ChatLanguageModel chatLanguageModel) {
-        return AiServices.create(Assistant.class, chatLanguageModel);
+    public StreamingChatLanguageModel streamingChatLanguageModel(
+            @Value("${ai.openai.api-key}") String apiKey,
+            @Value("${ai.openai.model-name}") String modelName,
+            @Value("${ai.openai.base-url:}") String baseUrl
+    ) {
+        var builder = OpenAiStreamingChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(modelName);
+
+        if (baseUrl != null) {
+            String trimmedBaseUrl = baseUrl.trim();
+            if (!trimmedBaseUrl.isBlank()) {
+                builder.baseUrl(trimmedBaseUrl);
+            }
+        }
+
+        return builder.build();
+    }
+
+    @Bean
+    public Assistant assistant(
+            ChatLanguageModel chatLanguageModel,
+            StreamingChatLanguageModel streamingChatLanguageModel
+    ) {
+        return AiServices.builder(Assistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .streamingChatLanguageModel(streamingChatLanguageModel)
+                .build();
     }
 }

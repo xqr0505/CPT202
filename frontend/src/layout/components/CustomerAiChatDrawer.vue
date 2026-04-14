@@ -75,7 +75,7 @@ const drawerVisible = computed<boolean>({
 })
 
 const displayResponse = computed<string>(() => {
-  if (aiChatStore.isLoading) {
+  if (aiChatStore.isLoading && !aiChatStore.answerMessage) {
     return AI_CHAT_THINKING_TEXT
   }
 

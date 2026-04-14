@@ -1,4 +1,6 @@
 export const AI_API_CHAT_PATH = '/api/v1/ai/chat'
+export const AI_CHAT_STREAM_EVENT = 'chat'
+export const AI_CHAT_STREAM_DONE_EVENT = 'done'
 
 export const AI_CHAT_STORE_ID = 'aiChat'
 

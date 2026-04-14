@@ -81,7 +81,7 @@ npm run dev
 
 Frontend defaults:
 
-- URL: `http://localhost:5173`
+- URL: `http://localhost:5331`
 
 ## Quick Start Checklist
 

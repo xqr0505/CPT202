@@ -90,9 +90,15 @@ This mode mounts source code into containers for faster iteration.
    - **Backend (dev profile)**: `http://localhost:8081`
    - **Swagger UI**: `http://localhost:8081/swagger-ui/index.html`
    - **phpMyAdmin**: `http://localhost:9003`
+   - **RedisInsight**: `http://localhost:5540`
+
+   If RedisInsight shows a "protected mode" error, recreate the Redis container to apply the dev command flags:
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d --force-recreate redis
+   ```
 
 ## Notes
-- Ensure that the ports `80`, `5331`, `8080`, `8081`, `9001`, `9002`, `9003` are not in use by other applications.
+- Ensure that the ports `80`, `5331`, `5540`, `8080`, `8081`, `9001`, `9002`, `9003` are not in use by other applications.
 - Modify the compose files if you need to change the default configurations.
 
 ## Troubleshooting
@@ -100,7 +106,7 @@ This mode mounts source code into containers for faster iteration.
   ```bash
   docker compose logs <service-name>
   ```
-  Replace `<service-name>` with `db`, `redis`, `backend`, or `frontend`.
+  Replace `<service-name>` with `db`, `redis`, `redisinsight`, `backend`, or `frontend`.
 
 - Ensure Docker and Docker Compose are up-to-date.
 

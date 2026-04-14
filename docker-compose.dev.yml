@@ -15,9 +15,21 @@ services:
     image: redis/redis-stack-server:latest
     container_name: expertlink-redis-dev
     restart: always
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      - REDIS_ARGS=--appendonly yes --protected-mode no
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "no"]
     ports:
       - "9002:6379"
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: expertlink-redisinsight-dev
+    restart: always
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis
+      
 
   pma:
     image: phpmyadmin:5

@@ -17,6 +17,7 @@ export interface AccountProfile {
   fullName: string
   email: string
   phoneNumber: string
+  avatarUrl: string
   status: string
 }
 
@@ -30,6 +31,10 @@ export interface ChangePasswordPayload {
   currentPassword: string
   newPassword: string
   confirmationPassword: string
+}
+
+export interface AvatarUploadResponse {
+  avatarUrl: string
 }
 
 export const applySavedThemePreference = (): void => {
@@ -58,6 +63,10 @@ const silentAccountRequestConfig = {
   suppressErrorMessage: true
 } as const
 
+const sanitizeAvatarUrl = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 const getUserAccountApiPrefix = (): string => {
   const baseUrl = String(request.defaults.baseURL ?? '')
   return /\/api\/?$/.test(baseUrl) ? '/user' : '/api/user'
@@ -70,6 +79,7 @@ const toSafeAccountProfile = (payload: unknown): AccountProfile => {
       fullName: '',
       email: '',
       phoneNumber: '',
+      avatarUrl: '',
       status: 'ACTIVE'
     }
   }
@@ -81,6 +91,7 @@ const toSafeAccountProfile = (payload: unknown): AccountProfile => {
     fullName: typeof profile.fullName === 'string' ? profile.fullName.trim() : '',
     email: typeof profile.email === 'string' ? profile.email.trim() : '',
     phoneNumber: typeof profile.phoneNumber === 'string' ? profile.phoneNumber.trim() : '',
+    avatarUrl: sanitizeAvatarUrl(profile.avatarUrl),
     status:
       typeof profile.status === 'string' && profile.status.trim()
         ? profile.status.trim().toUpperCase()
@@ -106,6 +117,28 @@ export const updateCurrentUserProfile = async (
   )
 }
 
+export const uploadCurrentUserAvatar = async (
+  file: File
+): Promise<AvatarUploadResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await request.post<any, unknown>(
+    `${getUserAccountApiPrefix()}/avatar`,
+    formData,
+    {
+      ...silentAccountRequestConfig,
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    } as any
+  )
+
+  return {
+    avatarUrl: sanitizeAvatarUrl((response as Partial<AvatarUploadResponse>)?.avatarUrl)
+  }
+}
+
 export const changeCurrentUserPassword = async (
   payload: ChangePasswordPayload
 ): Promise<void> => {
@@ -126,10 +159,27 @@ export const deactivateCurrentUserAccount = async (): Promise<void> => {
 
 // Kept intentionally stable because unrelated layouts/stores still rely on the mock shape.
 export const fetchUserProfile = async (): Promise<UserProfile> => {
+  let storedProfile: Partial<AccountProfile> | null = null
+
+  try {
+    const rawProfile = localStorage.getItem('mock-user-profile')
+    storedProfile = rawProfile ? (JSON.parse(rawProfile) as Partial<AccountProfile>) : null
+  } catch {
+    storedProfile = null
+  }
+
   return Promise.resolve({
-    id: 1,
+    id:
+      typeof storedProfile?.id === 'number' && Number.isFinite(storedProfile.id)
+        ? storedProfile.id
+        : 1,
     username: 'test_user',
-    nickname: 'Test User',
+    nickname: storedProfile?.fullName?.trim() || 'Test User',
+    fullName: typeof storedProfile?.fullName === 'string' ? storedProfile.fullName.trim() : '',
+    email: typeof storedProfile?.email === 'string' ? storedProfile.email.trim() : '',
+    phoneNumber:
+      typeof storedProfile?.phoneNumber === 'string' ? storedProfile.phoneNumber.trim() : '',
+    avatar: sanitizeAvatarUrl(storedProfile?.avatarUrl),
     role: USER_ROLES.CUSTOMER
   })
 }

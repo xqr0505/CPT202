@@ -6,7 +6,7 @@
         <h2>{{ isEditMode ? 'Edit Specialist' : 'Add Specialist' }}</h2>
       </div>
       <p class="page-note">
-        {{ isEditMode ? 'Adjust profile and pricing details in one place.' : 'Create a specialist profile with category, level, and pricing details.' }}
+        {{ isEditMode ? 'Update a specialist profile with category, level, and pricing details.' : 'Create a specialist profile with category, level, and pricing details.' }}
       </p>
     </div>
 

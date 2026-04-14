@@ -527,4 +527,135 @@ class AuthServiceImplTest {
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
         assertEquals("role not match", ex.getMessage());
     }
+    // ==================== Additional tests for first_fail_time and lock_time ====================
+
+    @Test
+    void login_FailCountResetsAfterWindowExpires() {
+        // 模拟第一次失败，记录 first_fail_time = T0
+        LocalDateTime firstAttemptTime = LocalDateTime.of(2025, 4, 1, 10, 0, 0);
+        try (MockedStatic<LocalDateTime> dateTimeMock = mockStatic(LocalDateTime.class)) {
+            dateTimeMock.when(LocalDateTime::now).thenReturn(firstAttemptTime);
+
+            LoginRequest request = new LoginRequest();
+            request.setEmail(testEmail);
+            request.setPassword("wrong");
+            request.setRole(testRole);
+
+            User user = User.builder()
+                    .id(1L)
+                    .email(testEmail)
+                    .passwordHash("encoded")
+                    .role(testRole)
+                    .status("ACTIVE")
+                    .loginFailCount(0)
+                    .firstFailTime(null)
+                    .build();
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            // 第一次失败，计数变为1
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());
+            assertEquals(firstAttemptTime, user.getFirstFailTime());
+
+            // 模拟时间推进到 3分钟 + 1秒后（超出窗口）
+            LocalDateTime laterTime = firstAttemptTime.plusMinutes(3).plusSeconds(1);
+            dateTimeMock.when(LocalDateTime::now).thenReturn(laterTime);
+
+            // 重置 mock，准备第二次失败
+            reset(userMapper);
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            // 第二次失败，窗口已过期，计数应重置为1
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());          // 重置为1，而不是2
+            assertEquals(laterTime, user.getFirstFailTime());   // first_fail_time 更新为新的失败时间
+        }
+    }
+
+    @Test
+    void login_SuccessResetsFirstFailTime() {
+        // 用户之前有失败记录
+        LocalDateTime failTime = LocalDateTime.now().minusMinutes(1);
+        User user = User.builder()
+                .id(1L)
+                .email(testEmail)
+                .passwordHash("encoded")
+                .role(testRole)
+                .status("ACTIVE")
+                .loginFailCount(3)
+                .firstFailTime(failTime)
+                .lockTime(null)
+                .build();
+        when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+        when(passwordEncoder.matches(testPassword, "encoded")).thenReturn(true);
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail(testEmail);
+        request.setPassword(testPassword);
+        request.setRole(testRole);
+
+        try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
+            jwtUtils.when(() -> JwtUtils.generateToken(1L, testRole)).thenReturn("jwt");
+
+            LoginResponse response = authService.login(request);
+            assertNotNull(response);
+
+            verify(userMapper, times(1)).updateById(user);
+            assertEquals(0, user.getLoginFailCount());
+            assertNull(user.getFirstFailTime());   // 关键：first_fail_time 被清零
+            assertNull(user.getLockTime());
+            assertEquals("ACTIVE", user.getStatus());
+        }
+    }
+
+    @Test
+    void login_FailCountAccumulatesWithinWindow() {
+        // 模拟第一次失败，记录 first_fail_time = T0
+        LocalDateTime firstFailTime = LocalDateTime.of(2025, 4, 1, 10, 0, 0);
+        try (MockedStatic<LocalDateTime> dateTimeMock = mockStatic(LocalDateTime.class)) {
+            dateTimeMock.when(LocalDateTime::now).thenReturn(firstFailTime);
+
+            LoginRequest request = new LoginRequest();
+            request.setEmail(testEmail);
+            request.setPassword("wrong");
+            request.setRole(testRole);
+
+            User user = User.builder()
+                    .id(1L)
+                    .email(testEmail)
+                    .passwordHash("encoded")
+                    .role(testRole)
+                    .status("ACTIVE")
+                    .loginFailCount(0)
+                    .firstFailTime(null)
+                    .build();
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            // 第一次失败
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(1, user.getLoginFailCount());
+            assertEquals(firstFailTime, user.getFirstFailTime());
+
+            // 模拟时间推进到 2 分钟后（仍在 3 分钟窗口内）
+            LocalDateTime secondFailTime = firstFailTime.plusMinutes(2);
+            dateTimeMock.when(LocalDateTime::now).thenReturn(secondFailTime);
+
+            // 第二次失败，计数累加
+            reset(userMapper);
+            when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+            assertThrows(BusinessException.class, () -> authService.login(request));
+            verify(userMapper).updateById(user);
+            assertEquals(2, user.getLoginFailCount());
+            // first_fail_time 应该保持不变（仍然是第一次失败的时间）
+            assertEquals(firstFailTime, user.getFirstFailTime());
+        }
+    }
 }

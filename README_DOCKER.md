@@ -92,22 +92,22 @@ This mode mounts source code into containers for faster iteration.
    - **phpMyAdmin**: `http://localhost:9003`
    - **RedisInsight**: `http://localhost:5540`
 
-   If RedisInsight shows a "protected mode" error, recreate the Redis container to apply the dev command flags:
-   ```bash
-   docker compose -f docker-compose.dev.yml up -d --force-recreate redis
-   ```
 
 ## Notes
 - Ensure that the ports `80`, `5331`, `5540`, `8080`, `8081`, `9001`, `9002`, `9003` are not in use by other applications.
 - Modify the compose files if you need to change the default configurations.
 
 ## Troubleshooting
-- If you encounter issues, check the logs for each service:
-  ```bash
-  docker compose logs <service-name>
-  ```
-  Replace `<service-name>` with `db`, `redis`, `redisinsight`, `backend`, or `frontend`.
-
+ If you encounter "Error 1" or the page fails to load properly (such as port issues, hot reload not working, or frontend errors), you can try forcing container recreation:
+ ```bash
+ docker compose -f docker-compose.dev.yml up -d --force-recreate
+ ```
+ 
+ If the problem persists, check the logs for each service:
+ ```bash
+ docker compose logs <service-name>
+ ```
+ Replace `<service-name>` with `db`, `redis`, `redisinsight`, `backend`, or `frontend`.
 - Ensure Docker and Docker Compose are up-to-date.
 
 ## Volumes

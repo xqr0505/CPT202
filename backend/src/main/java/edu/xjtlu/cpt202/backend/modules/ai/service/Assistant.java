@@ -9,10 +9,11 @@ import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
  * @author QiranXiao
  * @since 2026/4/15
  */
-@SystemMessage(AiConstant.AI_SYSTEM_PROMPT)
 public interface Assistant {
 
+    @SystemMessage(AiConstant.AI_SYSTEM_PROMPT)
     String chat(@UserMessage String userMessage);
 
+    @SystemMessage(AiConstant.AI_SYSTEM_PROMPT)
     TokenStream streamChat(@UserMessage String userMessage);
 }

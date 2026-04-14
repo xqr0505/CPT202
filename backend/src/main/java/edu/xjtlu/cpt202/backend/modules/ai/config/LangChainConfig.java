@@ -5,6 +5,7 @@ import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.springframework.beans.factory.annotation.Value;
@@ -73,6 +74,7 @@ public class LangChainConfig {
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
-                .build();
+            .chatMemoryProvider(memoryId -> MessageWindowChatMemory.withMaxMessages(20))
+            .build();
     }
 }

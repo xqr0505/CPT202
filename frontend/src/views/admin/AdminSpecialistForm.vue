@@ -6,7 +6,7 @@
         <h2>{{ isEditMode ? 'Edit Specialist' : 'Add Specialist' }}</h2>
       </div>
       <p class="page-note">
-        {{ isEditMode ? 'Adjust profile, pricing, and activation settings in one place.' : 'Create a specialist profile with category, level, and pricing details.' }}
+        {{ isEditMode ? 'Adjust profile and pricing details in one place.' : 'Create a specialist profile with category, level, and pricing details.' }}
       </p>
     </div>
 
@@ -74,7 +74,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="Status" prop="status">
+          <el-form-item v-if="!isEditMode" label="Status" prop="status">
             <el-radio-group v-model="form.status">
               <el-radio value="Active">Active</el-radio>
               <el-radio value="Inactive">Inactive</el-radio>

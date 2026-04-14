@@ -81,7 +81,7 @@ npm run dev
 
 Frontend defaults:
 
-- URL: `http://localhost:5173`
+- URL: `http://localhost:5331`
 
 ## Quick Start Checklist
 
@@ -119,3 +119,10 @@ npm run lint
 - If the backend fails to start, check MySQL is running and the database credentials in `application-dev.yml` are correct.
 - If the frontend cannot reach the backend, confirm the backend is running on `http://localhost:8081`.
 - If dependencies are missing, run `npm install` again in `frontend/` and rerun the backend Maven command.
+
+## Run With Docker
+
+Docker (production-like + dev) instructions are in:
+
+- `README_DOCKER.md`
+

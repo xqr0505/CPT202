@@ -4,42 +4,45 @@ This guide provides instructions for setting up and running the ExpertLink Consu
 
 ## Prerequisites
 - Docker installed on your system
-- Docker Compose installed
+- Docker Compose installed (`docker compose`)
 
 ## Services Overview
-The `docker-compose.yml` file defines the following services:
+This repo provides two compose files:
+
+- `docker-compose.yml`: production-like build (builds JAR + Nginx static)
+- `docker-compose.dev.yml`: development setup (source-mounted, hot reload)
+
+### Production-like (`docker-compose.yml`)
+Defines the following services:
 
 1. **Database (MySQL)**
    - Image: `mysql:8.0`
-   - Port: `3306`
+   - Port: `9001` (host) -> `3306` (container)
    - Environment Variables:
      - `MYSQL_ROOT_PASSWORD`: Root password for MySQL
      - `MYSQL_DATABASE`: Name of the database
    - Volume: `db_data` for persistent storage
 
+2. **Redis**
+   - Image: `redis:7-alpine`
+   - Port: `9002` (host) -> `6379` (container)
+   - Purpose: booking cache + idempotency lock
+
 2. **Backend**
    - Build Context: `./backend`
    - Dockerfile: `Dockerfile`
-   - Port: `8081`
+   - Port: `8080`
    - Environment Variables:
      - `SPRING_DATASOURCE_URL`: Database connection URL
      - `SPRING_DATASOURCE_USERNAME`: Database username
      - `SPRING_DATASOURCE_PASSWORD`: Database password
-   - Depends on: `db`
-
-3. **phpMyAdmin**
-   - Image: `phpmyadmin/phpmyadmin:latest`
-   - Port: `8080`
-   - Environment Variables:
-     - `PMA_HOST`: Hostname of the database
-     - `PMA_USER`: Database username
-     - `PMA_PASSWORD`: Database password
+     - `REDIS_HOST` / `REDIS_PORT`: Redis connection
    - Depends on: `db`
 
 4. **Frontend**
    - Build Context: `./frontend`
    - Dockerfile: `Dockerfile`
-   - Port: `8082`
+   - Port: `80`
    - Depends on: `backend`
 
 ## How to Run
@@ -54,33 +57,57 @@ The `docker-compose.yml` file defines the following services:
    cp .env.example .env
    ```
    Then fill in the real values for `DB_PASSWORD`, `MAIL_PASSWORD`, and `JWT_SECRET`.
+   If you already have Redis running locally, set `REDIS_HOST` to your host address.
 
 3. Start the services:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. Access the services:
-   - **phpMyAdmin**: [http://localhost:8080](http://localhost:8080)
-   - **Frontend**: [http://localhost:8082](http://localhost:8082)
-   - **Backend**: [http://localhost:8081](http://localhost:8081)
+   - **Frontend**: `http://localhost`
+   - **Backend**: `http://localhost:8080`
+   - **Swagger UI**: `http://localhost:8080/swagger-ui/index.html`
 
 5. Stop the services:
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
+## Development (`docker-compose.dev.yml`)
+This mode mounts source code into containers for faster iteration.
+
+1. Create `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Start dev services:
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d
+   ```
+3. Access:
+   - **Frontend (Vite)**: `http://localhost:5331`
+   - **Backend (dev profile)**: `http://localhost:8081`
+   - **Swagger UI**: `http://localhost:8081/swagger-ui/index.html`
+   - **phpMyAdmin**: `http://localhost:9003`
+   - **RedisInsight**: `http://localhost:5540`
+
+
 ## Notes
-- Ensure that the ports `3306`, `8080`, `8081`, and `8082` are not in use by other applications.
-- Modify the `docker-compose.yml` file if you need to change the default configurations.
+- Ensure that the ports `80`, `5331`, `5540`, `8080`, `8081`, `9001`, `9002`, `9003` are not in use by other applications.
+- Modify the compose files if you need to change the default configurations.
 
 ## Troubleshooting
-- If you encounter issues, check the logs for each service:
-  ```bash
-  docker-compose logs <service-name>
-  ```
-  Replace `<service-name>` with `db`, `backend`, `phpmyadmin`, or `frontend`.
-
+ If you encounter "Error 1" or the page fails to load properly (such as port issues, hot reload not working, or frontend errors), you can try forcing container recreation:
+ ```bash
+ docker compose -f docker-compose.dev.yml up -d --force-recreate
+ ```
+ 
+ If the problem persists, check the logs for each service:
+ ```bash
+ docker compose logs <service-name>
+ ```
+ Replace `<service-name>` with `db`, `redis`, `redisinsight`, `backend`, or `frontend`.
 - Ensure Docker and Docker Compose are up-to-date.
 
 ## Volumes

@@ -7,6 +7,7 @@
         <router-view />
       </div>
     </main>
+    <CustomerAiChatDrawer />
 
     <AppFooter />
   </div>
@@ -16,6 +17,7 @@
 import { onMounted } from 'vue'
 import AppNavbar from './components/AppNavbar.vue'
 import AppFooter from './components/AppFooter.vue'
+import CustomerAiChatDrawer from './components/CustomerAiChatDrawer.vue'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()

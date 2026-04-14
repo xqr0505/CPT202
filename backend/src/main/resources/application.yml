@@ -36,6 +36,11 @@ expertlink:
     bucket-name: ${OSS_BUCKET:}
     base-url: ${OSS_BASE_URL:}
 
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model-name: ${OPENAI_MODEL_NAME:}
+    base-url: ${OPENAI_BASE_URL:}
 
 
 # Logging

@@ -51,6 +51,69 @@
         </div>
       </div>
 
+      <section class="settings-card settings-card--avatar">
+        <div class="settings-card__header">
+          <div>
+            <p class="settings-card__eyebrow">Avatar</p>
+            <h2 class="settings-card__title">Profile photo</h2>
+            <p class="settings-card__subtitle">
+              Keep a recognizable avatar at the top of your account settings so your profile feels
+              consistent across visits and devices.
+            </p>
+          </div>
+          <el-tag effect="plain">{{ avatarTagText }}</el-tag>
+        </div>
+
+        <div class="settings-card__body">
+          <div
+            v-if="avatarNotice"
+            class="status-banner"
+            :class="`status-banner--${avatarNotice.tone}`"
+            aria-live="polite"
+          >
+            <div class="status-banner__body">
+              <strong class="status-banner__title">{{ avatarNotice.title }}</strong>
+              <p class="status-banner__text">{{ avatarNotice.message }}</p>
+            </div>
+          </div>
+
+          <div class="avatar-panel">
+            <div class="avatar-panel__preview">
+              <el-avatar :src="currentAvatarUrl" :size="112" class="avatar-panel__image">
+                {{ avatarInitials }}
+              </el-avatar>
+
+              <div class="avatar-panel__details">
+                <strong class="avatar-panel__name">{{ avatarDisplayName }}</strong>
+                <span class="avatar-panel__status">{{ avatarSummaryText }}</span>
+                <span class="avatar-panel__meta">Current mode: {{ syncModeLabel }}</span>
+              </div>
+            </div>
+
+            <div class="avatar-panel__actions">
+              <input
+                ref="avatarInputRef"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                class="visually-hidden"
+                @change="handleAvatarFileChange"
+              />
+
+              <CustomButton
+                type="primary"
+                :loading="isUploadingAvatar"
+                :disabled="!canUploadAvatar"
+                @click="triggerAvatarSelection"
+              >
+                {{ currentAvatarUrl ? 'Change Avatar' : 'Upload Avatar' }}
+              </CustomButton>
+
+              <span class="avatar-panel__hint">{{ avatarHelperText }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <el-form
         ref="profileFormRef"
         :model="profileForm"
@@ -483,12 +546,18 @@ import {
   changeCurrentUserPassword,
   deactivateCurrentUserAccount,
   getCurrentUserProfile,
+  uploadCurrentUserAvatar,
   updateCurrentUserProfile,
   type AccountProfile,
+  type AvatarUploadResponse,
   type ChangePasswordPayload,
   type UpdateUserProfilePayload
 } from '@/api/user'
-import { getAuthToken, logout as clearAuthAndRedirect } from '@/api/request'
+import {
+  getAuthToken,
+  isAuthFailureError,
+  logout as clearAuthAndRedirect
+} from '@/api/request'
 import { useUserStore } from '@/stores/user'
 
 defineOptions({ name: 'AccountSettingsDashboard' })
@@ -541,11 +610,14 @@ const USER_PASSWORD_STORAGE_KEY = 'mock-user-password'
 const USER_THEME_STORAGE_KEY = 'mock-user-theme-preference'
 const DEFAULT_PASSWORD = 'Password123'
 const DEFAULT_COUNTRY_CODE = '+86'
+const MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024
+const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const DEFAULT_PROFILE: AccountProfile = {
   id: 1,
   fullName: 'Emma Chen',
   email: 'emma.chen@example.com',
   phoneNumber: '+86 13812345678',
+  avatarUrl: '',
   status: 'ACTIVE'
 }
 
@@ -591,9 +663,11 @@ const userStore = useUserStore()
 
 const viewState = ref<ViewState>('loading')
 const loadErrorMessage = ref('We could not load your account settings.')
+const avatarNotice = ref<SectionNotice | null>(null)
 const profileNotice = ref<SectionNotice | null>(null)
 const passwordNotice = ref<SectionNotice | null>(null)
 const deactivationNotice = ref<SectionNotice | null>(null)
+const isUploadingAvatar = ref(false)
 const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
 const isDeactivatingAccount = ref(false)
@@ -602,9 +676,11 @@ const lastProfileSavedAt = ref<Date | null>(null)
 const lastPasswordUpdatedAt = ref<Date | null>(null)
 const highlightedSection = ref<SectionKey | null>(null)
 const highlightTimer = ref<number | null>(null)
+const shouldBypassUnsavedChangesPrompt = ref(false)
 
 const profileFormRef = ref<FormInstance>()
 const passwordFormRef = ref<FormInstance>()
+const avatarInputRef = ref<HTMLInputElement>()
 
 const personalSectionRef = ref<HTMLElement>()
 const contactSectionRef = ref<HTMLElement>()
@@ -629,6 +705,37 @@ const demoModeNotice = computed(() => !hasApiSession.value)
 
 const syncModeLabel = computed(() => (hasApiSession.value ? 'Live account' : 'Local preview'))
 const currentAccountStatus = computed(() => originalProfile.value?.status ?? DEFAULT_PROFILE.status)
+const currentAvatarUrl = computed(() => originalProfile.value?.avatarUrl?.trim() || '')
+const avatarTagText = computed(() => (currentAvatarUrl.value ? 'Custom avatar' : 'Default avatar'))
+const avatarDisplayName = computed(() => {
+  return (
+    profileForm.fullName.trim() ||
+    originalProfile.value?.fullName?.trim() ||
+    userStore.userInfo?.nickname?.trim() ||
+    userStore.userInfo?.username?.trim() ||
+    'Customer account'
+  )
+})
+const avatarInitials = computed(() => buildAvatarInitials(avatarDisplayName.value))
+const avatarSummaryText = computed(() => {
+  return currentAvatarUrl.value
+    ? 'Your saved avatar is ready and will load again the next time you open this page.'
+    : 'No avatar is saved yet, so a clean default placeholder is shown for now.'
+})
+const canUploadAvatar = computed(() => {
+  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && !isUploadingAvatar.value
+})
+const avatarHelperText = computed(() => {
+  if (!hasApiSession.value) {
+    return 'Sign in with a live account session to upload and save an avatar to your profile.'
+  }
+
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    return 'Only active accounts can upload a new avatar.'
+  }
+
+  return 'JPG, PNG, or WEBP up to 2 MB. Uploading replaces the current profile photo immediately.'
+})
 
 const accountStatusLabel = computed(() => {
   switch (currentAccountStatus.value) {
@@ -916,7 +1023,7 @@ const readStoredProfile = (): AccountProfile => {
 }
 
 const writeStoredProfile = (
-  profile: UpdateUserProfilePayload & { id?: number; status?: string }
+  profile: UpdateUserProfilePayload & { id?: number; status?: string; avatarUrl?: string }
 ): void => {
   localStorage.setItem(
     USER_PROFILE_STORAGE_KEY,
@@ -925,6 +1032,10 @@ const writeStoredProfile = (
       fullName: profile.fullName.trim(),
       email: profile.email.trim(),
       phoneNumber: profile.phoneNumber.trim(),
+      avatarUrl:
+        'avatarUrl' in profile && typeof profile.avatarUrl === 'string'
+          ? profile.avatarUrl.trim()
+          : originalProfile.value?.avatarUrl ?? DEFAULT_PROFILE.avatarUrl,
       status:
         'status' in profile && typeof profile.status === 'string' && profile.status.trim()
           ? profile.status.trim().toUpperCase()
@@ -947,6 +1058,7 @@ const normalizeProfile = (profile: Partial<AccountProfile>): AccountProfile => {
     fullName: String(profile.fullName ?? '').trim(),
     email: String(profile.email ?? '').trim(),
     phoneNumber: String(profile.phoneNumber ?? '').trim(),
+    avatarUrl: typeof profile.avatarUrl === 'string' ? profile.avatarUrl.trim() : '',
     status:
       typeof profile.status === 'string' && profile.status.trim()
         ? profile.status.trim().toUpperCase()
@@ -972,6 +1084,7 @@ const buildFallbackProfile = (mode: 'demo' | 'live-fallback' = 'demo'): AccountP
       currentUser?.phoneNumber ??
       storedProfile?.phoneNumber ??
       (mode === 'demo' ? DEFAULT_PROFILE.phoneNumber : ''),
+    avatarUrl: currentUser?.avatar ?? storedProfile?.avatarUrl ?? DEFAULT_PROFILE.avatarUrl,
     status: storedProfile?.status ?? DEFAULT_PROFILE.status
   })
 }
@@ -1024,6 +1137,20 @@ const formatTimestamp = (value: Date): string => {
   }).format(value)
 }
 
+const buildAvatarInitials = (value: string): string => {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+
+  if (!parts.length) {
+    return 'U'
+  }
+
+  return parts.map(part => part.charAt(0).toUpperCase()).join('')
+}
+
 const syncUserStoreProfile = (profile: AccountProfile): void => {
   const currentUser = userStore.userInfo
   const currentRole = userStore.userRole
@@ -1038,6 +1165,7 @@ const syncUserStoreProfile = (profile: AccountProfile): void => {
       fullName: profile.fullName,
       email: profile.email,
       phoneNumber: profile.phoneNumber,
+      avatar: profile.avatarUrl,
       nickname: profile.fullName || currentUser.nickname,
       username: currentUser.username || profile.email || 'customer'
     },
@@ -1067,6 +1195,37 @@ const resetPasswordForm = (clearNotice = true): void => {
   if (clearNotice) {
     passwordNotice.value = null
   }
+}
+
+const resetProfileFormState = (): void => {
+  profileForm.fullName = ''
+  profileForm.email = ''
+  profileForm.countryCode = DEFAULT_COUNTRY_CODE
+  profileForm.localPhoneNumber = ''
+  profileFormRef.value?.clearValidate()
+}
+
+const clearSensitiveAccountState = (): void => {
+  originalProfile.value = null
+  lastProfileSavedAt.value = null
+  lastPasswordUpdatedAt.value = null
+  highlightedSection.value = null
+  avatarNotice.value = null
+  profileNotice.value = null
+  passwordNotice.value = null
+  deactivationNotice.value = null
+  resetProfileFormState()
+  resetPasswordForm(false)
+  viewState.value = 'loading'
+}
+
+const handleAuthenticationLoss = (): void => {
+  shouldBypassUnsavedChangesPrompt.value = true
+  clearSensitiveAccountState()
+  userStore.token = null
+  userStore.userInfo = null
+  userStore.userRole = null
+  clearAuthAndRedirect()
 }
 
 const validateRequiredText = (label: string) => {
@@ -1268,9 +1427,117 @@ const handleCountryCodeChange = (): void => {
   }
 }
 
+const resetAvatarInput = (): void => {
+  if (avatarInputRef.value) {
+    avatarInputRef.value.value = ''
+  }
+}
+
+const triggerAvatarSelection = (): void => {
+  avatarNotice.value = null
+  avatarInputRef.value?.click()
+}
+
+const validateAvatarSelection = (file: File): string | null => {
+  const normalizedType = file.type.trim().toLowerCase()
+
+  if (!ALLOWED_AVATAR_MIME_TYPES.includes(normalizedType)) {
+    return 'Only JPG, PNG, and WEBP image files are supported.'
+  }
+
+  if (file.size > MAX_AVATAR_FILE_SIZE_BYTES) {
+    return 'Avatar image must be 2 MB or smaller.'
+  }
+
+  return null
+}
+
+const handleAvatarFileChange = async (event: Event): Promise<void> => {
+  const target = event.target as HTMLInputElement | null
+  const selectedFile = target?.files?.[0]
+
+  if (!selectedFile) {
+    return
+  }
+
+  avatarNotice.value = null
+
+  const validationMessage = validateAvatarSelection(selectedFile)
+  if (validationMessage) {
+    avatarNotice.value = {
+      tone: 'error',
+      title: 'Avatar upload rejected',
+      message: validationMessage
+    }
+    resetAvatarInput()
+    return
+  }
+
+  if (!hasApiSession.value) {
+    avatarNotice.value = {
+      tone: 'info',
+      title: 'Live session required',
+      message: 'Sign in with a live account session before uploading a profile avatar.'
+    }
+    resetAvatarInput()
+    return
+  }
+
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    avatarNotice.value = {
+      tone: 'warning',
+      title: 'Avatar updates unavailable',
+      message: 'Only active accounts can upload a new avatar.'
+    }
+    resetAvatarInput()
+    return
+  }
+
+  isUploadingAvatar.value = true
+
+  try {
+    const response: AvatarUploadResponse = await uploadCurrentUserAvatar(selectedFile)
+
+    if (!response.avatarUrl) {
+      throw new Error('Avatar upload completed without a usable image URL.')
+    }
+
+    const updatedProfile = normalizeProfile({
+      ...(originalProfile.value ?? DEFAULT_PROFILE),
+      avatarUrl: response.avatarUrl
+    })
+
+    originalProfile.value = updatedProfile
+    writeStoredProfile(updatedProfile)
+    syncUserStoreProfile(updatedProfile)
+    lastProfileSavedAt.value = new Date()
+
+    avatarNotice.value = {
+      tone: 'success',
+      title: 'Avatar updated successfully',
+      message: 'Your new avatar was uploaded and saved to your profile.'
+    }
+  } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
+    avatarNotice.value = {
+      tone: 'error',
+      title: 'Unable to upload avatar',
+      message: getErrorMessage(error, 'Unable to upload your avatar right now.')
+    }
+  } finally {
+    isUploadingAvatar.value = false
+    resetAvatarInput()
+  }
+}
+
 const loadDashboard = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load your account settings.'
+  avatarNotice.value = null
   profileNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
@@ -1283,6 +1550,11 @@ const loadDashboard = async (): Promise<void> => {
         const fetchedProfile = await getCurrentUserProfile()
         normalizedProfile = normalizeProfile(fetchedProfile)
       } catch (error) {
+        if (isAuthFailureError(error)) {
+          handleAuthenticationLoss()
+          return
+        }
+
         profileNotice.value = {
           tone: 'warning',
           title: 'Live profile data is temporarily unavailable',
@@ -1303,6 +1575,11 @@ const loadDashboard = async (): Promise<void> => {
       await scrollToSection(props.initialSection, 'auto')
     }
   } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
     loadErrorMessage.value = getErrorMessage(
       error,
       'We could not load your account settings.'
@@ -1356,6 +1633,7 @@ const saveProfile = async (): Promise<void> => {
     const savedProfile = normalizeProfile({
       id: originalProfile.value.id,
       status: originalProfile.value.status,
+      avatarUrl: originalProfile.value.avatarUrl,
       ...payload
     })
 
@@ -1372,6 +1650,11 @@ const saveProfile = async (): Promise<void> => {
         : 'Your profile changes were saved locally for this demo session.'
     }
   } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
     profileNotice.value = {
       tone: 'error',
       title: 'Unable to save profile changes',
@@ -1444,8 +1727,14 @@ const deactivateAccount = async (): Promise<void> => {
     writeStoredProfile(deactivatedProfile)
 
     ElMessage.success('Account deactivated successfully. Redirecting to login.')
+    shouldBypassUnsavedChangesPrompt.value = true
     clearAuthAndRedirect()
   } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
     deactivationNotice.value = {
       tone: 'error',
       title: 'Unable to deactivate account',
@@ -1485,7 +1774,12 @@ const savePassword = async (): Promise<void> => {
 
     if (hasApiSession.value) {
       await changeCurrentUserPassword(payload)
-    } else if (payload.currentPassword !== readStoredPassword()) {
+      ElMessage.success('Password updated successfully. Please log in again.')
+      handleAuthenticationLoss()
+      return
+    }
+
+    if (payload.currentPassword !== readStoredPassword()) {
       throw new Error('Current password is incorrect.')
     }
 
@@ -1496,11 +1790,14 @@ const savePassword = async (): Promise<void> => {
     passwordNotice.value = {
       tone: 'success',
       title: 'Password updated successfully',
-      message: hasApiSession.value
-        ? 'Your password was updated using the existing change-password endpoint.'
-        : 'Your demo password was updated locally.'
+      message: 'Your demo password was updated locally.'
     }
   } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
     passwordNotice.value = {
       tone: 'error',
       title: 'Unable to update password',
@@ -1534,6 +1831,10 @@ watch(
 )
 
 onBeforeRouteLeave(async () => {
+  if (shouldBypassUnsavedChangesPrompt.value) {
+    return true
+  }
+
   if (!hasUnsavedProfileChanges.value) {
     return true
   }
@@ -1688,6 +1989,12 @@ onBeforeUnmount(() => {
     var(--color-bg-surface);
 }
 
+.settings-card--avatar {
+  background:
+    linear-gradient(180deg, rgba(51, 144, 251, 0.08), transparent 54%),
+    var(--color-bg-surface);
+}
+
 .settings-card--actions {
   background:
     linear-gradient(180deg, rgba(211, 155, 46, 0.06), transparent 48%),
@@ -1730,6 +2037,59 @@ onBeforeUnmount(() => {
 
 .field-grid--single {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.avatar-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid rgba(216, 218, 215, 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.avatar-panel__preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.avatar-panel__image {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(51, 144, 251, 0.18), rgba(51, 144, 251, 0.34));
+  color: var(--color-primary);
+  font-size: 1.85rem;
+  font-weight: 800;
+}
+
+.avatar-panel__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.avatar-panel__name {
+  color: var(--color-text-primary);
+  font-size: 1.15rem;
+}
+
+.avatar-panel__status,
+.avatar-panel__meta,
+.avatar-panel__hint {
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.avatar-panel__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 320px;
 }
 
 .section-note,
@@ -2100,6 +2460,18 @@ onBeforeUnmount(() => {
   width: 72%;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 :deep(.el-progress-bar__outer) {
   background: rgba(255, 255, 255, 0.58);
 }
@@ -2130,6 +2502,7 @@ onBeforeUnmount(() => {
   }
 
   .settings-card__header,
+  .avatar-panel,
   .form-footer,
   .strength-panel__header,
   .danger-item {
@@ -2151,6 +2524,15 @@ onBeforeUnmount(() => {
   .state-actions,
   .appearance-actions {
     width: 100%;
+  }
+
+  .avatar-panel__preview,
+  .avatar-panel__actions {
+    width: 100%;
+  }
+
+  .avatar-panel__actions {
+    max-width: none;
   }
 
   .danger-item {

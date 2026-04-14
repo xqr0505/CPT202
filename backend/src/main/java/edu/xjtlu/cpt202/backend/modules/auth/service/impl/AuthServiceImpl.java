@@ -481,6 +481,7 @@ public class AuthServiceImpl implements AuthService {
         
         // 6. 更新密码
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(LocalDateTime.now());
         // 可选：重置失败计数和锁定状态（因为用户成功重置密码，应解除锁定）
         user.setLoginFailCount(0);
         user.setLockTime(null);

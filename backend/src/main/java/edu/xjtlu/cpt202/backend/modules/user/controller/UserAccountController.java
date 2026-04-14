@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.user.controller;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.validation.Valid;
@@ -12,7 +13,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/user")
@@ -30,6 +33,11 @@ public class UserAccountController {
     public Result<Void> updateProfile(@Valid @RequestBody UpdateUserProfileDTO request) {
         userAccountService.updateCurrentUserProfile(request);
         return Result.success();
+    }
+
+    @PostMapping("/avatar")
+    public Result<UserAvatarUploadVO> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return Result.success(userAccountService.uploadCurrentUserAvatar(file));
     }
 
     @PostMapping("/change-password")

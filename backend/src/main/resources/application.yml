@@ -22,6 +22,19 @@ spring:
           starttls:
             enable: true   # 开启STARTTLS
             required: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:5MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:5MB}
+
+expertlink:
+  oss:
+    endpoint: ${OSS_ENDPOINT:}
+    region: ${OSS_REGION:}
+    access-key-id: ${OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${OSS_BUCKET:}
+    base-url: ${OSS_BASE_URL:}
 
 
 

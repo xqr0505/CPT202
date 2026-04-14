@@ -23,15 +23,15 @@
       </el-menu>
 
       <div class="navbar-right">
-        <el-dropdown trigger="click" @command="handleDropdownCommand">
+        <el-dropdown trigger="click">
           <span class="user-trigger" :class="{ 'is-active': route.path.includes('/profile') }">
             <el-avatar :src="avatarSrc" :size="34">{{ userInitial }}</el-avatar>
             <span class="user-name desktop-only">{{ displayName }}</span>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="profile">Profile</el-dropdown-item>
-              <el-dropdown-item command="logout">Logout</el-dropdown-item>
+              <el-dropdown-item @click="navigateToProfile">Profile</el-dropdown-item>
+              <el-dropdown-item @click="handleLogout">Logout</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -65,12 +65,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import {
+  NavigationFailureType,
+  isNavigationFailure,
+  useRouter,
+  useRoute
+} from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { USER_ROLES } from '@/constants/roles'
 import { logout as clearAndRedirect } from '@/api/request'
-
-type DropdownCommand = 'profile' | 'logout'
 
 const router = useRouter()
 const route = useRoute()
@@ -135,12 +138,16 @@ const goHome = (): void => {
   router.push(fallback)
 }
 
-const handleDropdownCommand = async (command: DropdownCommand): Promise<void> => {
-  if (command === 'profile') {
-    await router.push('/customer/profile')
-    return
-  }
+const navigateToProfile = async (): Promise<void> => {
+  const failure = await router.push({ name: 'CustomerProfile' })
 
+  if (failure && !isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+    console.error('Failed to navigate to customer profile', failure)
+    await router.push('/customer/profile').catch(() => null)
+  }
+}
+
+const handleLogout = (): void => {
   clearAndRedirect()
 }
 </script>

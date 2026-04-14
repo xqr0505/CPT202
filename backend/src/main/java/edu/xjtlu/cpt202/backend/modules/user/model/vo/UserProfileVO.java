@@ -9,5 +9,6 @@ public class UserProfileVO {
     private String fullName;
     private String email;
     private String phoneNumber;
+    private String avatarUrl;
     private String status;
 }

@@ -7,6 +7,7 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.booking.constant.DashboardConstant;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
@@ -14,10 +15,13 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
@@ -34,7 +38,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -150,6 +156,42 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return summary;
     }
 
+    @Override
+    public DashboardStatisticsVO getDashboardStatistics(DashboardQueryDTO queryDTO) {
+        validateDashboardDateRange(queryDTO);
+
+        Long customerId = SecurityUtils.getCurrentUserId();
+        String completedStatus = BookingStatusEnum.COMPLETED.name();
+        LocalDate startDate = queryDTO == null ? null : queryDTO.getStartDate();
+        LocalDate endDate = queryDTO == null ? null : queryDTO.getEndDate();
+
+        DashboardStatisticsVO statistics = Optional.ofNullable(
+                        bookingMapper.selectDashboardSummary(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(DashboardStatisticsVO::new);
+
+        List<DashboardStatisticsVO.ConsultedExpertVO> consultedExperts = Optional.ofNullable(
+                        bookingMapper.selectDashboardConsultedExperts(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(ArrayList::new);
+
+        List<DashboardStatisticsVO.TrendChartVO> trendData = loadTrendData(customerId, completedStatus, startDate, endDate);
+        List<DashboardStatisticsVO.CategoryChartVO> categoryData = Optional.ofNullable(
+                        bookingMapper.selectDashboardCategoryData(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(ArrayList::new);
+        List<DashboardStatisticsVO.HabitChartVO> habitData = buildHabitData(customerId, completedStatus, startDate, endDate);
+
+        statistics.setTotalCompletedAppointments(Optional.ofNullable(statistics.getTotalCompletedAppointments()).orElse(CommonConstant.NO));
+        statistics.setTotalAmountSpent(Optional.ofNullable(statistics.getTotalAmountSpent()).orElse(BigDecimal.ZERO));
+        statistics.setTotalConsultationHours(Optional.ofNullable(statistics.getTotalConsultationHours()).orElse((double) CommonConstant.NO));
+        statistics.setConsultedExperts(consultedExperts);
+        statistics.setTrendData(trendData);
+        statistics.setCategoryData(categoryData);
+        statistics.setHabitData(habitData);
+        return statistics;
+    }
+
     public BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId) {
         BookingDetailVO detail = bookingMapper.selectBookingDetailById(bookingId)
                 .orElseThrow(() -> {
@@ -197,5 +239,65 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (queryDTO.getStartDate().isAfter(queryDTO.getEndDate())) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR);
         }
+    }
+
+    private void validateDashboardDateRange(DashboardQueryDTO queryDTO) {
+        if (queryDTO == null || queryDTO.getStartDate() == null || queryDTO.getEndDate() == null) {
+            return;
+        }
+        if (queryDTO.getStartDate().isAfter(queryDTO.getEndDate())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private List<DashboardStatisticsVO.TrendChartVO> loadTrendData(Long customerId, String completedStatus, LocalDate startDate, LocalDate endDate) {
+        if (shouldUseDailyTrend(startDate, endDate)) {
+            return Optional.ofNullable(
+                            bookingMapper.selectDashboardTrendByDay(customerId, completedStatus, startDate, endDate)
+                    )
+                    .orElseGet(ArrayList::new);
+        }
+        return Optional.ofNullable(
+                        bookingMapper.selectDashboardTrendByMonth(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(ArrayList::new);
+    }
+
+    private boolean shouldUseDailyTrend(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            return false;
+        }
+        long daySpan = endDate.toEpochDay() - startDate.toEpochDay();
+        return daySpan <= DashboardConstant.TREND_DAILY_THRESHOLD_DAYS;
+    }
+
+    private List<DashboardStatisticsVO.HabitChartVO> buildHabitData(Long customerId, String completedStatus, LocalDate startDate, LocalDate endDate) {
+        List<DashboardHabitRawVO> rawData = Optional.ofNullable(
+                        bookingMapper.selectDashboardHabitData(customerId, completedStatus, startDate, endDate)
+                )
+                .orElseGet(ArrayList::new);
+
+        Map<Integer, Integer> countByDayOfWeek = new HashMap<>();
+        rawData.forEach(item -> {
+            if (item.getDayOfWeek() != null) {
+                countByDayOfWeek.put(item.getDayOfWeek(), Optional.ofNullable(item.getCount()).orElse(CommonConstant.NO));
+            }
+        });
+
+        List<DashboardStatisticsVO.HabitChartVO> result = new ArrayList<>();
+        for (int index = CommonConstant.NO; index < DashboardConstant.WEEKDAY_ORDER.size(); index++) {
+            DashboardStatisticsVO.HabitChartVO habitChartVO = new DashboardStatisticsVO.HabitChartVO();
+            habitChartVO.setDayOfWeek(DashboardConstant.WEEKDAY_ORDER.get(index));
+            habitChartVO.setCount(countByDayOfWeek.getOrDefault(toMysqlDayOfWeek(index), CommonConstant.NO));
+            result.add(habitChartVO);
+        }
+        return result;
+    }
+
+    private int toMysqlDayOfWeek(int weekdayOrderIndex) {
+        if (weekdayOrderIndex == DashboardConstant.WEEKDAY_ORDER.size() - 1) {
+            return 1;
+        }
+        return weekdayOrderIndex + 2;
     }
 }

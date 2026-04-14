@@ -82,13 +82,16 @@ public class BookingServiceImplTest {
         // Arrange
         Long customerId = 1L;
         int limit = 3;
-        LocalDateTime now = LocalDate.now().atTime(10, 0, 0);
+        LocalDate today = LocalDate.now();
+        LocalDateTime firstBookingTime = today.atTime(10, 0);
+        LocalDateTime secondBookingTime = today.atTime(14, 0);
+        LocalDateTime thirdBookingTime = today.plusDays(1).atTime(10, 0);
         List<UpcomingBookingVO> mockResponse = List.of(
                 UpcomingBookingVO.builder()
                         .id(1L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(now)
+                        .startTime(firstBookingTime)
                         .today(null)
                         .status("CONFIRMED")
                         .build(),
@@ -96,7 +99,7 @@ public class BookingServiceImplTest {
                         .id(2L)
                         .specialistName("Dr. Adam Smith")
                         .serviceName("Career Planning")
-                        .startTime(now.plusHours(4))
+                        .startTime(secondBookingTime)
                         .today(null)
                         .status("CONFIRMED")
                         .build(),
@@ -104,7 +107,7 @@ public class BookingServiceImplTest {
                         .id(3L)
                         .specialistName("Schedule Dev Specialist")
                         .serviceName("Counseling")
-                        .startTime(now.plusDays(1))
+                        .startTime(thirdBookingTime)
                         .today(null)
                         .status("CONFIRMED")
                         .build()
@@ -120,17 +123,17 @@ public class BookingServiceImplTest {
         assertEquals(3, result.size());
         assertEquals("Schedule Dev Specialist", result.get(0).getSpecialistName());
         assertEquals("Counseling", result.get(0).getServiceName());
-        assertEquals(now, result.get(0).getStartTime());
+        assertEquals(firstBookingTime, result.get(0).getStartTime());
         assertTrue(result.get(0).getToday());
         assertEquals("CONFIRMED", result.get(0).getStatus());
         assertEquals("Dr. Adam Smith", result.get(1).getSpecialistName());
         assertEquals("Career Planning", result.get(1).getServiceName());
-        assertEquals(now.plusHours(4), result.get(1).getStartTime());
+        assertEquals(secondBookingTime, result.get(1).getStartTime());
         assertTrue(result.get(1).getToday());
         assertEquals("CONFIRMED", result.get(1).getStatus());
         assertEquals("Schedule Dev Specialist", result.get(2).getSpecialistName());
         assertEquals("Counseling", result.get(2).getServiceName());
-        assertEquals(now.plusDays(1), result.get(2).getStartTime());
+        assertEquals(thirdBookingTime, result.get(2).getStartTime());
         assertFalse(result.get(2).getToday());
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }

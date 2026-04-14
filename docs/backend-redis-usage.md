@@ -1,78 +1,95 @@
 # Redis Usage in the Backend (common package)
 
-This document explains how Redis is configured and used in the backend, especially with the new configuration in `common/config/RedisConfig.java`.
+This document provides a clear, logical overview of how Redis is configured and used in the backend, focusing on configuration, key conventions, and usage patterns.
 
-## 1. Redis Configuration Overview
+---
 
-The backend uses Spring Data Redis for caching and distributed data operations. The configuration is centralized in:
+## 1. Redis Configuration & Templates
 
-- `backend/src/main/java/edu/xjtlu/cpt202/backend/common/config/RedisConfig.java`
+**Location:** `common/config/RedisConfig.java`
 
-This configuration provides two main `RedisTemplate` beans:
+- Provides two main `RedisTemplate` beans:
+  - `redisTemplate` — for simple String key-value pairs
+  - `jsonRedisTemplate` — for storing/retrieving complex objects as JSON
+- Uses a custom `ObjectMapper` for JSON serialization (supports Java 8 date/time, disables timestamps, enables polymorphic types)
 
-- `redisTemplate` (String key, String value)
-- `jsonRedisTemplate` (String key, Object value, JSON serialization)
-
-### Key Points
-- **String RedisTemplate**: For simple string key-value operations.
-- **JSON RedisTemplate**: For storing complex objects as JSON, with type information preserved.
-- **Custom ObjectMapper**: Ensures compatibility with Java 8 date/time types and disables timestamp serialization.
-
-## 2. Bean Details & Usage
-
-### 2.1. String RedisTemplate
-
+### 1.1. String RedisTemplate
 ```java
 @Autowired
 private RedisTemplate<String, String> redisTemplate;
-
-// Example usage
 redisTemplate.opsForValue().set("key", "value");
 String value = redisTemplate.opsForValue().get("key");
 ```
 
-### 2.2. JSON RedisTemplate
-
+### 1.2. JSON RedisTemplate
 ```java
 @Autowired
 @Qualifier("jsonRedisTemplate")
 private RedisTemplate<String, Object> jsonRedisTemplate;
-
-// Example usage
 User user = new User("alice", 20);
 jsonRedisTemplate.opsForValue().set("user:alice", user);
 User cached = (User) jsonRedisTemplate.opsForValue().get("user:alice");
 ```
 
-- The `jsonRedisTemplate` uses Jackson for serialization, supporting polymorphic types and Java 8 date/time.
-- Type information is included in the JSON, so you can cache and retrieve any object.
+---
 
-## 3. Customization Details
+## 2. Redis Key Naming & Utilities
 
-- **Jackson2JsonRedisSerializer** is configured with a custom `ObjectMapper` that:
-  - Enables default typing for non-final classes (for polymorphic deserialization)
-  - Registers `JavaTimeModule` for Java 8 date/time support
-  - Disables writing dates as timestamps
+### 2.1. Key Constants
+**Location:** `common/constant/RedisCacheConstant.java`
 
-## 4. When to Use Which Template?
-- Use `redisTemplate` for simple string values (counters, tokens, etc).
-- Use `jsonRedisTemplate` for caching objects, lists, or maps.
-
-## 5. Example: Caching a DTO
+- Defines all key namespace prefixes and TTLs
+- Examples:
+  - `KEY_SEPARATOR` (usually `:`)
+  - `BOOKING_CACHE_PREFIX`, `CUSTOMER_CACHE_PREFIX`, etc.
+  - `BOOKING_LIST_CACHE_TTL_SECONDS`, `BOOKING_DETAIL_CACHE_TTL_SECONDS`
 
 ```java
-// Save a DTO
+String key = RedisCacheConstant.BOOKING_CACHE_PREFIX + RedisCacheConstant.KEY_SEPARATOR + "123";
+long ttl = RedisCacheConstant.BOOKING_DETAIL_CACHE_TTL_SECONDS;
+```
+
+### 2.2. Key Builder Utilities
+**Location:** `common/utils/RedisKeyUtils.java`
+
+- Provides static methods to build standardized keys:
+  - `buildCustomerBookingListKey(Long customerId, Integer pageNo, Integer pageSize, String tab, String status)`
+  - `buildCustomerBookingDetailKey(Long customerId, Long bookingId)`
+  - `buildCustomerBookingKeyPattern(Long customerId)`
+
+```java
+String listKey = RedisKeyUtils.buildCustomerBookingListKey(1L, 1, 10, "active", "confirmed");
+// "booking:customer:1:list:1:10:active:confirmed"
+String detailKey = RedisKeyUtils.buildCustomerBookingDetailKey(1L, 123L);
+// "booking:customer:1:detail:123"
+String pattern = RedisKeyUtils.buildCustomerBookingKeyPattern(1L);
+// "booking:customer:1:*"
+```
+
+---
+
+## 3. Usage Examples
+
+### 3.1. Caching a DTO
+```java
 BookingDTO booking = ...;
 jsonRedisTemplate.opsForValue().set("booking:123", booking);
-
-// Retrieve
 BookingDTO cached = (BookingDTO) jsonRedisTemplate.opsForValue().get("booking:123");
 ```
 
-## 6. Notes
+### 3.2. Setting Expiry
+```java
+redisTemplate.expire("some:key", RedisCacheConstant.BOOKING_LIST_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+```
+
+---
+
+## 4. Best Practices & Notes
+- Always use the provided key constants and utility methods for key construction.
+- Use `redisTemplate` for simple string values, `jsonRedisTemplate` for objects.
 - Both templates are auto-configured and can be injected anywhere in the backend.
 - For advanced Redis features (pub/sub, transactions, etc.), refer to Spring Data Redis documentation.
 
 ---
 
-For more details, see the source code in `common/config/RedisConfig.java`.
+For more details, see the source code in the `common` package.

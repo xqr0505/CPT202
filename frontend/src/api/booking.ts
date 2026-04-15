@@ -114,7 +114,7 @@ export interface BookingDetail {
 
 export interface BookingCancelQuote {
   allowed: boolean;
-  reasonCode?: string;
+  reasonCode?: string; //only used when allowed is false
   message?: string;
   policyType?: string;
   bookingStartAt?: string;
@@ -129,6 +129,31 @@ export interface BookingCancelConfirm {
   policyType?: string;
   refundAmount?: number;
   penaltyAmount?: number;
+  message?: string;
+}
+
+export interface BookingRescheduleQuote {
+  allowed: boolean;
+  reasonCode?: string;
+  message?: string;
+  policyType?: string;
+  bookingStartAt?: string;
+  originalPrice?: number;
+  newPrice?: number;
+  priceDifference?: number;
+  penaltyAmount?: number;
+  refundAmount?: number;
+  payableAmount?: number;
+}
+
+export interface BookingRescheduleConfirm {
+  bookingId: number;
+  bookingStatus: string;
+  policyType?: string;
+  priceDifference?: number;
+  penaltyAmount?: number;
+  refundAmount?: number;
+  payableAmount?: number;
   message?: string;
 }
 
@@ -171,4 +196,12 @@ export const getBookingCancelQuote = (bookingId: number | string) => {
 
 export const confirmBookingCancel = (bookingId: number | string) => {
   return request.post<any, BookingCancelConfirm>(`/api/v1/customer/bookings/${bookingId}/cancel/confirm`);
+}
+
+export const getBookingRescheduleQuote = (bookingId: number | string, newSlotId: number | string) => {
+  return request.post<any, BookingRescheduleQuote>(`/api/v1/customer/bookings/${bookingId}/reschedule/quote`, null, {params: { newSlotId },} as any);
+}
+
+export const confirmBookingReschedule = (bookingId: number | string, newSlotId: number | string) => {
+  return request.post<any, BookingRescheduleConfirm>(`/api/v1/customer/bookings/${bookingId}/reschedule/confirm`, null, {params: { newSlotId },} as any);
 }

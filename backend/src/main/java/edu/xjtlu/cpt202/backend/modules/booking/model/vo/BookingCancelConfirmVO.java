@@ -8,9 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/**
- * Customer cancellation confirm result.
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,7 +21,7 @@ public class BookingCancelConfirmVO {
     @Schema(description = "new booking status", example = "CANCELLED")
     private String bookingStatus;
 
-    @Schema(description = "applied policy type", example = "FULL_REFUND")
+    @Schema(description = "policy type", example = "FULL_REFUND")
     private String policyType;
 
     @Schema(description = "refund amount")

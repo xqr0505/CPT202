@@ -9,37 +9,35 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 客户取消前的试算结果（不写库，供确认弹窗展示）。
- */
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "客户取消预约试算")
+@Schema(description = "Customer cancellation and reschedule policy calculation")
 public class BookingCancelQuoteVO {
 
-    @Schema(description = "是否允许进入确认取消流程")
+    @Schema(description = "whether to allow entering the confirmation cancellation process")
     private boolean allowed;
 
-    @Schema(description = "不可取消时的机器可读原因", example = "TOO_CLOSE_TO_START")
+    @Schema(description = "reason code", example = "TOO_CLOSE_TO_START")
     private String reasonCode;
 
-    @Schema(description = "前端展示用说明")
+    @Schema(description = "message for display")
     private String message;
 
-    @Schema(description = "命中的规则档", example = "FULL_REFUND")
+    @Schema(description = "policy type", example = "FULL_REFUND")
     private String policyType;
 
-    @Schema(description = "预约时段开始时间")
+    @Schema(description = "booking start time")
     private LocalDateTime bookingStartAt;
 
-    @Schema(description = "作为计算基数的订单金额（咨询费）")
+    @Schema(description = "order amount")
     private BigDecimal orderAmount;
 
-    @Schema(description = "预估可退金额")
+    @Schema(description = "estimated refund amount")
     private BigDecimal refundAmount;
 
-    @Schema(description = "预估违约金")
+    @Schema(description = "estimated penalty amount")
     private BigDecimal penaltyAmount;
 }

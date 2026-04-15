@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
@@ -96,6 +97,17 @@ public class CustomerBookingController {
             @RequestParam("newSlotId") Long newSlotId) {
         Long currentCustomerId = SecurityUtils.getCurrentUserId();
         BookingRescheduleQuoteVO result = bookingService.customerRescheduleQuote(bookingId, newSlotId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/reschedule/confirm")
+    @Operation(summary = "Confirm customer reschedule", description = "Confirm customer reschedule for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingRescheduleConfirmVO> customerRescheduleConfirm(
+            @PathVariable("id") Long bookingId,
+            @RequestParam("newSlotId") Long newSlotId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingRescheduleConfirmVO result = bookingService.customerRescheduleConfirm(bookingId, newSlotId, currentCustomerId);
         return Result.success(result);
     }
 

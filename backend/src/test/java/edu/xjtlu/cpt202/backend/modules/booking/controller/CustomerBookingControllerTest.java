@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
@@ -146,6 +147,30 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.data.bookingId").value(55))
                 .andExpect(jsonPath("$.data.bookingStatus").value("CANCELLED"))
                 .andExpect(jsonPath("$.data.refundAmount").value(100.0));
+    }
+
+    @Test
+    @WithMockUser(roles = "CUSTOMER")
+    public void customerRescheduleConfirm_Success() throws Exception {
+        BookingRescheduleConfirmVO vo = BookingRescheduleConfirmVO.builder()
+                .bookingId(55L)
+                .bookingStatus("PENDING")
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, no reschedule penalty")
+                .priceDifference(new BigDecimal("20.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .refundAmount(new BigDecimal("0.00"))
+                .payableAmount(new BigDecimal("20.00"))
+                .build();
+        when(bookingService.customerRescheduleConfirm(eq(55L), eq(77L), anyLong())).thenReturn(vo);
+
+        mockMvc.perform(post("/api/v1/customer/bookings/55/reschedule/confirm")
+                        .param("newSlotId", "77"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.bookingId").value(55))
+                .andExpect(jsonPath("$.data.bookingStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.payableAmount").value(20.0));
     }
 
     private Authentication customerAuthentication() {

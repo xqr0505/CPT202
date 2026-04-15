@@ -9,10 +9,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Customer reschedule quote: price snapshot vs current specialist fee, plus time-window penalty.
- * Per-slot price is not modeled; new price comes from current {@code specialist_profiles.consultation_fee}.
- */
+
 @Data
 @Builder
 @NoArgsConstructor

@@ -11,6 +11,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/15
+ *
+ */
 class LangChainConfigTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()

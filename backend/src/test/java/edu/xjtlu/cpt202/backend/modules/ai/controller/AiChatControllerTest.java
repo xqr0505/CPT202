@@ -46,6 +46,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/15
+ *
+ */
 @SpringBootTest(classes = AiChatControllerTest.TestApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

@@ -16,6 +16,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/15
+ *
+ */
 class AiChatServiceImplTest {
 
     @AfterEach

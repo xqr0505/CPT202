@@ -77,7 +77,6 @@ const drawerVisible = computed<boolean>({
 })
 </script>
 
-<!-- 第一部分：作用于你自定义组件内部的范围样式 -->
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
 
@@ -122,12 +121,12 @@ const drawerVisible = computed<boolean>({
   display: flex;
   flex-direction: column;
   gap: var(--ai-chat-panel-gap);
-  overflow: hidden; /* 交给内部的 AiMessageList 去独立滚动 */
+  overflow: hidden;
   padding-bottom: var(--space-4);
 }
 
 .ai-chat-drawer__footer {
-  flex-shrink: 0; /* 拒绝被压缩，自然固定在底部 */
+  flex-shrink: 0;
   position: relative;
   z-index: 10;
   padding-top: var(--space-4);
@@ -136,7 +135,6 @@ const drawerVisible = computed<boolean>({
   box-shadow: 0 -12px 24px var(--color-bg-primary);
 }
 
-/* 这个保留，因为 AiMessageList 是组件内部的内容，没有脱离作用域 */
 :deep(.ai-chat-drawer__message-area .ai-message-list) {
   flex: 1;
   min-height: 0;
@@ -150,9 +148,8 @@ const drawerVisible = computed<boolean>({
 }
 </style>
 
-<!-- 第二部分：针对 Element Plus 弹窗的全局样式覆盖（不加 scoped） -->
+
 <style lang="scss">
-/* 注意：这里通过 .ai-chat-drawer 这个特有 class 来限制范围，绝不会污染系统其他抽屉 */
 .el-drawer.ai-chat-drawer {
   display: flex;
   flex-direction: column;
@@ -171,6 +168,6 @@ const drawerVisible = computed<boolean>({
   padding: var(--ai-chat-body-padding, 20px);
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* 重点：禁用 Element 自带的滚动条，防止双滚动条冲突 */
+  overflow: hidden;
 }
 </style>

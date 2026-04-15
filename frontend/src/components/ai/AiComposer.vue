@@ -61,7 +61,7 @@ const handleInput = (value: string): void => {
   padding: var(--ai-chat-composer-padding);
   background: var(--ai-chat-composer-background);
   border: 1px solid var(--ai-chat-toolbar-border-color);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
 }
 
 .ai-composer__actions {
@@ -73,13 +73,13 @@ const handleInput = (value: string): void => {
   min-height: 110px;
   padding: var(--space-3);
   background: transparent;
-  border-color: var(--color-border);
+  border: none;
   color: var(--color-text-primary);
   box-shadow: none;
 }
 
 :deep(.el-textarea__inner:focus) {
-  border-color: var(--color-primary);
+  box-shadow: none;
 }
 
 :deep(.el-input__count) {

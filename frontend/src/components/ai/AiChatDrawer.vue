@@ -23,21 +23,26 @@
     </template>
 
     <div class="ai-chat-drawer__body">
-      <el-alert
-        v-if="aiChatStore.errorMessage"
-        :title="aiChatStore.errorMessage"
-        type="error"
-        :closable="false"
-      />
+      <div class="ai-chat-drawer__message-area">
+        <el-alert
+          v-if="aiChatStore.errorMessage"
+          :title="aiChatStore.errorMessage"
+          type="error"
+          :closable="false"
+        />
 
-      <AiMessageList :messages="aiChatStore.messages" />
-      <AiComposer
-        :model-value="aiChatStore.inputMessage"
-        :loading="aiChatStore.isLoading"
-        @update:model-value="aiChatStore.setInput"
-        @focus="aiChatStore.resetError"
-        @submit="aiChatStore.sendMessage"
-      />
+        <AiMessageList :messages="aiChatStore.messages" />
+      </div>
+
+      <div class="ai-chat-drawer__footer">
+        <AiComposer
+          :model-value="aiChatStore.inputMessage"
+          :loading="aiChatStore.isLoading"
+          @update:model-value="aiChatStore.setInput"
+          @focus="aiChatStore.resetError"
+          @submit="aiChatStore.sendMessage"
+        />
+      </div>
     </div>
   </el-drawer>
 </template>
@@ -72,6 +77,7 @@ const drawerVisible = computed<boolean>({
 })
 </script>
 
+<!-- 第一部分：作用于你自定义组件内部的范围样式 -->
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
 
@@ -102,20 +108,38 @@ const drawerVisible = computed<boolean>({
 }
 
 .ai-chat-drawer__body {
-  height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-chat-drawer__message-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: var(--ai-chat-panel-gap);
-}
-
-:deep(.ai-chat-drawer .el-drawer__header) {
-  margin-bottom: 0;
+  overflow: hidden; /* 交给内部的 AiMessageList 去独立滚动 */
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--ai-chat-toolbar-border-color);
 }
 
-:deep(.ai-chat-drawer .el-drawer__body) {
-  padding: var(--ai-chat-body-padding);
+.ai-chat-drawer__footer {
+  flex-shrink: 0; /* 拒绝被压缩，自然固定在底部 */
+  position: relative;
+  z-index: 10;
+  padding-top: var(--space-4);
+  background-color: var(--color-bg-primary);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -12px 24px var(--color-bg-primary);
+}
+
+/* 这个保留，因为 AiMessageList 是组件内部的内容，没有脱离作用域 */
+:deep(.ai-chat-drawer__message-area .ai-message-list) {
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 640px) {
@@ -123,5 +147,30 @@ const drawerVisible = computed<boolean>({
     align-items: flex-start;
     flex-direction: column;
   }
+}
+</style>
+
+<!-- 第二部分：针对 Element Plus 弹窗的全局样式覆盖（不加 scoped） -->
+<style lang="scss">
+/* 注意：这里通过 .ai-chat-drawer 这个特有 class 来限制范围，绝不会污染系统其他抽屉 */
+.el-drawer.ai-chat-drawer {
+  display: flex;
+  flex-direction: column;
+}
+
+.el-drawer.ai-chat-drawer .el-drawer__header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--ai-chat-toolbar-border-color, #e4e7ed);
+}
+
+.el-drawer.ai-chat-drawer .el-drawer__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--ai-chat-body-padding, 20px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 重点：禁用 Element 自带的滚动条，防止双滚动条冲突 */
 }
 </style>

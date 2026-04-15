@@ -104,7 +104,7 @@ const messageContent = (message: AiChatMessage): string => {
   padding: var(--ai-chat-list-padding);
   background: var(--ai-chat-list-background);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
 }
 
 .ai-message-list__empty {
@@ -155,7 +155,6 @@ const messageContent = (message: AiChatMessage): string => {
   max-width: min(85%, 440px);
   padding: var(--ai-chat-bubble-padding);
   border-radius: var(--ai-chat-bubble-radius);
-  box-shadow: 0 10px 24px var(--color-shadow);
 }
 
 .ai-message--user .ai-message__bubble {

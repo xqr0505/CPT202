@@ -18,35 +18,32 @@ const getDefaultHomePath = (role: string): string => {
 };
 
 export function setupRouterGuard(router: Router) {
-  router.beforeEach(async (to, from, next) => {
+  router.beforeEach(async (to) => {
     const token = getAuthToken();
     const user = getUser(); // { userId, role, email, displayName }
 
     if (token && user) {
       // Logged in, check permissions
       if (to.path === '/auth/login' || to.path === '/register') {
-        next({ path: getDefaultHomePath(user.role) });
-        return;
+        return { path: getDefaultHomePath(user.role) };
       }
 
       if (to.path === '/') {
-        next({ path: getDefaultHomePath(user.role) });
-        return;
+        return { path: getDefaultHomePath(user.role) };
       }
 
       const requiredRole = to.meta?.role as string | undefined;
       if (requiredRole && user.role !== requiredRole) {
-        next({ path: '/error/403' });
-        return;
+        return { path: '/error/403' };
       }
 
-      next();
+      return true;
     } else {
       // Not logged in, check if the route is in the whitelist
       if (whiteList.includes(to.path)) {
-        next();
+        return true;
       } else {
-        next({ path: '/auth/login', query: { redirect: to.fullPath } });
+        return { path: '/auth/login', query: { redirect: to.fullPath } };
       }
     }
   });

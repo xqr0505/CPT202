@@ -67,3 +67,10 @@ mybatis-plus:
       logic-delete-field: deletedAt
       logic-delete-value: "now()"
       logic-not-delete-value: "null"
+
+# 客户取消 / 改期规则（第一步：试算接口读取）
+booking:
+  customer-change:
+    full-refund-lead-hours: 24
+    min-lead-hours: 2
+    late-window-penalty-ratio: "0.30"

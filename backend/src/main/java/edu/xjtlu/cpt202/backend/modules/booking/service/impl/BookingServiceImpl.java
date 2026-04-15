@@ -14,7 +14,12 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
@@ -41,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -62,6 +68,9 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private final BookingTopicMapper bookingTopicMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistQueryService specialistQueryService;
+
+    private final CustomerBookingChangePolicyService customerBookingChangePolicyService;
+
     @Qualifier("jsonRedisTemplate")
     private final RedisTemplate<String, Object> jsonRedisTemplate;
 
@@ -241,6 +250,250 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return detail;
     }
 
+
+    @Override
+    public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
+        Booking booking = bookingMapper.selectById(bookingId);
+
+        if (booking == null) {
+            log.warn("Booking not found for cancel quote: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+
+        //customer can only cancel their own booking
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Cancel quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+        LocalDateTime slotStart = resolveSlotStart(slot);
+        return customerBookingChangePolicyService.customerCancellationQuote(
+                booking.getStatus(),
+                slotStart,
+                LocalDateTime.now(),
+                booking.getPrice()
+        );
+    }
+
+    @Override
+    public BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId) {
+        if (newSlotId == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "newSlotId is required");
+        }
+
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            log.warn("Booking not found for reschedule quote: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Reschedule quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+        TimeSlot currentSlot = timeSlotMapper.selectById(booking.getSlotId());
+        if (currentSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+
+        if (newSlotId.equals(booking.getSlotId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Choose a different time slot to reschedule");
+        }
+
+
+        TimeSlot newSlot = timeSlotMapper.selectById(newSlotId);
+        if (newSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "New time slot not found");
+        }
+        if (!booking.getSpecialistId().equals(newSlot.getSpecialistId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Slot does not belong to this booking's specialist");
+        }
+        if (!TimeSlotStatusEnum.AVAILABLE.name().equals(newSlot.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
+        }
+
+        SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
+        BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
+
+        LocalDateTime slotStart = resolveSlotStart(currentSlot);
+        return customerBookingChangePolicyService.customerRescheduleQuote(
+                booking.getStatus(),
+                slotStart,
+                LocalDateTime.now(),
+                booking.getPrice(),
+                newPrice
+        );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId) {
+        Booking booking = bookingMapper.selectById(bookingId);
+        LocalDateTime now = LocalDateTime.now();
+        TimeSlot slotToUpdate = new TimeSlot();
+
+        if (booking == null) {
+            log.warn("Booking not found for cancel confirm: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+
+        
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Cancel confirm forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+        //customer cancellation quote
+        BookingCancelQuoteVO quote = customerBookingChangePolicyService.customerCancellationQuote(
+                booking.getStatus(),
+                resolveSlotStart(slot),
+                now,
+                booking.getPrice()
+        );
+        
+        if (!quote.isAllowed()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
+        }
+
+        booking.setStatus(BookingStatusEnum.CANCELLED.name());
+        booking.setCancelledBy("CUSTOMER");
+        booking.setChangeType("CANCEL");
+        booking.setDecisionTime(now);
+        bookingMapper.updateById(booking);
+
+        slotToUpdate.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        int updated = timeSlotMapper.update(
+                slotToUpdate,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, slot.getId())
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
+        );
+
+        if (updated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
+        }
+
+        return BookingCancelConfirmVO.builder()
+                .bookingId(bookingId)
+                .bookingStatus(BookingStatusEnum.CANCELLED.name())
+                .policyType(quote.getPolicyType())
+                .refundAmount(quote.getRefundAmount())
+                .penaltyAmount(quote.getPenaltyAmount())
+                .message(quote.getMessage())
+                .build();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BookingRescheduleConfirmVO customerRescheduleConfirm(Long bookingId, Long newSlotId, Long currentCustomerId) {
+        if (newSlotId == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "newSlotId is required");
+        }
+
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            log.warn("Booking not found for reschedule confirm: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Reschedule confirm forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+        if (newSlotId.equals(booking.getSlotId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Choose a different time slot to reschedule");
+        }
+
+        TimeSlot currentSlot = timeSlotMapper.selectById(booking.getSlotId());
+        if (currentSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+        TimeSlot newSlot = timeSlotMapper.selectById(newSlotId);
+        if (newSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "New time slot not found");
+        }
+        if (!booking.getSpecialistId().equals(newSlot.getSpecialistId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Slot does not belong to this booking's specialist");
+        }
+        if (!TimeSlotStatusEnum.AVAILABLE.name().equals(newSlot.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
+        }
+
+        SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
+        BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
+        LocalDateTime now = LocalDateTime.now();
+        BookingRescheduleQuoteVO quote = customerBookingChangePolicyService.customerRescheduleQuote(
+                booking.getStatus(),
+                resolveSlotStart(currentSlot),
+                now,
+                booking.getPrice(),
+                newPrice
+        );
+        if (!quote.isAllowed()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
+        }
+
+        TimeSlot releaseCurrentSlot = new TimeSlot();
+        releaseCurrentSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        int oldSlotUpdated = timeSlotMapper.update(
+                releaseCurrentSlot,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, currentSlot.getId())
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
+        );
+        if (oldSlotUpdated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
+        }
+
+        TimeSlot occupyNewSlot = new TimeSlot();
+        occupyNewSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        int newSlotUpdated = timeSlotMapper.update(
+                occupyNewSlot,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, newSlotId)
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.AVAILABLE.name())
+        );
+        if (newSlotUpdated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
+        }
+
+        booking.setSlotId(newSlotId);
+        booking.setStatus(BookingStatusEnum.PENDING.name());
+        booking.setChangeType("RESCHEDULE");
+        booking.setDecisionTime(now);
+        bookingMapper.updateById(booking);
+
+        return BookingRescheduleConfirmVO.builder()
+                .bookingId(bookingId)
+                .bookingStatus(booking.getStatus())
+                .policyType(quote.getPolicyType())
+                .priceDifference(quote.getPriceDifference())
+                .penaltyAmount(quote.getPenaltyAmount())
+                .refundAmount(quote.getRefundAmount())
+                .payableAmount(quote.getPayableAmount())
+                .message(quote.getMessage())
+                .build();
+    }
+
+    private static LocalDateTime resolveSlotStart(TimeSlot slot) {
+        LocalDate date = slot.getSlotDate();
+        LocalTime start = slot.getStartTime();
+        if (date == null || start == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Time slot has no start time");
+        }
+        return LocalDateTime.of(date, start);
+    }
+
     private <T> Optional<T> readCache(String key, Class<T> expectedType) {
         try {
             Object cacheValue = jsonRedisTemplate.opsForValue().get(key);
@@ -272,6 +525,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         } catch (Exception exception) {
             log.warn("Redis cache invalidation failed, continue without cache eviction: pattern={}, reason={}", cachePattern, exception.getMessage());
         }
+
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

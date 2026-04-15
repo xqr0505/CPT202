@@ -11,4 +11,6 @@ public interface AiChatService {
     String chat(String userMessage);
 
     TokenStream streamChat(String userMessage);
+
+    void clearCurrentUserMemory();
 }

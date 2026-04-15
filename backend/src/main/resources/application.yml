@@ -41,6 +41,11 @@ ai:
     api-key: ${OPENAI_API_KEY:}
     model-name: ${OPENAI_MODEL_NAME:}
     base-url: ${OPENAI_BASE_URL:}
+  chat:
+    memory:
+      max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:20}
+      ttl-seconds: ${AI_CHAT_MEMORY_TTL_SECONDS:86400}
+      key-prefix: ${AI_CHAT_MEMORY_KEY_PREFIX:expertlink:ai:memory}
 
 
 # Logging

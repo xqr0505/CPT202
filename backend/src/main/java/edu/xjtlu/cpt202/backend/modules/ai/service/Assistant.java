@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.ai.service;
 
 import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
@@ -12,8 +13,8 @@ import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 public interface Assistant {
 
     @SystemMessage(AiConstant.AI_SYSTEM_PROMPT)
-    String chat(@UserMessage String userMessage);
+    String chat(@MemoryId Long memoryId, @UserMessage String userMessage);
 
     @SystemMessage(AiConstant.AI_SYSTEM_PROMPT)
-    TokenStream streamChat(@UserMessage String userMessage);
+    TokenStream streamChat(@MemoryId Long memoryId, @UserMessage String userMessage);
 }

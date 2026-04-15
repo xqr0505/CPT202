@@ -1,5 +1,12 @@
-import { AI_API_CHAT_PATH, AI_CHAT_STREAM_DONE_EVENT, AI_CHAT_STREAM_EVENT } from '@/constants/ai'
-import { getAuthToken, logout } from './request'
+import {
+  AI_API_CHAT_MEMORY_PATH,
+  AI_API_CHAT_PATH,
+  AI_CHAT_AUTH_ERROR,
+  AI_CHAT_DEFAULT_ERROR,
+  AI_CHAT_STREAM_DONE_EVENT,
+  AI_CHAT_STREAM_EVENT
+} from '@/constants/ai'
+import request, { getAuthToken, logout } from './request'
 
 interface ChatRequestPayload {
   message: string
@@ -25,9 +32,9 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
     const json = (await response.json()) as Partial<ApiResult<unknown>>
-    return json.message?.trim() || 'Failed to get AI response. Please try again.'
+    return json.message?.trim() || AI_CHAT_DEFAULT_ERROR
   }
-  return (await response.text()).trim() || 'Failed to get AI response. Please try again.'
+  return (await response.text()).trim() || AI_CHAT_DEFAULT_ERROR
 }
 
 const handleSseEvent = (block: string, callbacks: StreamCallbacks): void => {
@@ -50,7 +57,7 @@ const handleSseEvent = (block: string, callbacks: StreamCallbacks): void => {
 
   const payload = JSON.parse(dataParts.join('\n')) as ApiResult<ChatStreamChunk>
   if (payload.code !== 200) {
-    throw new Error(payload.message || 'Failed to get AI response. Please try again.')
+    throw new Error(payload.message || AI_CHAT_DEFAULT_ERROR)
   }
 
   if (eventName === AI_CHAT_STREAM_DONE_EVENT || payload.data?.done) {
@@ -78,7 +85,7 @@ export const postChatMessage = async (message: string, callbacks: StreamCallback
 
   if (response.status === 401) {
     logout()
-    throw new Error('Unauthorized, please login again.')
+    throw new Error(AI_CHAT_AUTH_ERROR)
   }
 
   if (!response.ok || !response.body) {
@@ -113,4 +120,10 @@ export const postChatMessage = async (message: string, callbacks: StreamCallback
   if (finalBlock) {
     handleSseEvent(finalBlock, callbacks)
   }
+}
+
+export const deleteChatMemory = async (): Promise<void> => {
+  await request.delete(AI_API_CHAT_MEMORY_PATH, {
+    suppressErrorMessage: true
+  } as any)
 }

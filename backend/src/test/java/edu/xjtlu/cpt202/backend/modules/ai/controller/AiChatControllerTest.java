@@ -1,48 +1,72 @@
 package edu.xjtlu.cpt202.backend.modules.ai.controller;
 
-import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import com.alibaba.druid.spring.boot3.autoconfigure.DruidDataSourceAutoConfigure;
+import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.output.Response;
+import dev.langchain4j.service.TokenStream;
+import edu.xjtlu.cpt202.backend.common.config.SecurityConfig;
+import edu.xjtlu.cpt202.backend.common.exception.GlobalExceptionHandler;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.function.Consumer;
+
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = {
-        "ai.openai.api-key=test-openai-key",
-        "ai.openai.model-name=gpt-4o-mini",
-        "spring.flyway.enabled=false",
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration"
-})
+@SpringBootTest(classes = AiChatControllerTest.TestApplication.class)
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 class AiChatControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockBean
-    private Assistant assistant;
+    private AiChatService aiChatService;
 
     @MockBean
     private UserMapper userMapper;
 
     @Test
-    void chatShouldReturnSuccessForCustomer() throws Exception {
-        when(assistant.chat(anyString())).thenReturn("Hello from AI");
+    void chatShouldStreamSseEventsForAuthenticatedUser() throws Exception {
+        when(aiChatService.streamChat(anyString())).thenReturn(
+                new TestTokenStream(List.of("Hello ", "from AI"))
+        );
 
-        mockMvc.perform(post("/api/v1/ai/chat")
+        MvcResult result = mockMvc.perform(post("/api/v1/ai/chat")
                         .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -50,14 +74,21 @@ class AiChatControllerTest {
                                   "message": "Hello"
                                 }
                                 """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("Hello from AI"));
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString(MediaType.TEXT_EVENT_STREAM_VALUE)))
+                .andExpect(content().string(containsString("event:chat")))
+                .andExpect(content().string(containsString("\"content\":\"Hello \"")))
+                .andExpect(content().string(containsString("\"content\":\"from AI\"")))
+                .andExpect(content().string(containsString("event:done")));
     }
 
     @Test
-    void chatShouldReturnValidationErrorWhenMessageBlank() throws Exception {
-        mockMvc.perform(post("/api/v1/ai/chat")
+    void chatSyncShouldReturnValidationErrorWhenMessageBlank() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/chat/sync")
                         .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -83,17 +114,26 @@ class AiChatControllerTest {
     }
 
     @Test
-    void chatShouldReturnForbiddenForSpecialist() throws Exception {
-        mockMvc.perform(post("/api/v1/ai/chat")
-                        .with(authentication(specialistAuthentication()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "message": "Hello"
-                                }
-                                """))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value(403));
+    void clearMemoryShouldReturnSuccessForCustomer() throws Exception {
+        mockMvc.perform(delete("/api/v1/ai/chat/memory")
+                        .with(authentication(customerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void clearMemoryShouldReturnUnauthorizedForAnonymousUser() throws Exception {
+        mockMvc.perform(delete("/api/v1/ai/chat/memory"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void clearMemoryShouldReturnSuccessForSpecialist() throws Exception {
+        mockMvc.perform(delete("/api/v1/ai/chat/memory")
+                        .with(authentication(specialistAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
     }
 
     private Authentication customerAuthentication() {
@@ -110,5 +150,78 @@ class AiChatControllerTest {
                 null,
                 AuthorityUtils.createAuthorityList("ROLE_SPECIALIST")
         );
+    }
+
+    private static class TestTokenStream implements TokenStream {
+
+        private final List<String> chunks;
+        private Consumer<String> onNext = ignored -> {
+        };
+        private Consumer<Response<AiMessage>> onComplete = ignored -> {
+        };
+        private Consumer<Throwable> onError = ignored -> {
+        };
+
+        private TestTokenStream(List<String> chunks) {
+            this.chunks = chunks;
+        }
+
+        @Override
+        public TokenStream onNext(Consumer<String> onNext) {
+            this.onNext = onNext;
+            return this;
+        }
+
+        @Override
+        public TokenStream onRetrieved(Consumer<List<dev.langchain4j.rag.content.Content>> onRetrieved) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onToolExecuted(Consumer<dev.langchain4j.service.tool.ToolExecution> onToolExecuted) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onComplete(Consumer<Response<AiMessage>> onComplete) {
+            this.onComplete = onComplete;
+            return this;
+        }
+
+        @Override
+        public TokenStream onError(Consumer<Throwable> onError) {
+            this.onError = onError;
+            return this;
+        }
+
+        @Override
+        public TokenStream ignoreErrors() {
+            return this;
+        }
+
+        @Override
+        public void start() {
+            try {
+                for (String chunk : chunks) {
+                    onNext.accept(chunk);
+                }
+                onComplete.accept(Response.from(AiMessage.aiMessage(String.join("", chunks))));
+            } catch (RuntimeException exception) {
+                onError.accept(exception);
+            }
+        }
+    }
+
+    @SpringBootConfiguration
+    @EnableAutoConfiguration(exclude = {
+            DataSourceAutoConfiguration.class,
+            DataSourceTransactionManagerAutoConfiguration.class,
+            HibernateJpaAutoConfiguration.class,
+            FlywayAutoConfiguration.class,
+            DruidDataSourceAutoConfigure.class,
+            MybatisPlusAutoConfiguration.class
+    })
+    @Import({AiChatController.class, SecurityConfig.class, GlobalExceptionHandler.class})
+    static class TestApplication {
     }
 }

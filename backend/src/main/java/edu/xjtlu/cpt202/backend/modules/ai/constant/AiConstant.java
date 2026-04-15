@@ -12,6 +12,7 @@ public final class AiConstant {
     public static final String API_V1_AI = "/api/v1/ai";
     public static final String CHAT_PATH = "/chat";
     public static final String CHAT_SYNC_PATH = "/chat/sync";
+    public static final String CHAT_MEMORY_PATH = "/chat/memory";
     public static final String CHAT_STREAM_EVENT = "chat";
     public static final String CHAT_STREAM_DONE_EVENT = "done";
     public static final String EMPTY_CONTENT = "";

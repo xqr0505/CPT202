@@ -63,7 +63,7 @@
               <CustomButton size="small" type="warning" plain class="action-btn" @click="handleAction('reschedule', row)">
                 Reschedule
               </CustomButton>
-              <CustomButton size="small" type="danger" plain class="action-btn" @click="handleAction('cancel', row)">
+              <CustomButton size="small" type="danger" plain class="action-btn" :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
                 Cancel
               </CustomButton>
             </template>
@@ -109,7 +109,7 @@
                 <CustomButton class="mobile-action-btn" type="warning" plain @click="handleAction('reschedule', row)">
                   Reschedule
                 </CustomButton>
-                <CustomButton class="mobile-action-btn" type="danger" plain @click="handleAction('cancel', row)">
+                <CustomButton class="mobile-action-btn" type="danger" plain :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
                   Cancel
                 </CustomButton>
               </template>
@@ -126,12 +126,58 @@
     </div>
   </div>
   <BookingDetailModal v-model="showDetailModal" />
+  <el-dialog
+    v-model="showCancelDialog"
+    title="Cancel Booking"
+    width="500px"
+    :close-on-click-modal="false"
+    @closed="resetCancelDialog"
+  >
+    <div v-loading="cancelQuoteLoading" class="cancel-dialog-content">
+      <p class="cancel-dialog-tip">
+        Please confirm your cancellation. Refund and penalty will be calculated automatically according to the cancellation policy.
+      </p>
+
+      <div v-if="cancelQuote" class="cancel-finance-card">
+        <div class="finance-row">
+          <span>Refund Amount：</span>
+          <strong class="refund-amount">{{ formatMoney(cancelQuote.refundAmount) }}</strong>
+        </div>
+        <div class="finance-row">
+          <span>Penalty Amount：</span>
+          <strong class="penalty-amount">{{ formatMoney(cancelQuote.penaltyAmount) }}</strong>
+        </div>
+      </div>
+
+      <el-alert
+        v-if="cancelQuote?.message"
+        :title="cancelQuote.message"
+        :type="cancelQuote?.allowed ? 'info' : 'warning'"
+        :closable="false"
+        show-icon
+      />
+    </div>
+
+    <template #footer>
+      <span class="dialog-footer">
+        <CustomButton @click="showCancelDialog = false">Keep Booking</CustomButton>
+        <CustomButton
+          type="danger"
+          :loading="cancelConfirmLoading"
+          :disabled="cancelQuoteLoading || !cancelQuote?.allowed"
+          @click="confirmCancel"
+        >
+          Confirm Cancel
+        </CustomButton>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Calendar } from '@element-plus/icons-vue'
-import { getBookingList } from '@/api/booking'
+import { confirmBookingCancel, getBookingCancelQuote, getBookingList } from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
 import type { FetchDataParams, FetchDataResult, TableColumn } from '@/components/business/PaginationTable.vue'
 import PaginationTable from '@/components/business/PaginationTable.vue'
@@ -151,6 +197,11 @@ const router = useRouter();
 const route = useRoute();
 
 const showDetailModal = ref(false);
+const showCancelDialog = ref(false);
+const cancelQuoteLoading = ref(false);
+const cancelConfirmLoading = ref(false);
+const selectedBooking = ref<BookingListItem | null>(null);
+const cancelQuote = ref<Awaited<ReturnType<typeof getBookingCancelQuote>> | null>(null);
 
 const checkQueryAndOpenModal = () => {
   if (route.query.bookingId) {
@@ -229,6 +280,71 @@ const formatDateTime = (dtStr: string) => {
   }
 }
 
+const normalizeStatus = (status: string) => String(status || '').toUpperCase();
+
+const canCancelBooking = (row: BookingListItem) => {
+  const normalizedStatus = normalizeStatus(row.status);
+  const isCancelableStatus = normalizedStatus === 'PENDING' || normalizedStatus === 'CONFIRMED';
+  if (!isCancelableStatus) {
+    return false;
+  }
+  const bookingTime = new Date(row.appointmentDateTime.replace(' ', 'T')).getTime();
+  if (Number.isNaN(bookingTime)) {
+    return true;
+  }
+  const diffMs = bookingTime - Date.now();
+  return diffMs > 2 * 60 * 60 * 1000;
+};
+
+const formatMoney = (value?: number) => {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '¥0.00';
+};
+
+const openCancelDialog = async (row: BookingListItem) => {
+  if (!canCancelBooking(row)) {
+    ElMessage.warning('Cancellation is only available for bookings more than 2 hours away.');
+    return;
+  }
+
+  selectedBooking.value = row;
+  showCancelDialog.value = true;
+  cancelQuoteLoading.value = true;
+
+  try {
+    cancelQuote.value = await getBookingCancelQuote(row.id);
+  } catch {
+    cancelQuote.value = null;
+    ElMessage.error('Failed to calculate refund quote. Please try again.');
+  } finally {
+    cancelQuoteLoading.value = false;
+  }
+};
+
+const resetCancelDialog = () => {
+  selectedBooking.value = null;
+  cancelQuote.value = null;
+  cancelQuoteLoading.value = false;
+  cancelConfirmLoading.value = false;
+};
+
+const confirmCancel = async () => {
+  if (!selectedBooking.value || !cancelQuote.value?.allowed) {
+    return;
+  }
+  cancelConfirmLoading.value = true;
+  try {
+    const result = await confirmBookingCancel(selectedBooking.value.id);
+    ElMessage.success(result.message || 'Booking cancelled successfully.');
+    showCancelDialog.value = false;
+    tableRef.value?.refresh();
+  } catch {
+    ElMessage.error('Failed to cancel booking. Please try again.');
+  } finally {
+    cancelConfirmLoading.value = false;
+  }
+};
+
 const handleAction = (action: string, row: BookingListItem) => {
   switch (action) {
     case 'view':
@@ -240,7 +356,7 @@ const handleAction = (action: string, row: BookingListItem) => {
       router.push(`/customer/bookings/${row.id}/reschedule`);
       break;
     case 'cancel':
-      router.push(`/customer/bookings/${row.id}/cancel`);
+      void openCancelDialog(row);
       break;
     case 'bookAgain':
       router.push(`/customer/specialists/${row.specialistId}?from=/customer/specialists`);
@@ -463,6 +579,44 @@ const handleAction = (action: string, row: BookingListItem) => {
         margin: 0;
       }
     }
+  }
+
+  .cancel-dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .cancel-dialog-tip {
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .cancel-finance-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    background: var(--color-bg-page);
+  }
+
+  .finance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .finance-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .refund-amount {
+    color: var(--color-success);
+  }
+
+  .penalty-amount {
+    color: var(--color-danger);
   }
 }
 </style>

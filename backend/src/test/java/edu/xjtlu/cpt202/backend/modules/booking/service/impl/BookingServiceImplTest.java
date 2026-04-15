@@ -606,6 +606,10 @@ public class BookingServiceImplTest {
                 () -> bookingService.customerCancellationConfirm(bookingId, 1L));
         assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
         verify(bookingMapper, times(0)).updateById(any(Booking.class));
+
+    }
+
+    @Test
     void testGetUsageSummary_AllTime_DefaultsWhenMapperReturnsNull() {
         Long customerId = 1L;
         UserContextHolder.setUserId(customerId);

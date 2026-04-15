@@ -112,6 +112,26 @@ export interface BookingDetail {
   customerNotes: string;
 }
 
+export interface BookingCancelQuote {
+  allowed: boolean;
+  reasonCode?: string;
+  message?: string;
+  policyType?: string;
+  bookingStartAt?: string;
+  orderAmount?: number;
+  refundAmount?: number;
+  penaltyAmount?: number;
+}
+
+export interface BookingCancelConfirm {
+  bookingId: number;
+  bookingStatus: string;
+  policyType?: string;
+  refundAmount?: number;
+  penaltyAmount?: number;
+  message?: string;
+}
+
 export const getUpcomingBookings = () => {
   return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
 }
@@ -143,4 +163,12 @@ export const getBookingList = (params: BookingListQuery) => {
 
 export const getBookingDetail = (bookingId: number | string) => {
   return request.get<BookingDetail>(`/api/v1/customer/bookings/${bookingId}`);
+}
+
+export const getBookingCancelQuote = (bookingId: number | string) => {
+  return request.post<any, BookingCancelQuote>(`/api/v1/customer/bookings/${bookingId}/cancel/quote`);
+}
+
+export const confirmBookingCancel = (bookingId: number | string) => {
+  return request.post<any, BookingCancelConfirm>(`/api/v1/customer/bookings/${bookingId}/cancel/confirm`);
 }

@@ -16,6 +16,11 @@ type RequestWithToastControl = {
   suppressErrorMessage?: boolean;
 };
 
+type AuthFailureError = Error & {
+  isAuthFailure?: boolean;
+  status?: number;
+};
+
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
@@ -81,6 +86,37 @@ export const logout = () => {
   clearAuthData();
   triggerLogoutEvent();
   router.push({ name: 'Login' }).catch(() => null);
+};
+
+const createAuthFailureError = (message: string): AuthFailureError => {
+  const error = new Error(message) as AuthFailureError;
+  error.isAuthFailure = true;
+  error.status = 401;
+  return error;
+};
+
+export const isAuthFailureError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  if ('isAuthFailure' in error && Boolean((error as AuthFailureError).isAuthFailure)) {
+    return true;
+  }
+
+  if ('status' in error && Number((error as { status?: number }).status) === 401) {
+    return true;
+  }
+
+  if (
+    'response' in error &&
+    typeof (error as { response?: { status?: number } }).response === 'object' &&
+    (error as { response?: { status?: number } }).response?.status === 401
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 // TTL for suppressing duplicate messages (ms)
@@ -150,7 +186,7 @@ service.interceptors.response.use(
         // allow future 401 handling after short delay
         setTimeout(() => { handling401 = false }, 3000)
       }
-      return Promise.reject(new Error(res.message || 'Unauthorized'));
+      return Promise.reject(createAuthFailureError(res.message || 'Unauthorized'));
     }
 
     if (res.code === 403) {
@@ -179,6 +215,9 @@ service.interceptors.response.use(
         router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
         setTimeout(() => { handling401 = false }, 3000)
       }
+      const authFailureError = error as AuthFailureError
+      authFailureError.isAuthFailure = true
+      authFailureError.status = 401
     } else if (status === 403) {
       if (!suppressErrorMessage) {
         showErrorOnce('Forbidden');

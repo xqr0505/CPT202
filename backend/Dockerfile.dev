@@ -1,0 +1,17 @@
+FROM maven:3.9-eclipse-temurin-17
+
+WORKDIR /app
+
+# Use a mirror for Maven Central to avoid TLS/proxy handshake issues in Docker.
+COPY maven-settings.xml /root/.m2/settings.xml
+
+# Pre-download dependencies to speed up iterative dev runs.
+COPY pom.xml .
+RUN mvn -q -DskipTests dependency:go-offline
+
+# Copy sources for the first build; docker-compose dev will mount the repo for hot reload.
+COPY src ./src
+
+EXPOSE 8081
+EXPOSE 5331
+CMD ["mvn", "-DskipTests", "spring-boot:run", "-Dspring-boot.run.profiles=dev"]

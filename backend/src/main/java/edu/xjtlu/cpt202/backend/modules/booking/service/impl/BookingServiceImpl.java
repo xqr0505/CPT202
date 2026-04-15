@@ -3,9 +3,11 @@ package edu.xjtlu.cpt202.backend.modules.booking.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import edu.xjtlu.cpt202.backend.common.constant.CommonConstant;
+import edu.xjtlu.cpt202.backend.common.constant.RedisCacheConstant;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.utils.RedisKeyUtils;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.constant.DashboardConstant;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
@@ -36,6 +38,8 @@ import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +52,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author QiranXiao
@@ -62,7 +68,11 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private final BookingTopicMapper bookingTopicMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistQueryService specialistQueryService;
+
     private final CustomerBookingChangePolicyService customerBookingChangePolicyService;
+
+    @Qualifier("jsonRedisTemplate")
+    private final RedisTemplate<String, Object> jsonRedisTemplate;
 
     @Override
     public List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit) {
@@ -125,16 +135,33 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot already booked");
         }
 
+        invalidateCustomerBookingCache(customerId);
         return new BookingCreateVO(booking.getId(), booking.getStatus());
     }
 
     @Override
     public PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto) {
+        String cacheKey = RedisKeyUtils.buildCustomerBookingListKey(
+                customerId,
+                dto.getPageNo(),
+                dto.getPageSize(),
+                dto.getTab(),
+                dto.getStatus()
+        );
+
+        Optional<PageResult> cachedPageResult = readCache(cacheKey, PageResult.class);
+        if (cachedPageResult.isPresent()) {
+            //noinspection unchecked
+            return (PageResult<BookingItemVO>) cachedPageResult.get();
+        }
+
         LocalDateTime currentTime = LocalDateTime.now();
         long offset = (long) (dto.getPageNo() - 1) * dto.getPageSize();
         List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), dto.getStatus(), currentTime, offset, dto.getPageSize());
         Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), dto.getStatus(), currentTime);
-        return new PageResult<>(total, list);
+        PageResult<BookingItemVO> pageResult = new PageResult<>(total, list);
+        writeCache(cacheKey, pageResult, RedisCacheConstant.BOOKING_LIST_CACHE_TTL_SECONDS);
+        return pageResult;
     }
 
     @Override
@@ -200,6 +227,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     }
 
     public BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId) {
+        String cacheKey = RedisKeyUtils.buildCustomerBookingDetailKey(currentCustomerId, bookingId);
+        Optional<BookingDetailVO> cachedBookingDetail = readCache(cacheKey, BookingDetailVO.class);
+        if (cachedBookingDetail.isPresent()) {
+            return cachedBookingDetail.get();
+        }
+
         BookingDetailVO detail = bookingMapper.selectBookingDetailById(bookingId)
                 .orElseThrow(() -> {
                     log.warn("Booking not found: bookingId={}", bookingId);
@@ -213,8 +246,10 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
 
+        writeCache(cacheKey, detail, RedisCacheConstant.BOOKING_DETAIL_CACHE_TTL_SECONDS);
         return detail;
     }
+
 
     @Override
     public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
@@ -457,6 +492,40 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Time slot has no start time");
         }
         return LocalDateTime.of(date, start);
+    }
+
+    private <T> Optional<T> readCache(String key, Class<T> expectedType) {
+        try {
+            Object cacheValue = jsonRedisTemplate.opsForValue().get(key);
+            if (cacheValue == null || !expectedType.isInstance(cacheValue)) {
+                return Optional.empty();
+            }
+            return Optional.of(expectedType.cast(cacheValue));
+        } catch (Exception exception) {
+            log.warn("Redis read failed, fallback to database: key={}, reason={}", key, exception.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private void writeCache(String key, Object value, long ttlSeconds) {
+        try {
+            jsonRedisTemplate.opsForValue().set(key, value, ttlSeconds, TimeUnit.SECONDS);
+        } catch (Exception exception) {
+            log.warn("Redis write failed, continue without cache: key={}, reason={}", key, exception.getMessage());
+        }
+    }
+
+    private void invalidateCustomerBookingCache(Long customerId) {
+        String cachePattern = RedisKeyUtils.buildCustomerBookingKeyPattern(customerId);
+        try {
+            Set<String> keys = jsonRedisTemplate.keys(cachePattern);
+            if (keys != null && !keys.isEmpty()) {
+                jsonRedisTemplate.delete(keys);
+            }
+        } catch (Exception exception) {
+            log.warn("Redis cache invalidation failed, continue without cache eviction: pattern={}, reason={}", cachePattern, exception.getMessage());
+        }
+
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

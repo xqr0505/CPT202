@@ -3,10 +3,12 @@ package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
+import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -20,12 +22,14 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,6 +47,9 @@ class UserAccountServiceImplTest {
 
     @Mock
     private UserMapper userMapper;
+
+    @Mock
+    private AvatarStorageService avatarStorageService;
 
     @InjectMocks
     private UserAccountServiceImpl userAccountService;
@@ -64,8 +71,23 @@ class UserAccountServiceImplTest {
         assertEquals("Alice Johnson", profile.getFullName());
         assertEquals("alice@example.com", profile.getEmail());
         assertEquals("+86 13800138000", profile.getPhoneNumber());
+        assertEquals("https://cdn.example.com/avatars/alice.jpg", profile.getAvatarUrl());
         assertEquals(AccountStatusEnum.ACTIVE.name(), profile.getStatus());
 
+        verify(userMapper).selectById(7L);
+        verifyNoMoreInteractions(userMapper);
+    }
+
+    @Test
+    void getCurrentUserProfile_whenAvatarMissing_returnsNullAvatarUrl() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        currentUser.setAvatarUrl(null);
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        UserProfileVO profile = userAccountService.getCurrentUserProfile();
+
+        assertNull(profile.getAvatarUrl());
         verify(userMapper).selectById(7L);
         verifyNoMoreInteractions(userMapper);
     }
@@ -154,6 +176,93 @@ class UserAccountServiceImplTest {
     }
 
     @Test
+    void uploadCurrentUserAvatar_persistsUploadedAvatarUrl() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                "avatar-bytes".getBytes()
+        );
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+        when(avatarStorageService.uploadUserAvatar(7L, file))
+                .thenReturn("https://cdn.example.com/avatars/new-avatar.png");
+        when(userMapper.updateById(any(User.class))).thenReturn(1);
+
+        UserAvatarUploadVO response = userAccountService.uploadCurrentUserAvatar(file);
+
+        assertEquals("https://cdn.example.com/avatars/new-avatar.png", response.getAvatarUrl());
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).selectById(7L);
+        verify(avatarStorageService).uploadUserAvatar(7L, file);
+        verify(userMapper).updateById(userCaptor.capture());
+        verifyNoMoreInteractions(userMapper);
+
+        assertEquals("https://cdn.example.com/avatars/new-avatar.png", userCaptor.getValue().getAvatarUrl());
+    }
+
+    @Test
+    void uploadCurrentUserAvatar_whenFileTypeIsInvalid_throwsBadRequest() {
+        authenticateAs(7L);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.gif",
+                "image/gif",
+                "gif-bytes".getBytes()
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.uploadCurrentUserAvatar(file)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Only JPG, JPEG, PNG, and WEBP images are allowed", exception.getMessage());
+        verifyNoInteractions(userMapper, avatarStorageService);
+    }
+
+    @Test
+    void uploadCurrentUserAvatar_whenFileIsTooLarge_throwsBadRequest() {
+        authenticateAs(7L);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                new byte[2 * 1024 * 1024 + 1]
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.uploadCurrentUserAvatar(file)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Avatar image must be 2 MB or smaller", exception.getMessage());
+        verifyNoInteractions(userMapper, avatarStorageService);
+    }
+
+    @Test
+    void uploadCurrentUserAvatar_whenUnauthenticated_throwsUnauthorized() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                "avatar-bytes".getBytes()
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.uploadCurrentUserAvatar(file)
+        );
+
+        assertEquals(ResultCodeEnum.UNAUTHORIZED.getCode(), exception.getCode());
+        verifyNoInteractions(userMapper, avatarStorageService);
+    }
+
+    @Test
     void changePassword_updatesEncodedPasswordWhenCurrentPasswordMatches() {
         authenticateAs(7L);
         User currentUser = buildUser();
@@ -178,6 +287,7 @@ class UserAccountServiceImplTest {
         User savedUser = userCaptor.getValue();
         assertNotEquals("NewPass456", savedUser.getPasswordHash());
         assertNotEquals(oldPasswordHash, savedUser.getPasswordHash());
+        assertNotNull(savedUser.getPasswordChangedAt());
         assertTrue(PASSWORD_ENCODER.matches("NewPass456", savedUser.getPasswordHash()));
     }
 
@@ -290,9 +400,11 @@ class UserAccountServiceImplTest {
                 .fullName("Alice Johnson")
                 .email("alice@example.com")
                 .phoneNumber("+86 13800138000")
+                .avatarUrl("https://cdn.example.com/avatars/alice.jpg")
                 .status(AccountStatusEnum.ACTIVE.name())
                 .role("CUSTOMER")
                 .passwordHash(PASSWORD_ENCODER.encode("OldPass123"))
+                .passwordChangedAt(null)
                 .build();
     }
 }

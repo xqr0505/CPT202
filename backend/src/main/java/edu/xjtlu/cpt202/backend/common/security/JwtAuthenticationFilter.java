@@ -15,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.ZoneId;
+import java.util.Date;
 
 /**
  * JWT Authentication Filter - Executes before each request
@@ -51,11 +53,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     User user = userMapper.selectById(userId);
 
                     if (user != null && AccountStatusEnum.ACTIVE.name().equalsIgnoreCase(user.getStatus())) {
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(userId, null, null);
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
-                        UserContextHolder.setUserId(userId);
-                        UserContextHolder.setRole(role);
+                        if (isTokenInvalidatedByPasswordChange(claims, user)) {
+                            SecurityContextHolder.clearContext();
+                        } else {
+                            UsernamePasswordAuthenticationToken authentication =
+                                    new UsernamePasswordAuthenticationToken(userId, null, null);
+                            SecurityContextHolder.getContext().setAuthentication(authentication);
+                            UserContextHolder.setUserId(userId);
+                            UserContextHolder.setRole(role);
+                        }
                     } else {
                         SecurityContextHolder.clearContext();
                     }
@@ -71,5 +77,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } finally {
             UserContextHolder.clear();
         }
+    }
+
+    private boolean isTokenInvalidatedByPasswordChange(Claims claims, User user) {
+        Date issuedAt = claims.getIssuedAt();
+
+        if (issuedAt == null || user.getPasswordChangedAt() == null) {
+            return false;
+        }
+
+        return issuedAt.toInstant().isBefore(
+                user.getPasswordChangedAt().atZone(ZoneId.systemDefault()).toInstant()
+        );
     }
 }

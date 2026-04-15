@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.service.impl;
 import edu.xjtlu.cpt202.backend.modules.booking.config.BookingCustomerChangeConfig;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -88,5 +89,60 @@ class CustomerBookingChangePolicyServiceImplTest {
                 BookingStatusEnum.CONFIRMED.name(), start, now, new BigDecimal("50.00"));
         assertFalse(q.isAllowed());
         assertEquals("SLOT_ALREADY_STARTED", q.getReasonCode());
+    }
+
+    @Test
+    void rescheduleFullRefundWindow_priceIncrease() {
+        LocalDateTime now = LocalDateTime.of(2026, 4, 10, 10, 0);
+        LocalDateTime start = now.plusHours(25);
+        BookingRescheduleQuoteVO q = policy.customerRescheduleQuote(
+                BookingStatusEnum.CONFIRMED.name(), start, now,
+                new BigDecimal("100.00"), new BigDecimal("130.00"));
+        assertTrue(q.isAllowed());
+        assertEquals("FULL_REFUND", q.getPolicyType());
+        assertEquals(new BigDecimal("30.00"), q.getPriceDifference());
+        assertEquals(new BigDecimal("0.00"), q.getPenaltyAmount());
+        assertEquals(new BigDecimal("0.00"), q.getRefundAmount());
+        assertEquals(new BigDecimal("30.00"), q.getPayableAmount());
+    }
+
+    @Test
+    void rescheduleFullRefundWindow_priceDecrease() {
+        LocalDateTime now = LocalDateTime.of(2026, 4, 10, 10, 0);
+        LocalDateTime start = now.plusHours(25);
+        BookingRescheduleQuoteVO q = policy.customerRescheduleQuote(
+                BookingStatusEnum.CONFIRMED.name(), start, now,
+                new BigDecimal("100.00"), new BigDecimal("80.00"));
+        assertTrue(q.isAllowed());
+        assertEquals(new BigDecimal("-20.00"), q.getPriceDifference());
+        assertEquals(new BigDecimal("20.00"), q.getRefundAmount());
+        assertEquals(new BigDecimal("0.00"), q.getPayableAmount());
+    }
+
+    @Test
+    void rescheduleLateWindow_penaltyPlusPriceIncrease() {
+        LocalDateTime now = LocalDateTime.of(2026, 4, 10, 10, 0);
+        LocalDateTime start = now.plusHours(10);
+        BookingRescheduleQuoteVO q = policy.customerRescheduleQuote(
+                BookingStatusEnum.PENDING.name(), start, now,
+                new BigDecimal("100.00"), new BigDecimal("120.00"));
+        assertTrue(q.isAllowed());
+        assertEquals("LATE_WINDOW_PENALTY", q.getPolicyType());
+        assertEquals(new BigDecimal("20.00"), q.getPriceDifference());
+        assertEquals(new BigDecimal("30.00"), q.getPenaltyAmount());
+        assertEquals(new BigDecimal("50.00"), q.getPayableAmount());
+    }
+
+    @Test
+    void rescheduleBlockedSameAsCancel() {
+        LocalDateTime now = LocalDateTime.of(2026, 4, 10, 10, 0);
+        LocalDateTime start = now.plusHours(2);
+        BookingRescheduleQuoteVO q = policy.customerRescheduleQuote(
+                BookingStatusEnum.CONFIRMED.name(), start, now,
+                new BigDecimal("100.00"), new BigDecimal("150.00"));
+        assertFalse(q.isAllowed());
+        assertEquals("TOO_CLOSE_TO_START", q.getReasonCode());
+        assertEquals(new BigDecimal("50.00"), q.getPriceDifference());
+        assertEquals(new BigDecimal("0.00"), q.getPayableAmount());
     }
 }

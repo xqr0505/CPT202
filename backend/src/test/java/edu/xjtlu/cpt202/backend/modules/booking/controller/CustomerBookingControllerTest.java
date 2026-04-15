@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.junit.jupiter.api.Test;
@@ -100,6 +101,30 @@ public class CustomerBookingControllerTest {
                 .andExpect(jsonPath("$.data.allowed").value(true))
                 .andExpect(jsonPath("$.data.policyType").value("FULL_REFUND"))
                 .andExpect(jsonPath("$.data.refundAmount").value(100.0));
+    }
+
+    @Test
+    @WithMockUser(roles = "CUSTOMER")
+    public void customerRescheduleQuote_Success() throws Exception {
+        BookingRescheduleQuoteVO vo = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .originalPrice(new BigDecimal("100.00"))
+                .newPrice(new BigDecimal("120.00"))
+                .priceDifference(new BigDecimal("20.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .refundAmount(new BigDecimal("0.00"))
+                .payableAmount(new BigDecimal("20.00"))
+                .build();
+        when(bookingService.customerRescheduleQuote(eq(55L), eq(77L), anyLong())).thenReturn(vo);
+
+        mockMvc.perform(post("/api/v1/customer/bookings/55/reschedule/quote")
+                        .param("newSlotId", "77"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.allowed").value(true))
+                .andExpect(jsonPath("$.data.payableAmount").value(20.0))
+                .andExpect(jsonPath("$.data.priceDifference").value(20.0));
     }
 
     @Test

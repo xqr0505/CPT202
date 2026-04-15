@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -83,6 +85,17 @@ public class CustomerBookingController {
     public Result<BookingCancelConfirmVO> customerCancellationConfirm(@PathVariable("id") Long bookingId) {
         Long currentCustomerId = SecurityUtils.getCurrentUserId();
         BookingCancelConfirmVO result = bookingService.customerCancellationConfirm(bookingId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/reschedule/quote")
+    @Operation(summary = "Quote customer reschedule", description = "Quote customer reschedule for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingRescheduleQuoteVO> customerRescheduleQuote(
+            @PathVariable("id") Long bookingId,
+            @RequestParam("newSlotId") Long newSlotId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingRescheduleQuoteVO result = bookingService.customerRescheduleQuote(bookingId, newSlotId, currentCustomerId);
         return Result.success(result);
     }
 

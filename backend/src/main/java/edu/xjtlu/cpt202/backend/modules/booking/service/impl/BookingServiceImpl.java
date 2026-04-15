@@ -14,6 +14,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
@@ -217,14 +218,19 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     @Override
     public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
         Booking booking = bookingMapper.selectById(bookingId);
+
         if (booking == null) {
             log.warn("Booking not found for cancel quote: bookingId={}", bookingId);
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
+
+        //customer can only cancel their own booking
         if (!booking.getCustomerId().equals(currentCustomerId)) {
             log.warn("Cancel quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
+
+
         TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
         if (slot == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
@@ -239,15 +245,70 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     }
 
     @Override
+    public BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId) {
+        if (newSlotId == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "newSlotId is required");
+        }
+
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            log.warn("Booking not found for reschedule quote: bookingId={}", bookingId);
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!booking.getCustomerId().equals(currentCustomerId)) {
+            log.warn("Reschedule quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+
+        TimeSlot currentSlot = timeSlotMapper.selectById(booking.getSlotId());
+        if (currentSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+
+        if (newSlotId.equals(booking.getSlotId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Choose a different time slot to reschedule");
+        }
+
+
+        TimeSlot newSlot = timeSlotMapper.selectById(newSlotId);
+        if (newSlot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "New time slot not found");
+        }
+        if (!booking.getSpecialistId().equals(newSlot.getSpecialistId())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Slot does not belong to this booking's specialist");
+        }
+        if (!TimeSlotStatusEnum.AVAILABLE.name().equals(newSlot.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
+        }
+
+        SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
+        BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
+
+        LocalDateTime slotStart = resolveSlotStart(currentSlot);
+        return customerBookingChangePolicyService.customerRescheduleQuote(
+                booking.getStatus(),
+                slotStart,
+                LocalDateTime.now(),
+                booking.getPrice(),
+                newPrice
+        );
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId) {
         Booking booking = bookingMapper.selectById(bookingId);
+        LocalDateTime now = LocalDateTime.now();
+        TimeSlot slotToUpdate = new TimeSlot();
+
         if (booking == null) {
             log.warn("Booking not found for cancel confirm: bookingId={}", bookingId);
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
-
+        
         TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+
+        
         if (slot == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
         }
@@ -257,9 +318,6 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        TimeSlot slotToUpdate = new TimeSlot();
-        
         //customer cancellation quote
         BookingCancelQuoteVO quote = customerBookingChangePolicyService.customerCancellationQuote(
                 booking.getStatus(),

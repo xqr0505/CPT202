@@ -9,6 +9,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -36,12 +37,17 @@ public interface BookingService extends IService<Booking> {
     BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId);
 
     /**
-     * 客户取消前的试算：校验归属后按规则返回是否可取消及退款/违约金（不写库）。
+     * Cancle preview: Calculate the refund and penalty when the customer cancels the booking.
      */
     BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId);
 
     /**
-     * 客户确认取消：写库更新预约状态并释放时段。
+     * Customer confirms cancellation: write to database and release time slot.
      */
     BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId);
+
+    /**
+     * Reschedule preview: Calculate the refund and penalty and show the difference when the customer reschedules the booking.
+     */
+    BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId);
 }

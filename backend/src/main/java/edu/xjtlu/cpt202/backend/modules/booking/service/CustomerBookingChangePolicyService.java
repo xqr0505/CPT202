@@ -1,27 +1,40 @@
 package edu.xjtlu.cpt202.backend.modules.booking.service;
 
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 客户侧取消 / 改期相关的纯规则试算（不落库）。
+ * Customer cancellation and reschedule policy calculation.
  */
 public interface CustomerBookingChangePolicyService {
 
     /**
-     * 根据当前预约状态、时段开始时间、订单金额，试算客户取消时的退款与违约金。
+     * Cancel preview: Calculate and show the refund and penalty when the customer cancels the booking.
      *
-     * @param bookingStatus 预约状态名，如 PENDING / CONFIRMED
-     * @param slotStartAt   时段开始时间
-     * @param now           当前时间（可注入便于测试）
-     * @param orderAmount   订单上的咨询费金额
+     * @param bookingStatus 
+     * @param slotStartAt   
+     * @param now           
+     * @param orderAmount   
      */
     BookingCancelQuoteVO customerCancellationQuote(
             String bookingStatus,
             LocalDateTime slotStartAt,
             LocalDateTime now,
             BigDecimal orderAmount
+    );
+
+    /**
+     * Reschedule preview: Calculate and show the refund and penalty when the customer reschedules the booking.
+     * If the specialist changed the consultation fee, the new price will be used to calculate show the difference.
+     */
+    BookingRescheduleQuoteVO customerRescheduleQuote(
+            String bookingStatus,
+            LocalDateTime currentBookingSlotStartAt,
+            LocalDateTime now,
+            BigDecimal originalPrice,
+            BigDecimal newPrice
     );
 }

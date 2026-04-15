@@ -15,12 +15,17 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
@@ -33,15 +38,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.times;
@@ -68,6 +72,9 @@ public class BookingServiceImplTest {
 
     @Mock
     private SpecialistQueryService specialistQueryService;
+
+    @Mock
+    private CustomerBookingChangePolicyService customerBookingChangePolicyService;
 
     @InjectMocks
     private BookingServiceImpl bookingService;
@@ -465,6 +472,307 @@ public class BookingServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> bookingService.getBookingDetailById(bookingId, 1L));
         assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
+    @Test
+
+    void customerCancellationQuote_DelegatesToPolicy() {
+        Long bookingId = 200L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(55L);
+        booking.setStatus("CONFIRMED");
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(55L);
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .bookingStartAt(LocalDateTime.of(2026, 5, 1, 14, 0))
+                .orderAmount(new BigDecimal("120.00"))
+                .refundAmount(new BigDecimal("120.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(55L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                eq("CONFIRMED"),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("120.00"))))
+                .thenReturn(quoted);
+
+        BookingCancelQuoteVO result = bookingService.customerCancellationQuote(bookingId, 1L);
+        assertTrue(result.isAllowed());
+        assertEquals("FULL_REFUND", result.getPolicyType());
+    }
+
+    @Test
+    void customerCancellationQuote_BookingNotFound() {
+        when(bookingMapper.selectById(201L)).thenReturn(null);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationQuote(201L, 1L));
+        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    void customerCancellationQuote_Forbidden() {
+        Booking booking = new Booking();
+        booking.setId(202L);
+        booking.setCustomerId(99L);
+        when(bookingMapper.selectById(202L)).thenReturn(booking);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationQuote(202L, 1L));
+        assertEquals(ResultCodeEnum.FORBIDDEN.getCode(), ex.getCode());
+    }
+
+    @Test
+    void customerRescheduleQuote_DelegatesToPolicy() {
+        Long bookingId = 400L;
+        Long newSlotId = 77L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(55L);
+        booking.setStatus("CONFIRMED");
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(55L);
+        currentSlot.setSpecialistId(5L);
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(77L);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .bookingStartAt(LocalDateTime.of(2026, 5, 1, 14, 0))
+                .originalPrice(new BigDecimal("100.00"))
+                .newPrice(new BigDecimal("120.00"))
+                .priceDifference(new BigDecimal("20.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .refundAmount(new BigDecimal("0.00"))
+                .payableAmount(new BigDecimal("20.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(55L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(77L)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                eq("CONFIRMED"),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("100.00")),
+                eq(new BigDecimal("120.00"))))
+                .thenReturn(quoted);
+
+        BookingRescheduleQuoteVO result = bookingService.customerRescheduleQuote(bookingId, newSlotId, 1L);
+        assertTrue(result.isAllowed());
+        assertEquals(new BigDecimal("20.00"), result.getPayableAmount());
+    }
+
+    @Test
+    void customerRescheduleConfirm_Success() {
+        Long bookingId = 401L;
+        Long newSlotId = 78L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(55L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(55L);
+        currentSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, no reschedule penalty")
+                .priceDifference(new BigDecimal("20.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .refundAmount(new BigDecimal("0.00"))
+                .payableAmount(new BigDecimal("20.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(55L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("100.00")),
+                eq(new BigDecimal("120.00"))))
+                .thenReturn(quoted);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        BookingRescheduleConfirmVO result = bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L);
+
+        assertNotNull(result);
+        assertEquals(bookingId, result.getBookingId());
+        assertEquals(BookingStatusEnum.PENDING.name(), result.getBookingStatus());
+        assertEquals("FULL_REFUND", result.getPolicyType());
+        assertEquals(new BigDecimal("20.00"), result.getPayableAmount());
+        verify(bookingMapper).updateById(argThat(updated ->
+                newSlotId.equals(updated.getSlotId())
+                        && "RESCHEDULE".equals(updated.getChangeType())
+                        && BookingStatusEnum.PENDING.name().equals(updated.getStatus())
+        ));
+    }
+
+    @Test
+    void customerRescheduleConfirm_NewSlotUpdateFails() {
+        Long bookingId = 402L;
+        Long newSlotId = 79L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(56L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(56L);
+        currentSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 2));
+        currentSlot.setStartTime(LocalTime.of(10, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(56L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1, 0);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L));
+        assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), ex.getCode());
+        assertEquals("Time slot is not available", ex.getMessage());
+    }
+
+    @Test
+    void customerCancellationConfirm_Success() {
+        Long bookingId = 300L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(88L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(88L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, full refund")
+                .refundAmount(new BigDecimal("120.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(88L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("120.00")))).thenReturn(quoted);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        BookingCancelConfirmVO result = bookingService.customerCancellationConfirm(bookingId, 1L);
+
+        assertEquals(bookingId, result.getBookingId());
+        assertEquals(BookingStatusEnum.CANCELLED.name(), result.getBookingStatus());
+        assertEquals(new BigDecimal("120.00"), result.getRefundAmount());
+        assertEquals(new BigDecimal("0.00"), result.getPenaltyAmount());
+        verify(bookingMapper).updateById(argThat(updated ->
+                BookingStatusEnum.CANCELLED.name().equals(updated.getStatus())
+                        && "CUSTOMER".equals(updated.getCancelledBy())
+                        && "CANCEL".equals(updated.getChangeType())
+        ));
+    }
+
+    @Test
+    void customerCancellationConfirm_NotAllowedByPolicy() {
+        Long bookingId = 301L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(89L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(89L);
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(9, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(false)
+                .message("Less than 2 hours to start, cannot cancel or reschedule")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(89L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationConfirm(bookingId, 1L));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        verify(bookingMapper, times(0)).updateById(any(Booking.class));
+
     }
 
     @Test

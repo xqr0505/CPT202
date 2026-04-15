@@ -7,6 +7,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
@@ -32,4 +36,13 @@ public interface BookingService extends IService<Booking> {
     DashboardStatisticsVO getDashboardStatistics(DashboardQueryDTO queryDTO);
 
     BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId);
+
+    
+    BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId);
+
+    BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId);
+
+    BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId);
+
+    BookingRescheduleConfirmVO customerRescheduleConfirm(Long bookingId, Long newSlotId, Long currentCustomerId);
 }

@@ -23,15 +23,15 @@
       </el-menu>
 
       <div class="navbar-right">
-        <el-dropdown trigger="click" @command="handleDropdownCommand">
+        <el-dropdown trigger="click">
           <span class="user-trigger" :class="{ 'is-active': route.path.includes('/profile') }">
             <el-avatar :src="avatarSrc" :size="34">{{ userInitial }}</el-avatar>
             <span class="user-name desktop-only">{{ displayName }}</span>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="profile">Profile</el-dropdown-item>
-              <el-dropdown-item command="logout">Logout</el-dropdown-item>
+              <el-dropdown-item @click="navigateToProfile">Profile</el-dropdown-item>
+              <el-dropdown-item @click="handleLogout">Logout</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -65,24 +65,36 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import {
+  NavigationFailureType,
+  isNavigationFailure,
+  useRouter,
+  useRoute
+} from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { USER_ROLES } from '@/constants/roles'
+import { useAiChatStore } from '@/stores/aiChat'
+import { AI_NAV_MENU_KEY, AI_NAV_MENU_LABEL } from '@/constants/ai'
 import { logout as clearAndRedirect } from '@/api/request'
-
-type DropdownCommand = 'profile' | 'logout'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const aiChatStore = useAiChatStore()
 
 const isMobileMenuOpen = ref(false)
 
-const ROLE_MENUS = {
+interface NavMenuItem {
+  name: string
+  path: string
+}
+
+const ROLE_MENUS: Record<string, NavMenuItem[]> = {
   [USER_ROLES.CUSTOMER]: [
     { name: 'Find Specialists', path: '/customer/specialists' },
     { name: 'Dashboard', path: '/customer/dashboard' },
-    { name: 'My Bookings', path: '/customer/bookings' }
+    { name: 'My Bookings', path: '/customer/bookings' },
+    { name: AI_NAV_MENU_LABEL, path: AI_NAV_MENU_KEY }
   ],
   [USER_ROLES.SPECIALIST]: [
     { name: 'Dashboard', path: '/specialist/dashboard' },
@@ -98,12 +110,16 @@ const ROLE_MENUS = {
 const currentMenus = computed(() => {
   // Use customer as default
   const role = userStore.userRole || USER_ROLES.CUSTOMER
-  return ROLE_MENUS[role as keyof typeof ROLE_MENUS] || ROLE_MENUS[USER_ROLES.CUSTOMER]
+  return (ROLE_MENUS[role as keyof typeof ROLE_MENUS] || ROLE_MENUS[USER_ROLES.CUSTOMER]) as NavMenuItem[]
 })
 
 const activeMenu = computed<string>(() => {
+  if (aiChatStore.isDrawerOpen && userStore.userRole === USER_ROLES.CUSTOMER) {
+    return AI_NAV_MENU_KEY
+  }
+
   const path: string = route.path
-  const matchedMenu = currentMenus.value.find(m => path.startsWith(m.path))
+  const matchedMenu = currentMenus.value.find(m => m.path !== AI_NAV_MENU_KEY && path.startsWith(m.path))
   if (matchedMenu) {
     return matchedMenu.path
   }
@@ -121,26 +137,41 @@ const avatarSrc = computed<string>(() => userStore.userInfo?.avatar?.trim() || '
 const userInitial = computed<string>(() => displayName.value.charAt(0).toUpperCase())
 
 const handleMenuSelect = (path: string): void => {
+  if (path === AI_NAV_MENU_KEY) {
+    aiChatStore.openDrawer()
+    return
+  }
+
   router.push(path)
 }
 
 const handleMobileMenuSelect = (path: string): void => {
   isMobileMenuOpen.value = false
+  if (path === AI_NAV_MENU_KEY) {
+    aiChatStore.openDrawer()
+    return
+  }
+
   router.push(path)
 }
 
 const goHome = (): void => {
   isMobileMenuOpen.value = false
-  const fallback = (currentMenus.value && currentMenus.value[0] && currentMenus.value[0].path) ? currentMenus.value[0].path : '/'
+  const fallbackMenu = currentMenus.value.find(item => item.path !== AI_NAV_MENU_KEY)
+  const fallback = fallbackMenu ? fallbackMenu.path : '/'
   router.push(fallback)
 }
 
-const handleDropdownCommand = async (command: DropdownCommand): Promise<void> => {
-  if (command === 'profile') {
-    await router.push('/customer/profile')
-    return
-  }
+const navigateToProfile = async (): Promise<void> => {
+  const failure = await router.push({ name: 'CustomerProfile' })
 
+  if (failure && !isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+    console.error('Failed to navigate to customer profile', failure)
+    await router.push('/customer/profile').catch(() => null)
+  }
+}
+
+const handleLogout = (): void => {
   clearAndRedirect()
 }
 </script>

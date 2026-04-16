@@ -2,12 +2,12 @@
   <div class="login-container">
     <div class="login-form-card">
       <h1 class="login-title">Appointment Platform Login</h1>
-      
+
       <!-- Role selection -->
       <div class="form-group">
         <label>Select Role</label>
         <div class="role-selector">
-          <button 
+          <button
             v-for="roleOption in roles"
             :key="roleOption.value"
             :class="['role-btn', { active: form.role === roleOption.value }]"
@@ -22,7 +22,7 @@
       <!-- Email input -->
       <div class="form-group">
         <label>Email Address</label>
-        <input 
+        <input
           v-model="form.email"
           type="email"
           placeholder="Enter your email"
@@ -34,7 +34,7 @@
       <!-- Password input -->
       <div class="form-group">
         <label>Password</label>
-        <input 
+        <input
           v-model="form.password"
           type="password"
           placeholder="Enter your password"
@@ -42,7 +42,6 @@
         <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
       </div>
 
-      <!-- 新增：记住我的邮箱 -->
       <div class="form-group remember-me">
         <label class="checkbox-label">
           <input type="checkbox" v-model="rememberEmail" />
@@ -50,7 +49,7 @@
         </label>
       </div>
 
-      <button 
+      <button
         class="login-btn"
         :disabled="isLoading"
         @click="handleLogin"
@@ -69,15 +68,18 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { login, type LoginPayload } from '@/api/auth';
-import { saveRememberedEmail, getRememberedEmail } from '@/api/request';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { login, type LoginPayload, type LoginResponse } from '@/api/auth';
+import { saveAuthData, saveRememberedEmail, getRememberedEmail, dispatchSessionActivityEvent } from '@/api/request';
+import { useUserStore } from '@/stores/user';
 
 defineOptions({ name: 'AuthLogin' });
 
 const router = useRouter();
+const userStore = useUserStore();
 const isLoading = ref(false);
 const rememberEmail = ref(false);
+const rememberSession = ref(false);
 
 onMounted(() => {
   const remembered = getRememberedEmail();
@@ -85,6 +87,7 @@ onMounted(() => {
     form.email = remembered;
     rememberEmail.value = true;
   }
+  rememberSession.value = localStorage.getItem('rememberMe') === 'true';
 });
 
 const roles = [
@@ -121,6 +124,38 @@ function validateEmail() {
   return true;
 }
 
+const mapRoleToUserRole = (role: string) => {
+  switch (role?.toUpperCase()) {
+    case 'ADMIN':
+      return 'admin';
+    case 'SPECIALIST':
+      return 'specialist';
+    case 'CUSTOMER':
+    default:
+      return 'customer';
+  }
+};
+
+const askRememberMeChoice = async (defaultChecked: boolean): Promise<boolean> => {
+  try {
+    await ElMessageBox.confirm(
+      '因登录成功，是否记住密码并保持登录状态？',
+      '记住我',
+      {
+        confirmButtonText: '记住',
+        cancelButtonText: '不记住',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        distinguishCancelAndClose: true,
+        type: 'warning'
+      }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 async function handleLogin() {
   try {
     errors.role = form.role ? '' : 'Please select a role first.';
@@ -132,31 +167,56 @@ async function handleLogin() {
     }
 
     isLoading.value = true;
-    
+
     const payload: LoginPayload = {
       email: form.email,
       password: form.password,
       role: form.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
     };
 
-    const response = await login(payload, false);
+    const response = await login(payload);
+    const rememberChoice = await askRememberMeChoice(rememberSession.value);
+    const rememberMe = Boolean(rememberChoice);
+
+    saveAuthData(
+      response.token,
+      response.refreshToken,
+      {
+        userId: response.userId,
+        role: response.role,
+        email: response.email,
+        displayName: response.displayName
+      },
+      rememberMe
+    );
+
+    rememberSession.value = rememberMe;
+
+    userStore.token = response.token;
+    userStore.userInfo = {
+      id: response.userId,
+      username: response.email,
+      nickname: response.displayName,
+      email: response.email
+    };
+    userStore.userRole = mapRoleToUserRole(response.role);
 
     if (rememberEmail.value) {
       saveRememberedEmail(form.email);
     } else {
-      // 如果未勾选，清除之前保存的邮箱（可选）
       saveRememberedEmail('');
     }
-    
+
+    dispatchSessionActivityEvent();
     ElMessage.success('Login successful');
 
     const targetRoute = form.role === 'CUSTOMER' ? '/customer/search' :
                         form.role === 'SPECIALIST' ? '/specialist/schedule' :
                         '/admin/specialists';
-    router.push(targetRoute);
+    await router.push(targetRoute);
   } catch (error: any) {
     console.error('Login error:', error);
-    ElMessage.error(error.message || 'Login failed');
+    ElMessage.error(error?.message || 'Login failed');
   } finally {
     isLoading.value = false;
   }

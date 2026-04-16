@@ -16,51 +16,114 @@ type RequestWithToastControl = {
   suppressErrorMessage?: boolean;
 };
 
+type AuthFailureError = Error & {
+  isAuthFailure?: boolean;
+  status?: number;
+};
+
+const ACTIVITY_EVENT_KEY = 'session-activity-event';
+const LOGOUT_EVENT_KEY = 'logout-event';
+const AUTH_REFRESH_PATH = '/auth/refresh-token';
+
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
 
-const clearAuthData = () => {
+export const getRefreshToken = (): string | null => {
+  return localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
+};
+
+export const getRememberedEmail = (): string | null => {
+  return localStorage.getItem('rememberedEmail');
+};
+
+export const isRememberMeSession = (): boolean => {
+  return localStorage.getItem('rememberMe') === 'true';
+};
+
+const getPreferredStorage = (rememberMe: boolean): Storage => {
+  return rememberMe ? localStorage : sessionStorage;
+};
+
+let handling401 = false;
+let lastErrorMessage = '';
+let lastErrorMessageTime = 0;
+
+const shouldSuppressErrorMessage = (config?: any): boolean => {
+  return Boolean(config?.suppressErrorMessage);
+};
+
+const showErrorOnce = (message: string): void => {
+  if (!message) {
+    return;
+  }
+
+  const now = Date.now();
+  if (message !== lastErrorMessage || now - lastErrorMessageTime > 3000) {
+    lastErrorMessage = message;
+    lastErrorMessageTime = now;
+    ElMessage.error(message);
+  }
+};
+
+export const clearAuthData = () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
   localStorage.removeItem('rememberMe');
   sessionStorage.removeItem('token');
+  sessionStorage.removeItem('refreshToken');
   sessionStorage.removeItem('user');
 };
 
-export const saveAuthData = (token: string, user: any, rememberMe: boolean = false) => {
+export const saveAuthData = (
+  token: string,
+  refreshToken: string,
+  user: any,
+  rememberMe: boolean = false
+) => {
+  saveToken(token, rememberMe);
+  saveRefreshToken(refreshToken, rememberMe);
+  saveUser(user, rememberMe);
   if (rememberMe) {
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('rememberMe', 'true');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
   } else {
-    sessionStorage.setItem('token', token);
-    sessionStorage.setItem('user', JSON.stringify(user));
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('rememberMe');  }
+    localStorage.removeItem('rememberMe');
+  }
 };
 
 export const saveToken = (token: string, rememberMe: boolean = false) => {
+  const storage = getPreferredStorage(rememberMe);
+  storage.setItem('token', token);
   if (rememberMe) {
-    localStorage.setItem('token', token);
     sessionStorage.removeItem('token');
   } else {
-    sessionStorage.setItem('token', token);
     localStorage.removeItem('token');
+  }
+};
+
+export const saveRefreshToken = (refreshToken: string, rememberMe: boolean = false) => {
+  const storage = getPreferredStorage(rememberMe);
+  storage.setItem('refreshToken', refreshToken);
+  if (rememberMe) {
+    sessionStorage.removeItem('refreshToken');
+  } else {
+    localStorage.removeItem('refreshToken');
   }
 };
 
 export const saveUser = (user: any, rememberMe: boolean = false) => {
+  const storage = getPreferredStorage(rememberMe);
+  storage.setItem('user', JSON.stringify(user));
   if (rememberMe) {
-    localStorage.setItem('user', JSON.stringify(user));
     sessionStorage.removeItem('user');
   } else {
-    sessionStorage.setItem('user', JSON.stringify(user));
     localStorage.removeItem('user');
   }
+};
+
+export const clearRememberedEmail = () => {
+  localStorage.removeItem('rememberedEmail');
 };
 
 export const getUser = (): any => {
@@ -73,8 +136,14 @@ export const getUser = (): any => {
 };
 
 export const triggerLogoutEvent = () => {
-  localStorage.setItem('logout-event', Date.now().toString());
-  setTimeout(() => localStorage.removeItem('logout-event'), 100);
+  localStorage.setItem(LOGOUT_EVENT_KEY, Date.now().toString());
+  setTimeout(() => localStorage.removeItem(LOGOUT_EVENT_KEY), 100);
+};
+
+export const dispatchSessionActivityEvent = () => {
+  window.dispatchEvent(new CustomEvent('session-activity'));
+  localStorage.setItem(ACTIVITY_EVENT_KEY, Date.now().toString());
+  setTimeout(() => localStorage.removeItem(ACTIVITY_EVENT_KEY), 100);
 };
 
 export const logout = () => {
@@ -83,29 +152,84 @@ export const logout = () => {
   router.push({ name: 'Login' }).catch(() => null);
 };
 
-// TTL for suppressing duplicate messages (ms)
-const ERROR_CACHE_TTL = 5000
-const errorCache = new Map<string, number>()
-let handling401 = false
+const createAuthFailureError = (message: string): AuthFailureError => {
+  const error = new Error(message) as AuthFailureError;
+  error.isAuthFailure = true;
+  error.status = 401;
+  return error;
+};
 
-function showErrorOnce(msg: string) {
-  if (!msg) return
-  const now = Date.now()
-  const last = errorCache.get(msg)
-  if (!last || now - last > ERROR_CACHE_TTL) {
-    ElMessage.error(msg)
-    errorCache.set(msg, now)
+const isRefreshEndpoint = (url?: string): boolean => {
+  if (!url || typeof url !== 'string') {
+    return false;
   }
-}
+  return url.includes(AUTH_REFRESH_PATH);
+};
 
-function shouldSuppressErrorMessage(config?: unknown): boolean {
-  return Boolean(
-    config &&
-      typeof config === 'object' &&
-      'suppressErrorMessage' in config &&
-      (config as RequestWithToastControl).suppressErrorMessage
-  )
-}
+export const isAuthFailureError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  if ('isAuthFailure' in error && Boolean((error as AuthFailureError).isAuthFailure)) {
+    return true;
+  }
+
+  if ('status' in error && Number((error as { status?: number }).status) === 401) {
+    return true;
+  }
+
+  if (
+    'response' in error &&
+    typeof (error as { response?: { status?: number } }).response === 'object' &&
+    (error as { response?: { status?: number } }).response?.status === 401
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+const decodeJwtPayload = (token: string): any | null => {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const payloadPart = parts[1];
+  if (!payloadPart) {
+    return null;
+  }
+
+  try {
+    let base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
+    const jsonPayload = atob(base64);
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+export const isTokenExpired = (token: string | null): boolean => {
+  if (!token) {
+    return true;
+  }
+
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+  if (typeof exp !== 'number') {
+    return true;
+  }
+
+  return Date.now() / 1000 >= exp;
+};
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081',
@@ -130,6 +254,50 @@ service.interceptors.request.use(
   }
 );
 
+let refreshingPromise: Promise<string> | null = null;
+
+export const refreshAuthToken = async (): Promise<string> => {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw createAuthFailureError('Refresh token missing');
+  }
+
+  if (refreshingPromise) {
+    return refreshingPromise;
+  }
+
+  const rememberMe = isRememberMeSession();
+  refreshingPromise = service
+    .post<any, any>(
+      '/auth/refresh-token',
+      { refreshToken },
+      { suppressErrorMessage: true } as any
+    )
+    .then(result => {
+      if (!result || typeof result.token !== 'string') {
+        throw new Error('Failed to refresh access token');
+      }
+
+      saveToken(result.token, rememberMe);
+
+      if (typeof result.refreshToken === 'string' && result.refreshToken) {
+        saveRefreshToken(result.refreshToken, rememberMe);
+      }
+
+      dispatchSessionActivityEvent();
+      return result.token;
+    })
+    .catch(error => {
+      logout();
+      throw error;
+    })
+    .finally(() => {
+      refreshingPromise = null;
+    });
+
+  return refreshingPromise;
+};
+
 service.interceptors.response.use(
   response => {
     const res = response.data as ApiResponse;
@@ -140,17 +308,35 @@ service.interceptors.response.use(
     }
 
     if (res.code === 401) {
+      const originalRequest = response.config as any;
+      if (
+        !originalRequest?._retry &&
+        !isRefreshEndpoint(originalRequest?.url) &&
+        getRefreshToken()
+      ) {
+        originalRequest._retry = true;
+        return refreshAuthToken()
+          .then(() => service(originalRequest))
+          .catch(error => {
+            if (!suppressErrorMessage) {
+              showErrorOnce(error.message || 'Unauthorized, please login again');
+            }
+            logout();
+            return Promise.reject(createAuthFailureError(error.message || 'Unauthorized'));
+          });
+      }
+
       if (!handling401) {
-        handling401 = true
-        clearAuthData();
+        handling401 = true;
+        logout();
         if (!suppressErrorMessage) {
           showErrorOnce(res.message || 'Unauthorized, please login again');
         }
-        router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
-        // allow future 401 handling after short delay
-        setTimeout(() => { handling401 = false }, 3000)
+        setTimeout(() => {
+          handling401 = false;
+        }, 3000);
       }
-      return Promise.reject(new Error(res.message || 'Unauthorized'));
+      return Promise.reject(createAuthFailureError(res.message || 'Unauthorized'));
     }
 
     if (res.code === 403) {
@@ -165,21 +351,51 @@ service.interceptors.response.use(
     }
     return Promise.reject(new Error(res.message || 'Error'));
   },
-  error => {
+  async error => {
     const status = error.response?.status;
     const suppressErrorMessage = shouldSuppressErrorMessage(error.config);
+    const originalRequest = error.config as any;
 
-    if (status === 401) {
-      if (!handling401) {
-        handling401 = true
-        clearAuthData();
+    if (
+      status === 401 &&
+      !originalRequest?._retry &&
+      !isRefreshEndpoint(originalRequest?.url) &&
+      getRefreshToken()
+    ) {
+      originalRequest._retry = true;
+      try {
+        await refreshAuthToken();
+        return service(originalRequest);
+      } catch (refreshError) {
         if (!suppressErrorMessage) {
           showErrorOnce('Unauthorized, please login again');
         }
-        router.push({ name: 'Login', query: { redirect: router.currentRoute.value.fullPath } }).catch(() => null);
-        setTimeout(() => { handling401 = false }, 3000)
+        logout();
+        const authFailureError = error as AuthFailureError;
+        authFailureError.isAuthFailure = true;
+        authFailureError.status = 401;
+        return Promise.reject(authFailureError);
       }
-    } else if (status === 403) {
+    }
+
+    if (status === 401) {
+      if (!handling401) {
+        handling401 = true;
+        logout();
+        if (!suppressErrorMessage) {
+          showErrorOnce('Unauthorized, please login again');
+        }
+        setTimeout(() => {
+          handling401 = false;
+        }, 3000);
+      }
+      const authFailureError = error as AuthFailureError;
+      authFailureError.isAuthFailure = true;
+      authFailureError.status = 401;
+      return Promise.reject(authFailureError);
+    }
+
+    if (status === 403) {
       if (!suppressErrorMessage) {
         showErrorOnce('Forbidden');
       }
@@ -210,8 +426,4 @@ export const saveRememberedEmail = (email: string) => {
   } else {
     localStorage.removeItem('rememberedEmail');
   }
-};
-
-export const getRememberedEmail = (): string | null => {
-  return localStorage.getItem('rememberedEmail');
 };

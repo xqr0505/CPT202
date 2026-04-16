@@ -26,9 +26,10 @@ public class CommonProperties {
     @Data
     public static class Oss {
         private String endpoint;
+        private String region;
         private String accessKeyId;
         private String accessKeySecret;
         private String bucketName;
+        private String baseUrl;
     }
 }
-

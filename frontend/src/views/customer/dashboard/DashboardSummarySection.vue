@@ -29,7 +29,7 @@
         <h3 class="dashboard-summary__state-title">{{ DASHBOARD_ERROR_TITLE }}</h3>
         <p class="dashboard-summary__state-text">{{ DASHBOARD_ERROR_MESSAGE }}</p>
       </div>
-      <CustomButton type="primary" @click="loadSummary">
+      <CustomButton type="primary" @click="loadDashboardStatistics">
         {{ DASHBOARD_RETRY_LABEL }}
       </CustomButton>
     </div>
@@ -92,13 +92,13 @@
           </span>
         </div>
 
-        <div v-if="summary.consultedExperts.length === 0" class="dashboard-summary__empty-text">
+        <div v-if="statistics.consultedExperts.length === 0" class="dashboard-summary__empty-text">
           {{ DASHBOARD_EMPTY_EXPERTS_TEXT }}
         </div>
 
         <div v-else class="dashboard-summary__experts">
           <div
-            v-for="expert in summary.consultedExperts"
+            v-for="expert in statistics.consultedExperts"
             :key="expert.specialistId"
             class="dashboard-summary__expert"
           >
@@ -116,6 +116,25 @@
         </div>
       </article>
     </div>
+
+    <DashboardTrendChart
+      :trend-data="statistics.trendData"
+      :view-state="viewState"
+      :date-range="dateRange"
+      @retry="loadDashboardStatistics"
+    />
+
+    <DashboardDepartmentChart
+      :category-data="statistics.categoryData"
+      :view-state="viewState"
+      @retry="loadDashboardStatistics"
+    />
+
+    <DashboardHabitChart
+      :habit-data="statistics.habitData"
+      :view-state="viewState"
+      @retry="loadDashboardStatistics"
+    />
   </section>
 </template>
 
@@ -123,16 +142,18 @@
 import { computed, onMounted, ref, type Component } from 'vue'
 import { CircleCheck, Clock, Money, User } from '@element-plus/icons-vue'
 import {
-  getCustomerDashboardSummary,
-  type CustomerDashboardSummary,
-  type CustomerDashboardSummaryQuery
+  getCustomerDashboardStatistics,
+  type DashboardStatistics,
+  type DashboardStatisticsQuery
 } from '@/api/booking'
 import CustomButton from '@/components/common/CustomButton.vue'
+import DashboardTrendChart from './DashboardTrendChart.vue'
+import DashboardDepartmentChart from './DashboardDepartmentChart.vue'
+import DashboardHabitChart from './DashboardHabitChart.vue'
 import {
-  createEmptyDashboardSummary,
+  createEmptyDashboardStatistics,
   DASHBOARD_AMOUNT_PRECISION,
   DASHBOARD_CURRENCY_PREFIX,
-  DASHBOARD_DATE_FILTER_HINT,
   DASHBOARD_DATE_END_PLACEHOLDER,
   DASHBOARD_DATE_PICKER_TYPE,
   DASHBOARD_DATE_RANGE_SEPARATOR,
@@ -164,36 +185,36 @@ interface StatisticCardDefinition {
 }
 
 const dateRange = ref<DashboardDateRangeNullable>(null)
-const summary = ref<CustomerDashboardSummary>(createEmptyDashboardSummary())
+const statistics = ref<DashboardStatistics>(createEmptyDashboardStatistics())
 const viewState = ref<DashboardViewState>(DASHBOARD_VIEW_STATES.loading)
 
 const statisticCards = computed<StatisticCardDefinition[]>(() => {
   return [
     {
       label: DASHBOARD_STATISTIC_LABELS.totalCompletedAppointments,
-      value: summary.value.totalCompletedAppointments,
+      value: statistics.value.totalCompletedAppointments,
       icon: CircleCheck
     },
     {
       label: DASHBOARD_STATISTIC_LABELS.totalAmountSpent,
-      value: summary.value.totalAmountSpent,
+      value: statistics.value.totalAmountSpent,
       icon: Money,
       precision: DASHBOARD_AMOUNT_PRECISION,
       prefix: DASHBOARD_CURRENCY_PREFIX
     },
     {
       label: DASHBOARD_STATISTIC_LABELS.totalConsultationHours,
-      value: summary.value.totalConsultationHours,
+      value: statistics.value.totalConsultationHours,
       icon: Clock
     }
   ]
 })
 
-const loadSummary = async (): Promise<void> => {
+const loadDashboardStatistics = async (): Promise<void> => {
   viewState.value = DASHBOARD_VIEW_STATES.loading
 
   try {
-    const query: CustomerDashboardSummaryQuery = {}
+    const query: DashboardStatisticsQuery = {}
 
     if (dateRange.value) {
       const [startDate, endDate] = dateRange.value
@@ -201,12 +222,12 @@ const loadSummary = async (): Promise<void> => {
       query.endDate = endDate
     }
 
-    const response = await getCustomerDashboardSummary(query)
+    const response = await getCustomerDashboardStatistics(query)
 
-    summary.value = response
+    statistics.value = response
     viewState.value = DASHBOARD_VIEW_STATES.ready
   } catch {
-    summary.value = createEmptyDashboardSummary()
+    statistics.value = createEmptyDashboardStatistics()
     viewState.value = DASHBOARD_VIEW_STATES.error
   }
 }
@@ -214,7 +235,7 @@ const loadSummary = async (): Promise<void> => {
 const handleDateRangeChange = (value: DashboardDateRangeNullable): void => {
   if (!value) {
     dateRange.value = null
-    void loadSummary()
+    void loadDashboardStatistics()
     return
   }
 
@@ -225,7 +246,7 @@ const handleDateRangeChange = (value: DashboardDateRangeNullable): void => {
   }
 
   dateRange.value = [startDate, endDate]
-  void loadSummary()
+  void loadDashboardStatistics()
 }
 
 const getExpertInitials = (specialistName: string): string => {
@@ -239,7 +260,7 @@ const getExpertInitials = (specialistName: string): string => {
 }
 
 onMounted(() => {
-  void loadSummary()
+  void loadDashboardStatistics()
 })
 </script>
 

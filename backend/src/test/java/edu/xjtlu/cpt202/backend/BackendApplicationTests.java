@@ -7,7 +7,10 @@ import org.springframework.boot.test.context.SpringBootTest;
  * @date 2026/4/1
  *
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+		"ai.openai.api-key=test-key",
+		"ai.openai.model-name=test-model"
+})
 class BackendApplicationTests {
 
 	@Test

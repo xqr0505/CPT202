@@ -2,7 +2,9 @@ package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
@@ -46,6 +48,14 @@ public class BookingController {
     public Result<UsageSummaryVO> getUsageSummary(@ModelAttribute UsageSummaryQueryDTO queryDTO) {
         UsageSummaryVO usageSummary = bookingService.getUsageSummary(queryDTO);
         return Result.success(usageSummary);
+    }
+
+    @GetMapping("/statistics")
+    @Operation(summary = "Get dashboard statistics", description = "Get customer dashboard statistics with optional date range.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<DashboardStatisticsVO> getDashboardStatistics(@ModelAttribute DashboardQueryDTO queryDTO) {
+        DashboardStatisticsVO statistics = bookingService.getDashboardStatistics(queryDTO);
+        return Result.success(statistics);
     }
 }
 

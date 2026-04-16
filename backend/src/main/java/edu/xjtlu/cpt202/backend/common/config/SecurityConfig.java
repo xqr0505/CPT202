@@ -67,8 +67,6 @@ public class SecurityConfig {
                                 "/auth/verify-email",
                                 "/auth/logout",           
                                 "/auth/reset-password/**", 
-                                "/api/v1/categories",
-                                "/api/v1/specialists",
                                 "/doc.html",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
@@ -84,7 +82,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/ai/**").hasAnyRole("ADMIN", "SPECIALIST", "CUSTOMER")
                         .requestMatchers(
                                 "/api/v1/categories",
+                                "/api/v1/specialists",
                                 "/api/v1/specialists/**",
+                                "/api/v1/booking-topics",
                                 "/api/v1/booking-topics/**"
                         ).authenticated()
 

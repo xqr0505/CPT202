@@ -18,7 +18,7 @@ const getDefaultHomePath = (role: string): string => {
 };
 
 export function setupRouterGuard(router: Router) {
-  router.beforeEach(async (to, from, next) => {
+  router.beforeEach(async (to) => {
     const token = getAuthToken();
     const refreshToken = getRefreshToken();
     const user = getUser();
@@ -30,8 +30,7 @@ export function setupRouterGuard(router: Router) {
         await refreshAuthToken();
       } catch {
         clearAuthData();
-        next({ path: '/auth/login', query: { redirect: to.fullPath } });
-        return;
+        return { path: '/auth/login', query: { redirect: to.fullPath } };
       }
     }
 
@@ -41,27 +40,24 @@ export function setupRouterGuard(router: Router) {
 
     if (isAuthenticated) {
       if (to.path === '/auth/login' || to.path === '/register') {
-        next({ path: getDefaultHomePath(currentUser.role) });
-        return;
+        return { path: getDefaultHomePath(currentUser.role) };
       }
 
       if (to.path === '/') {
-        next({ path: getDefaultHomePath(currentUser.role) });
-        return;
+        return { path: getDefaultHomePath(currentUser.role) };
       }
 
       const requiredRole = to.meta?.role as string | undefined;
       if (requiredRole && currentUser.role !== requiredRole) {
-        next({ path: '/error/403' });
-        return;
+        return { path: '/error/403' };
       }
 
-      next();
+      return true;
     } else {
       if (whiteList.includes(to.path)) {
-        next();
+        return true;
       } else {
-        next({ path: '/auth/login', query: { redirect: to.fullPath } });
+        return { path: '/auth/login', query: { redirect: to.fullPath } };
       }
     }
   });

@@ -13,9 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -47,8 +45,15 @@ public class CustomerBookingControllerTest {
         when(bookingService.createBooking(anyLong(), any()))
                 .thenReturn(new BookingCreateVO(101L, "PENDING"));
 
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(
+                        1L,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))
+                );
+
         mockMvc.perform(post("/api/v1/customer/bookings")
-                        .with(authentication(customerAuthentication()))
+                        .with(authentication(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -66,8 +71,15 @@ public class CustomerBookingControllerTest {
 
     @Test
     public void createBooking_ValidationError() throws Exception {
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(
+                        1L,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))
+                );
+
         mockMvc.perform(post("/api/v1/customer/bookings")
-                        .with(authentication(customerAuthentication()))
+                        .with(authentication(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

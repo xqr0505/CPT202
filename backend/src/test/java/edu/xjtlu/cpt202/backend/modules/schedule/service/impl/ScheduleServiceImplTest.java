@@ -4,7 +4,9 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRule;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
+import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.CreateSlotRequest;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.UpdateSlotRequest;
@@ -37,6 +39,9 @@ class ScheduleServiceImplTest {
     private TimeSlotMapper timeSlotMapper;
 
     @Mock
+    private AvailabilityRecurringRuleMapper recurringRuleMapper;
+
+    @Mock
     private SpecialistProfileMapper specialistProfileMapper;
 
     @InjectMocks
@@ -50,6 +55,7 @@ class ScheduleServiceImplTest {
         request.setEndTime(LocalTime.of(10, 0));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(5, "12:00")));
         when(timeSlotMapper.selectCount(any())).thenReturn(0L);
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
@@ -92,6 +98,7 @@ class ScheduleServiceImplTest {
         request.setEndTime(LocalTime.of(10, 0));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(5, "12:00")));
         when(timeSlotMapper.selectCount(any())).thenReturn(1L);
 
         BusinessException exception = assertThrows(BusinessException.class, () -> scheduleService.createSlot(request));
@@ -161,6 +168,7 @@ class ScheduleServiceImplTest {
         request.setStartTime(LocalTime.of(10, 0));
         request.setEndTime(LocalTime.of(11, 0));
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(3, "18:00")));
 
         when(timeSlotMapper.selectById(12L)).thenReturn(slot);
         when(timeSlotMapper.selectCount(any())).thenReturn(0L);
@@ -189,6 +197,7 @@ class ScheduleServiceImplTest {
         request.setEndTime(LocalTime.of(10, 30));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(3, "12:00")));
         when(timeSlotMapper.selectById(12L)).thenReturn(slot);
         when(timeSlotMapper.selectCount(any())).thenReturn(1L);
 
@@ -319,5 +328,68 @@ class ScheduleServiceImplTest {
         assertNotNull(result);
         assertEquals(22L, result.getId());
         assertTrue(result.getStatusDesc().contains("Available"));
+    }
+
+    @Test
+    void createSlot_outsideConsultationHours() {
+        CreateSlotRequest request = new CreateSlotRequest();
+        request.setSlotDate(LocalDate.of(2026, 4, 10));
+        request.setStartTime(LocalTime.of(13, 0));
+        request.setEndTime(LocalTime.of(14, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(5, "12:00")));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> scheduleService.createSlot(request));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+    }
+
+    @Test
+    void updateSlot_outsideConsultationHours() {
+        TimeSlot slot = new TimeSlot();
+        slot.setId(31L);
+        slot.setSpecialistId(1L);
+        slot.setSlotDate(LocalDate.of(2026, 4, 8));
+        slot.setStartTime(LocalTime.of(9, 0));
+        slot.setEndTime(LocalTime.of(10, 0));
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        UpdateSlotRequest request = new UpdateSlotRequest();
+        request.setStartTime(LocalTime.of(18, 0));
+        request.setEndTime(LocalTime.of(19, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(timeSlotMapper.selectById(31L)).thenReturn(slot);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildActiveRule(3, "17:00")));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> scheduleService.updateSlot(31L, request));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+    }
+
+    @Test
+    void deleteSlot_outsideConsultationHours_stillAllowed() {
+        TimeSlot slot = new TimeSlot();
+        slot.setId(32L);
+        slot.setSpecialistId(1L);
+        slot.setSlotDate(LocalDate.of(2026, 4, 10));
+        slot.setStartTime(LocalTime.of(18, 0));
+        slot.setEndTime(LocalTime.of(19, 0));
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(timeSlotMapper.selectById(32L)).thenReturn(slot);
+        scheduleService.deleteSlot(32L);
+        verify(timeSlotMapper).deleteById(32L);
+    }
+
+    private AvailabilityRecurringRule buildActiveRule(Integer dayOfWeek, String end) {
+        AvailabilityRecurringRule rule = new AvailabilityRecurringRule();
+        rule.setSpecialistId(1L);
+        rule.setDayOfWeek(dayOfWeek);
+        rule.setStartTime(LocalTime.of(8, 0));
+        rule.setEndTime(LocalTime.parse(end));
+        rule.setEffectiveEndDate(LocalDate.of(2026, 12, 31));
+        rule.setIsActive(1);
+        return rule;
     }
 }

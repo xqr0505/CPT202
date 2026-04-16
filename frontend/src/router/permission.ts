@@ -1,9 +1,10 @@
 // src/router/permission.ts
 import type { Router } from 'vue-router';
+import { ElMessageBox } from 'element-plus';
 import { getAuthToken, getRefreshToken, getUser, isTokenExpired, refreshAuthToken, clearAuthData } from '@/api/request';
 
-// WhiteList
-const whiteList = ['/auth/login', '/register', '/forgot-password', '/error/403', '/error/404', '/error/500'];
+const publicRoutes = ['/customer/search'];
+const authRoutes = ['/auth/login', '/login', '/register', '/forgot-password'];
 
 const getDefaultHomePath = (role: string): string => {
   switch (role) {
@@ -30,7 +31,6 @@ export function setupRouterGuard(router: Router) {
         await refreshAuthToken();
       } catch {
         clearAuthData();
-        return { path: '/auth/login', query: { redirect: to.fullPath } };
       }
     }
 
@@ -39,7 +39,7 @@ export function setupRouterGuard(router: Router) {
     const isAuthenticated = Boolean(currentToken && currentUser);
 
     if (isAuthenticated) {
-      if (to.path === '/auth/login' || to.path === '/register') {
+      if (to.path === '/auth/login' || to.path === '/login' || to.path === '/register') {
         return { path: getDefaultHomePath(currentUser.role) };
       }
 
@@ -54,10 +54,24 @@ export function setupRouterGuard(router: Router) {
 
       return true;
     } else {
-      if (whiteList.includes(to.path)) {
+      if (publicRoutes.includes(to.path) || authRoutes.includes(to.path)) {
         return true;
-      } else {
-        return { path: '/auth/login', query: { redirect: to.fullPath } };
+      }
+
+      try {
+        await ElMessageBox.confirm('This page requires login to access', 'Permission Required', {
+          confirmButtonText: 'Login',
+          cancelButtonText: 'Continue Browsing',
+          closeOnClickModal: false,
+          closeOnPressEscape: false,
+          showCancelButton: true,
+          distinguishCancelAndClose: true,
+          type: 'warning'
+        });
+
+        return { path: '/login', query: { redirect: to.fullPath } };
+      } catch {
+        return { path: '/customer/search' };
       }
     }
   });

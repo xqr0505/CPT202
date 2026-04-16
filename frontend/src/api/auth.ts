@@ -22,7 +22,6 @@ export interface RegisterPayload {
   verificationCode: string;
   password: string;
   confirmPassword: string;
-  role: 'CUSTOMER' | 'SPECIALIST';
 }
 
 export interface SendVerificationCodePayload {

@@ -27,6 +27,7 @@ import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -53,6 +54,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
     private final BookingMapper bookingMapper;
     private final UserMapper userMapper;
+    private final UserAccountService userAccountService;
     private final SpecialistProfileMapper specialistProfileMapper;
     private final JavaMailSender mailSender;
     private final Environment env;
@@ -86,16 +88,12 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         validateSpecialistLevel(normalizedLevel);
         validateFeeWithinRange(normalizedLevel, request.getConsultationFee());
 
-        User user = User.builder()
-                .email(buildGeneratedSpecialistEmail(normalizedName))
-                .passwordHash(PASSWORD_ENCODER.encode(DEFAULT_SPECIALIST_PASSWORD))
-                .role(UserRoleEnum.SPECIALIST.name())
-                .status(AccountStatusEnum.ACTIVE.name())
-                .fullName(normalizedName)
-                .loginFailCount(0)
-                .lockTime(LocalDateTime.now())
-                .build();
-        userMapper.insert(user);
+        User user = userAccountService.createUser(
+                buildGeneratedSpecialistEmail(normalizedName),
+                DEFAULT_SPECIALIST_PASSWORD,
+                UserRoleEnum.SPECIALIST.name(),
+                normalizedName
+        );
 
         SpecialistProfile specialistProfile = SpecialistProfile.builder()
                 .userId(user.getId())

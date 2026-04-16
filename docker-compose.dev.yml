@@ -65,6 +65,9 @@ services:
       - REDIS_TIMEOUT=${REDIS_TIMEOUT:-5000ms}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
     volumes:
       - ./backend:/app
       - maven_repo_dev:/root/.m2

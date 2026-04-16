@@ -99,7 +99,8 @@ const loadData = async () => {
   try {
     const res = await props.fetchData({ page: currentPage.value, limit: pageSize.value })
     tableData.value = res.list
-    total.value = res.total
+    const parsedTotal = Number((res as unknown as { total?: unknown })?.total)
+    total.value = Number.isFinite(parsedTotal) ? parsedTotal : 0
   } catch (error) {
     console.error('Failed to load table data:', error)
   } finally {

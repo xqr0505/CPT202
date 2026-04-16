@@ -4,18 +4,8 @@
       <h1 class="register-title">Create your account</h1>
 
       <div class="form-group">
-        <label>Select role</label>
-        <div class="role-selector">
-          <button
-            v-for="option in roles"
-            :key="option.value"
-            :class="['role-btn', { active: form.role === option.value }]"
-            @click="form.role = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-        <span v-if="errors.role" class="error-text">{{ errors.role }}</span>
+        <label>Customer account</label>
+        <p class="hint-text">Register a customer account to book expert consultations.</p>
       </div>
 
       <div class="form-group">
@@ -85,22 +75,19 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { register, sendVerificationCode, type RegisterPayload } from '@/api/auth';
+import { saveAuthData, dispatchSessionActivityEvent } from '@/api/request';
+import { useUserStore } from '@/stores/user';
 
 defineOptions({ name: 'AuthRegister' });
 
 const router = useRouter();
+const userStore = useUserStore();
 const isLoading = ref(false);
 const isCodeSending = ref(false);
 const countdown = ref(0);
 const sendCodeMessage = ref('');
 
-const roles = [
-  { label: 'Customer', value: 'CUSTOMER' },
-  { label: 'Specialist', value: 'SPECIALIST' }
-];
-
 const form = reactive({
-  role: '',
   email: '',
   verificationCode: '',
   password: '',
@@ -108,7 +95,6 @@ const form = reactive({
 });
 
 const errors = reactive({
-  role: '',
   email: '',
   verificationCode: '',
   password: '',
@@ -144,11 +130,6 @@ function validatePassword() {
 }
 
 async function getVerificationCode() {
-  errors.role = form.role ? '' : 'Please select a role first.';
-  if (!form.role) {
-    return;
-  }
-
   if (!validateEmail()) {
     return;
   }
@@ -159,7 +140,6 @@ async function getVerificationCode() {
   try {
     await sendVerificationCode({
       email: form.email,
-      role: form.role as 'CUSTOMER' | 'SPECIALIST',
       type: 'REGISTER'
     });
 
@@ -182,8 +162,7 @@ async function getVerificationCode() {
 }
 
 async function handleRegister() {
-  if (!form.role || !form.email || !form.verificationCode || !form.password || !form.confirmPassword) {
-    errors.role = form.role ? '' : 'Please select a role first.';
+  if (!form.email || !form.verificationCode || !form.password || !form.confirmPassword) {
     errors.email = form.email ? '' : 'Please enter every field';
     errors.verificationCode = form.verificationCode ? '' : 'Please enter every field';
     errors.password = form.password ? '' : 'Please enter every field';
@@ -207,13 +186,32 @@ async function handleRegister() {
   try {
     const payload: RegisterPayload = {
       email: form.email,
-      role: form.role as 'CUSTOMER' | 'SPECIALIST',
       verificationCode: form.verificationCode,
       password: form.password,
       confirmPassword: form.confirmPassword
     };
 
     const response = await register(payload);
+    saveAuthData(
+      response.token,
+      response.refreshToken,
+      {
+        userId: response.userId,
+        role: response.role,
+        email: response.email,
+        displayName: response.displayName
+      },
+      false
+    );
+    userStore.token = response.token;
+    userStore.userInfo = {
+      id: response.userId,
+      username: response.email,
+      nickname: response.displayName,
+      email: response.email
+    };
+    userStore.userRole = response.role.toLowerCase() as any;
+    dispatchSessionActivityEvent();
     ElMessage.success('Registration successful, logging in...');
 
     const target = response.role === 'SPECIALIST' ? '/specialist/schedule' : '/customer/search';

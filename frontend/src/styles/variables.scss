@@ -44,6 +44,21 @@
   --footer-height: 56px;
   --sidebar-width: 240px;
   --content-max-width: 1440px;
+  --ai-chat-drawer-width: 560px;
+  --ai-chat-panel-gap: 16px;
+  --ai-chat-body-padding: 20px;
+  --ai-chat-list-padding: 20px;
+  --ai-chat-message-gap: 16px;
+  --ai-chat-bubble-radius: 22px;
+  --ai-chat-bubble-padding: 14px 16px;
+  --ai-chat-composer-padding: 16px;
+  --ai-chat-list-background: var(--color-bg-surface);
+  --ai-chat-composer-background: var(--color-bg-surface);
+  --ai-chat-user-bubble-bg: var(--color-primary);
+  --ai-chat-user-bubble-color: var(--color-text-inverse);
+  --ai-chat-assistant-bubble-bg: var(--color-bg-muted);
+  --ai-chat-assistant-bubble-color: var(--color-text-primary);
+  --ai-chat-toolbar-border-color: var(--color-border);
 
   /* Spacing */
   --space-1: 4px;
@@ -194,6 +209,13 @@
   --color-btn-bg-info-hover: var(--color-info);
   --color-btn-text-info-hover: var(--color-text-inverse);
   --color-btn-shadow-info: rgba(91, 124, 240, 0.15);
+  --ai-chat-list-background: var(--color-bg-surface);
+  --ai-chat-composer-background: var(--color-bg-surface);
+  --ai-chat-user-bubble-bg: var(--color-primary);
+  --ai-chat-user-bubble-color: var(--color-text-inverse);
+  --ai-chat-assistant-bubble-bg: var(--color-bg-muted);
+  --ai-chat-assistant-bubble-color: var(--color-text-primary);
+  --ai-chat-toolbar-border-color: var(--color-border);
 }
 
 html,

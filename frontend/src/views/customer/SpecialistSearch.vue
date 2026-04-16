@@ -178,7 +178,7 @@ const loadSpecialists = async () => {
 
 const pushSearchState = (pageNo = 1) => {
   router.push({
-    path: '/customer/specialists',
+    path: '/customer/search',
     query: buildSearchQuery(pageNo),
   })
 }

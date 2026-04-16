@@ -59,9 +59,9 @@ export function setupRouterGuard(router: Router) {
       }
 
       try {
-        await ElMessageBox.confirm('当前页面需要登录才能访问', '权限提示', {
-          confirmButtonText: '登录',
-          cancelButtonText: '继续浏览',
+        await ElMessageBox.confirm('This page requires login to access', 'Permission Required', {
+          confirmButtonText: 'Login',
+          cancelButtonText: 'Continue Browsing',
           closeOnClickModal: false,
           closeOnPressEscape: false,
           showCancelButton: true,

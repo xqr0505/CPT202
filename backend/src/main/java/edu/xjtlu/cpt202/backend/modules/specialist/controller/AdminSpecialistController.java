@@ -13,6 +13,7 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistLevelOptio
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/admin/specialists")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminSpecialistController {
 
     private final AdminSpecialistService adminSpecialistService;

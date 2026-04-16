@@ -1,11 +1,14 @@
 package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
@@ -42,6 +45,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     private static final long MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024L;
 
     private final UserMapper userMapper;
+    private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
 
     @Override
@@ -101,6 +105,8 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update password");
         }
+
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", user.getId()));
     }
 
     @Override

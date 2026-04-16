@@ -4,6 +4,7 @@ import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
@@ -47,6 +48,9 @@ class UserAccountServiceImplTest {
 
     @Mock
     private UserMapper userMapper;
+
+    @Mock
+    private RefreshTokenMapper refreshTokenMapper;
 
     @Mock
     private AvatarStorageService avatarStorageService;
@@ -282,7 +286,8 @@ class UserAccountServiceImplTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).selectById(7L);
         verify(userMapper).updateById(userCaptor.capture());
-        verifyNoMoreInteractions(userMapper);
+        verify(refreshTokenMapper).delete(any());
+        verifyNoMoreInteractions(userMapper, refreshTokenMapper);
 
         User savedUser = userCaptor.getValue();
         assertNotEquals("NewPass456", savedUser.getPasswordHash());

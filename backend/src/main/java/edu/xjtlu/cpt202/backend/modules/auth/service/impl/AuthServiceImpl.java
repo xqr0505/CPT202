@@ -9,12 +9,17 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LogoutRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.VerifyResetCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
@@ -30,6 +35,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.UUID;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -44,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
     private final VerificationCodeMapper verificationCodeMapper;
+    private final RefreshTokenMapper refreshTokenMapper;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final Environment env;
@@ -51,11 +58,13 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
                            VerificationCodeMapper verificationCodeMapper,
+                           RefreshTokenMapper refreshTokenMapper,
                            PasswordEncoder passwordEncoder,
                            JavaMailSender mailSender,
                            Environment env) {
         this.userMapper = userMapper;
         this.verificationCodeMapper = verificationCodeMapper;
+        this.refreshTokenMapper = refreshTokenMapper;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
         this.env = env;
@@ -302,16 +311,82 @@ public class AuthServiceImpl implements AuthService {
         // user.setLastLoginTime(LocalDateTime.now());
         userMapper.updateById(user);
 
-        String token = JwtUtils.generateToken(user.getId(), user.getRole());
+        String accessToken = JwtUtils.generateToken(user.getId(), user.getRole());
+        String refreshToken = generateRefreshToken();
+        persistRefreshToken(user.getId(), refreshToken);
 
         return LoginResponse.builder()
-                .token(token)
+                .token(accessToken)
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .role(user.getRole())
                 .email(user.getEmail())
                 .displayName(user.getFullName() != null ? user.getFullName() : user.getEmail())
                 .expiresIn(System.currentTimeMillis() + SecurityConstant.JWT_EXPIRATION_MILLISECONDS)
                 .build();
+    }
+
+    @Override
+    public RefreshTokenResponse refreshToken(RefreshTokenRequest request) {
+        String refreshTokenValue = request.getRefreshToken().trim();
+        if (StrUtil.isBlank(refreshTokenValue)) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Invalid refresh token");
+        }
+
+        RefreshToken persistedToken = refreshTokenMapper.selectOne(new QueryWrapper<RefreshToken>()
+                .eq("token", refreshTokenValue)
+                .ge("expires_at", LocalDateTime.now())
+        );
+
+        if (persistedToken == null) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Refresh token invalid or expired");
+        }
+
+        User user = userMapper.selectById(persistedToken.getUserId());
+        if (user == null || !AccountStatusEnum.ACTIVE.name().equalsIgnoreCase(user.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "User session is invalid");
+        }
+
+        if (user.getPasswordChangedAt() != null && persistedToken.getCreatedAt() != null &&
+                persistedToken.getCreatedAt().isBefore(user.getPasswordChangedAt())) {
+            invalidateRefreshToken(refreshTokenValue);
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Refresh token invalid due to password change");
+        }
+
+        String accessToken = JwtUtils.generateToken(user.getId(), user.getRole());
+
+        return RefreshTokenResponse.builder()
+                .token(accessToken)
+                .expiresIn(System.currentTimeMillis() + SecurityConstant.JWT_EXPIRATION_MILLISECONDS)
+                .build();
+    }
+
+    @Override
+    public void logout(LogoutRequest request) {
+        if (request != null && StrUtil.isNotBlank(request.getRefreshToken())) {
+            invalidateRefreshToken(request.getRefreshToken().trim());
+        }
+    }
+
+    private String generateRefreshToken() {
+        return UUID.randomUUID().toString() + UUID.randomUUID().toString();
+    }
+
+    private void persistRefreshToken(Long userId, String refreshTokenValue) {
+        RefreshToken refreshToken = RefreshToken.builder()
+                .userId(userId)
+                .token(refreshTokenValue)
+                .expiresAt(LocalDateTime.now().plusDays(SecurityConstant.REFRESH_TOKEN_EXPIRATION_DAYS))
+                .build();
+        refreshTokenMapper.insert(refreshToken);
+    }
+
+    private void invalidateRefreshToken(String refreshTokenValue) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("token", refreshTokenValue));
+    }
+
+    private void invalidateAllRefreshTokensForUser(Long userId) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", userId));
     }
 
     @Override
@@ -490,7 +565,8 @@ public class AuthServiceImpl implements AuthService {
             user.setStatus(AccountStatusEnum.ACTIVE.name());
         }
         userMapper.updateById(user);
-        
+        invalidateAllRefreshTokensForUser(user.getId());
+
         logger.info("Password reset successfully for email: {}", email);
     }
 }

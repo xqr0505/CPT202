@@ -85,10 +85,13 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { register, sendVerificationCode, type RegisterPayload } from '@/api/auth';
+import { saveAuthData, dispatchSessionActivityEvent } from '@/api/request';
+import { useUserStore } from '@/stores/user';
 
 defineOptions({ name: 'AuthRegister' });
 
 const router = useRouter();
+const userStore = useUserStore();
 const isLoading = ref(false);
 const isCodeSending = ref(false);
 const countdown = ref(0);
@@ -214,6 +217,26 @@ async function handleRegister() {
     };
 
     const response = await register(payload);
+    saveAuthData(
+      response.token,
+      response.refreshToken,
+      {
+        userId: response.userId,
+        role: response.role,
+        email: response.email,
+        displayName: response.displayName
+      },
+      false
+    );
+    userStore.token = response.token;
+    userStore.userInfo = {
+      id: response.userId,
+      username: response.email,
+      nickname: response.displayName,
+      email: response.email
+    };
+    userStore.userRole = response.role.toLowerCase() as any;
+    dispatchSessionActivityEvent();
     ElMessage.success('Registration successful, logging in...');
 
     const target = response.role === 'SPECIALIST' ? '/specialist/schedule' : '/customer/search';

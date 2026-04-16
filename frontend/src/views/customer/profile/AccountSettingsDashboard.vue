@@ -2,7 +2,7 @@
   <section class="page-card settings-page">
     <div class="page-header">
       <div>
-        <p class="page-tag">Customer</p>
+        <p class="page-tag">Account</p>
         <h1 class="page-title">Account Settings</h1>
         <p class="page-text">
           Manage your personal details, contact information, password, and account controls from
@@ -41,16 +41,6 @@
     </div>
 
     <div v-else class="dashboard">
-      <div v-if="demoModeNotice" class="status-banner status-banner--info" aria-live="polite">
-        <div class="status-banner__body">
-          <strong class="status-banner__title">Local demo mode</strong>
-          <p class="status-banner__text">
-            No authenticated API session was detected, so profile changes are being saved to local
-            demo storage to preserve existing module behavior.
-          </p>
-        </div>
-      </div>
-
       <section class="settings-card settings-card--avatar">
         <div class="settings-card__header">
           <div>
@@ -86,7 +76,7 @@
               <div class="avatar-panel__details">
                 <strong class="avatar-panel__name">{{ avatarDisplayName }}</strong>
                 <span class="avatar-panel__status">{{ avatarSummaryText }}</span>
-                <span class="avatar-panel__meta">Current mode: {{ syncModeLabel }}</span>
+                <span class="avatar-panel__meta">Source: {{ accountDataSourceLabel }}</span>
               </div>
             </div>
 
@@ -150,8 +140,8 @@
             </div>
 
             <p class="section-note">
-              This name is used as your primary account identity within the customer settings
-              module.
+              This name is used as your primary account identity within the shared account settings
+              flow.
             </p>
           </div>
         </section>
@@ -216,8 +206,8 @@
                 <strong class="contact-summary__value">{{ composedPhonePreview || 'Not provided' }}</strong>
               </div>
               <div class="contact-summary__item">
-                <span class="contact-summary__label">Profile data usage</span>
-                <strong class="contact-summary__value">{{ syncModeLabel }}</strong>
+                <span class="contact-summary__label">Profile data source</span>
+                <strong class="contact-summary__value">{{ accountDataSourceLabel }}</strong>
               </div>
             </div>
           </div>
@@ -370,14 +360,14 @@
         </div>
 
         <div class="settings-card__body">
-          <div class="appearance-panel">
-            <span class="appearance-panel__label">Current appearance</span>
-            <strong class="appearance-panel__value">{{ currentPageStyleText }}</strong>
-            <p class="appearance-panel__text">
-              Theme controls still use the existing style settings page, so your current Light
-              Mode behavior stays intact without duplicating settings logic here.
-            </p>
-          </div>
+            <div class="appearance-panel">
+              <span class="appearance-panel__label">Current appearance</span>
+              <strong class="appearance-panel__value">{{ currentPageStyleText }}</strong>
+              <p class="appearance-panel__text">
+                Appearance preferences are separate from the live account profile APIs. This section
+                only reflects the current interface theme without mixing it into profile data.
+              </p>
+            </div>
 
           <div class="appearance-actions">
             <CustomButton @click="goToStyleSettings">Open Style Settings</CustomButton>
@@ -430,7 +420,7 @@
           <div class="form-footer">
             <div class="form-footer__meta">
               <strong>{{ profileMetaText }}</strong>
-              <span>{{ hasUnsavedProfileChanges ? 'Changes stay local until you save them.' : 'Your saved details are currently in sync.' }}</span>
+              <span>{{ hasUnsavedProfileChanges ? 'Changes are pending until you save them to the backend.' : 'Your saved details are currently in sync with the backend.' }}</span>
             </div>
 
             <div class="form-footer__actions">
@@ -605,18 +595,14 @@ const props = withDefaults(defineProps<Props>(), {
   initialSection: 'overview'
 })
 
-const USER_PROFILE_STORAGE_KEY = 'mock-user-profile'
-const USER_PASSWORD_STORAGE_KEY = 'mock-user-password'
-const USER_THEME_STORAGE_KEY = 'mock-user-theme-preference'
-const DEFAULT_PASSWORD = 'Password123'
 const DEFAULT_COUNTRY_CODE = '+86'
 const MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024
 const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-const DEFAULT_PROFILE: AccountProfile = {
-  id: 1,
-  fullName: 'Emma Chen',
-  email: 'emma.chen@example.com',
-  phoneNumber: '+86 13812345678',
+const EMPTY_PROFILE: AccountProfile = {
+  id: 0,
+  fullName: '',
+  email: '',
+  phoneNumber: '',
   avatarUrl: '',
   status: 'ACTIVE'
 }
@@ -701,10 +687,8 @@ const passwordForm = reactive<PasswordFormModel>({
 })
 
 const hasApiSession = computed(() => Boolean(getAuthToken()))
-const demoModeNotice = computed(() => !hasApiSession.value)
-
-const syncModeLabel = computed(() => (hasApiSession.value ? 'Live account' : 'Local preview'))
-const currentAccountStatus = computed(() => originalProfile.value?.status ?? DEFAULT_PROFILE.status)
+const accountDataSourceLabel = computed(() => 'Live account data')
+const currentAccountStatus = computed(() => originalProfile.value?.status ?? EMPTY_PROFILE.status)
 const currentAvatarUrl = computed(() => originalProfile.value?.avatarUrl?.trim() || '')
 const avatarTagText = computed(() => (currentAvatarUrl.value ? 'Custom avatar' : 'Default avatar'))
 const avatarDisplayName = computed(() => {
@@ -713,7 +697,7 @@ const avatarDisplayName = computed(() => {
     originalProfile.value?.fullName?.trim() ||
     userStore.userInfo?.nickname?.trim() ||
     userStore.userInfo?.username?.trim() ||
-    'Customer account'
+    'Account profile'
   )
 })
 const avatarInitials = computed(() => buildAvatarInitials(avatarDisplayName.value))
@@ -727,7 +711,7 @@ const canUploadAvatar = computed(() => {
 })
 const avatarHelperText = computed(() => {
   if (!hasApiSession.value) {
-    return 'Sign in with a live account session to upload and save an avatar to your profile.'
+    return 'An authenticated session is required to upload and save an avatar to your profile.'
   }
 
   if (currentAccountStatus.value !== 'ACTIVE') {
@@ -767,7 +751,7 @@ const canDeactivateAccount = computed(() => {
 
 const dangerZoneHelperText = computed(() => {
   if (!hasApiSession.value) {
-    return 'A live authenticated session is required to deactivate the real account.'
+    return 'An authenticated session is required to deactivate this account.'
   }
 
   if (currentAccountStatus.value === 'DEACTIVATED') {
@@ -842,13 +826,15 @@ const completenessPercentage = computed(() => {
 })
 
 const currentPageStyleText = computed(() => {
-  const preference = readStoredThemePreference()
+  if (typeof document === 'undefined') {
+    return 'Light Mode'
+  }
 
-  return preference === 'dark'
-    ? 'Dark Mode'
-    : preference === 'light'
-      ? 'Light Mode'
-      : 'Light Mode (default)'
+  const html = document.documentElement
+  const isDarkMode =
+    html.getAttribute('data-theme') === 'dark' || html.classList.contains('dark')
+
+  return isDarkMode ? 'Dark Mode' : 'Light Mode'
 })
 
 const hasUnsavedProfileChanges = computed(() => {
@@ -876,7 +862,7 @@ const profileMetaText = computed(() => {
     return `Saved ${formatTimestamp(lastProfileSavedAt.value)}`
   }
 
-  return hasApiSession.value ? 'Profile synced with current account data' : 'Profile loaded from local demo storage'
+  return 'Profile synced with current account data'
 })
 
 const passwordMetaText = computed(() => {
@@ -995,66 +981,9 @@ const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
   return error instanceof Error && error.message ? error.message : fallbackMessage
 }
 
-const readStoredThemePreference = (): 'light' | 'dark' | null => {
-  const storedPreference = localStorage.getItem(USER_THEME_STORAGE_KEY)
-
-  return storedPreference === 'dark' || storedPreference === 'light'
-    ? storedPreference
-    : null
-}
-
-const readStoredProfile = (): AccountProfile => {
-  const storedProfile = localStorage.getItem(USER_PROFILE_STORAGE_KEY)
-
-  if (!storedProfile) {
-    return { ...DEFAULT_PROFILE }
-  }
-
-  try {
-    const parsedProfile = JSON.parse(storedProfile) as Partial<AccountProfile>
-
-    return normalizeProfile({
-      ...DEFAULT_PROFILE,
-      ...parsedProfile
-    })
-  } catch {
-    return { ...DEFAULT_PROFILE }
-  }
-}
-
-const writeStoredProfile = (
-  profile: UpdateUserProfilePayload & { id?: number; status?: string; avatarUrl?: string }
-): void => {
-  localStorage.setItem(
-    USER_PROFILE_STORAGE_KEY,
-    JSON.stringify({
-      id: profile.id ?? originalProfile.value?.id ?? DEFAULT_PROFILE.id,
-      fullName: profile.fullName.trim(),
-      email: profile.email.trim(),
-      phoneNumber: profile.phoneNumber.trim(),
-      avatarUrl:
-        'avatarUrl' in profile && typeof profile.avatarUrl === 'string'
-          ? profile.avatarUrl.trim()
-          : originalProfile.value?.avatarUrl ?? DEFAULT_PROFILE.avatarUrl,
-      status:
-        'status' in profile && typeof profile.status === 'string' && profile.status.trim()
-          ? profile.status.trim().toUpperCase()
-          : originalProfile.value?.status ?? DEFAULT_PROFILE.status
-    })
-  )
-}
-
-const readStoredPassword = (): string => {
-  return localStorage.getItem(USER_PASSWORD_STORAGE_KEY) || DEFAULT_PASSWORD
-}
-
-const writeStoredPassword = (password: string): void => {
-  localStorage.setItem(USER_PASSWORD_STORAGE_KEY, password)
-}
-
 const normalizeProfile = (profile: Partial<AccountProfile>): AccountProfile => {
   return {
-    id: Number(profile.id ?? DEFAULT_PROFILE.id),
+    id: Number(profile.id ?? EMPTY_PROFILE.id),
     fullName: String(profile.fullName ?? '').trim(),
     email: String(profile.email ?? '').trim(),
     phoneNumber: String(profile.phoneNumber ?? '').trim(),
@@ -1062,31 +991,8 @@ const normalizeProfile = (profile: Partial<AccountProfile>): AccountProfile => {
     status:
       typeof profile.status === 'string' && profile.status.trim()
         ? profile.status.trim().toUpperCase()
-        : DEFAULT_PROFILE.status
+        : EMPTY_PROFILE.status
   }
-}
-
-const buildFallbackProfile = (mode: 'demo' | 'live-fallback' = 'demo'): AccountProfile => {
-  const storedProfile = mode === 'demo' ? readStoredProfile() : null
-  const currentUser = userStore.userInfo
-
-  return normalizeProfile({
-    id: currentUser?.id ?? storedProfile?.id ?? DEFAULT_PROFILE.id,
-    fullName:
-      currentUser?.fullName ??
-      storedProfile?.fullName ??
-      (mode === 'demo' ? DEFAULT_PROFILE.fullName : ''),
-    email:
-      currentUser?.email ??
-      storedProfile?.email ??
-      (mode === 'demo' ? DEFAULT_PROFILE.email : ''),
-    phoneNumber:
-      currentUser?.phoneNumber ??
-      storedProfile?.phoneNumber ??
-      (mode === 'demo' ? DEFAULT_PROFILE.phoneNumber : ''),
-    avatarUrl: currentUser?.avatar ?? storedProfile?.avatarUrl ?? DEFAULT_PROFILE.avatarUrl,
-    status: storedProfile?.status ?? DEFAULT_PROFILE.status
-  })
 }
 
 const isCountryCode = (value: string): boolean => {
@@ -1167,7 +1073,7 @@ const syncUserStoreProfile = (profile: AccountProfile): void => {
       phoneNumber: profile.phoneNumber,
       avatar: profile.avatarUrl,
       nickname: profile.fullName || currentUser.nickname,
-      username: currentUser.username || profile.email || 'customer'
+      username: currentUser.username || profile.email || `user-${profile.id}`
     },
     currentRole
   )
@@ -1474,12 +1380,8 @@ const handleAvatarFileChange = async (event: Event): Promise<void> => {
   }
 
   if (!hasApiSession.value) {
-    avatarNotice.value = {
-      tone: 'info',
-      title: 'Live session required',
-      message: 'Sign in with a live account session before uploading a profile avatar.'
-    }
     resetAvatarInput()
+    handleAuthenticationLoss()
     return
   }
 
@@ -1503,12 +1405,11 @@ const handleAvatarFileChange = async (event: Event): Promise<void> => {
     }
 
     const updatedProfile = normalizeProfile({
-      ...(originalProfile.value ?? DEFAULT_PROFILE),
+      ...(originalProfile.value ?? EMPTY_PROFILE),
       avatarUrl: response.avatarUrl
     })
 
     originalProfile.value = updatedProfile
-    writeStoredProfile(updatedProfile)
     syncUserStoreProfile(updatedProfile)
     lastProfileSavedAt.value = new Date()
 
@@ -1543,31 +1444,16 @@ const loadDashboard = async (): Promise<void> => {
   deactivationNotice.value = null
 
   try {
-    let normalizedProfile = buildFallbackProfile(hasApiSession.value ? 'live-fallback' : 'demo')
-
-    if (hasApiSession.value) {
-      try {
-        const fetchedProfile = await getCurrentUserProfile()
-        normalizedProfile = normalizeProfile(fetchedProfile)
-      } catch (error) {
-        if (isAuthFailureError(error)) {
-          handleAuthenticationLoss()
-          return
-        }
-
-        profileNotice.value = {
-          tone: 'warning',
-          title: 'Live profile data is temporarily unavailable',
-          message:
-            'We could not refresh your latest profile data from the server, so the page is showing your last available values instead.'
-        }
-      }
+    if (!hasApiSession.value) {
+      handleAuthenticationLoss()
+      return
     }
+
+    const normalizedProfile = normalizeProfile(await getCurrentUserProfile())
 
     originalProfile.value = normalizedProfile
     populateProfileForm(normalizedProfile)
     syncUserStoreProfile(normalizedProfile)
-    writeStoredProfile(normalizedProfile)
 
     viewState.value = 'ready'
 
@@ -1619,16 +1505,7 @@ const saveProfile = async (): Promise<void> => {
 
   try {
     const payload = trimmedProfileDraft.value
-
-    if (hasApiSession.value) {
-      await updateCurrentUserProfile(payload)
-    }
-
-    writeStoredProfile({
-      id: originalProfile.value.id,
-      status: originalProfile.value.status,
-      ...payload
-    })
+    await updateCurrentUserProfile(payload)
 
     const savedProfile = normalizeProfile({
       id: originalProfile.value.id,
@@ -1645,9 +1522,7 @@ const saveProfile = async (): Promise<void> => {
     profileNotice.value = {
       tone: 'success',
       title: 'Profile saved successfully',
-      message: hasApiSession.value
-        ? 'Your personal and contact details were updated using the existing profile endpoint.'
-        : 'Your profile changes were saved locally for this demo session.'
+      message: 'Your personal and contact details were updated using the existing profile endpoint.'
     }
   } catch (error) {
     if (isAuthFailureError(error)) {
@@ -1682,11 +1557,7 @@ const deactivateAccount = async (): Promise<void> => {
   deactivationNotice.value = null
 
   if (!hasApiSession.value) {
-    deactivationNotice.value = {
-      tone: 'info',
-      title: 'Live session required',
-      message: 'Sign in with a real account session before attempting deactivation.'
-    }
+    handleAuthenticationLoss()
     return
   }
 
@@ -1719,12 +1590,11 @@ const deactivateAccount = async (): Promise<void> => {
     await deactivateCurrentUserAccount()
 
     const deactivatedProfile = normalizeProfile({
-      ...(originalProfile.value ?? DEFAULT_PROFILE),
+      ...(originalProfile.value ?? EMPTY_PROFILE),
       status: 'DEACTIVATED'
     })
 
     originalProfile.value = deactivatedProfile
-    writeStoredProfile(deactivatedProfile)
 
     ElMessage.success('Account deactivated successfully. Redirecting to login.')
     shouldBypassUnsavedChangesPrompt.value = true
@@ -1772,26 +1642,16 @@ const savePassword = async (): Promise<void> => {
       confirmationPassword: passwordForm.confirmationPassword.trim()
     }
 
-    if (hasApiSession.value) {
-      await changeCurrentUserPassword(payload)
-      ElMessage.success('Password updated successfully. Please log in again.')
+    if (!hasApiSession.value) {
       handleAuthenticationLoss()
       return
     }
 
-    if (payload.currentPassword !== readStoredPassword()) {
-      throw new Error('Current password is incorrect.')
-    }
-
-    writeStoredPassword(payload.newPassword)
+    await changeCurrentUserPassword(payload)
     lastPasswordUpdatedAt.value = new Date()
-    resetPasswordForm(false)
-
-    passwordNotice.value = {
-      tone: 'success',
-      title: 'Password updated successfully',
-      message: 'Your demo password was updated locally.'
-    }
+    ElMessage.success('Password updated successfully. Please log in again.')
+    handleAuthenticationLoss()
+    return
   } catch (error) {
     if (isAuthFailureError(error)) {
       handleAuthenticationLoss()

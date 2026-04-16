@@ -47,8 +47,8 @@ const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; 
     userInfo: storedUser
       ? {
           id: storedUser.userId || 0,
-          username: storedUser.email || storedUser.displayName || 'mockuser',
-          nickname: storedUser.displayName || storedUser.email || 'Mock User',
+          username: storedUser.email || storedUser.displayName || `user-${storedUser.userId || 0}`,
+          nickname: storedUser.displayName || storedUser.email || 'Account User',
           email: storedUser.email
         }
       : null,
@@ -69,15 +69,9 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 export const useUserStore = defineStore('user', () => {
   const storedSession = getStoredSession()
 
-  const token = ref<string | null>(storedSession.token || 'fake-jwt-token-12345')
-  const userInfo = ref<UserInfo | null>(
-    storedSession.userInfo || {
-      id: 1,
-      username: 'mockuser',
-      nickname: 'Mock Customer'
-    }
-  )
-  const userRole = ref<UserRole>(storedSession.role || USER_ROLES.CUSTOMER)
+  const token = ref<string | null>(storedSession.token)
+  const userInfo = ref<UserInfo | null>(storedSession.userInfo)
+  const userRole = ref<UserRole>(storedSession.role)
 
   const isLoggedIn = computed(() => !!token.value)
   const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)
@@ -110,10 +104,18 @@ export const useUserStore = defineStore('user', () => {
       userInfo.value = null
       userRole.value = null
       localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('rememberMe')
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('user')
     }
   }
 
   const fetchAndSetUserProfile = async () => {
+    if (!token.value) {
+      throw new Error('Authenticated session required to fetch user profile')
+    }
+
     try {
       const user = await fetchUserProfile()
       syncUserProfile(user)

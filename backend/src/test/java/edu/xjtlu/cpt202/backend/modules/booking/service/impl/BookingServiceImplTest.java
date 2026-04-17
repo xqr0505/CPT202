@@ -38,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.RedisTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -46,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.times;
@@ -75,6 +77,9 @@ public class BookingServiceImplTest {
 
     @Mock
     private CustomerBookingChangePolicyService customerBookingChangePolicyService;
+
+    @Mock
+    private RedisTemplate<String, Object> jsonRedisTemplate;
 
     @InjectMocks
     private BookingServiceImpl bookingService;
@@ -635,6 +640,7 @@ public class BookingServiceImplTest {
                 eq(new BigDecimal("120.00"))))
                 .thenReturn(quoted);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:detail:401"));
 
         BookingRescheduleConfirmVO result = bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L);
 
@@ -648,6 +654,7 @@ public class BookingServiceImplTest {
                         && "RESCHEDULE".equals(updated.getChangeType())
                         && BookingStatusEnum.PENDING.name().equals(updated.getStatus())
         ));
+        verify(jsonRedisTemplate).delete(Set.of("booking:customer:1:detail:401"));
     }
 
     @Test
@@ -728,6 +735,7 @@ public class BookingServiceImplTest {
                 any(LocalDateTime.class),
                 eq(new BigDecimal("120.00")))).thenReturn(quoted);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:list:1"));
 
         BookingCancelConfirmVO result = bookingService.customerCancellationConfirm(bookingId, 1L);
 
@@ -740,6 +748,7 @@ public class BookingServiceImplTest {
                         && "CUSTOMER".equals(updated.getCancelledBy())
                         && "CANCEL".equals(updated.getChangeType())
         ));
+        verify(jsonRedisTemplate).delete(Set.of("booking:customer:1:list:1"));
     }
 
     @Test

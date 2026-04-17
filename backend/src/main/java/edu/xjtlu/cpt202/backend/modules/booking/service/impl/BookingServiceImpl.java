@@ -384,6 +384,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
         }
 
+        invalidateCustomerBookingCache(currentCustomerId);
         return BookingCancelConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(BookingStatusEnum.CANCELLED.name())
@@ -473,6 +474,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setDecisionTime(now);
         bookingMapper.updateById(booking);
 
+        invalidateCustomerBookingCache(currentCustomerId);
         return BookingRescheduleConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(booking.getStatus())

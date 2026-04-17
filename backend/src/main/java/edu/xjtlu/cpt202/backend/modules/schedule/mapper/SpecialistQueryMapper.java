@@ -41,6 +41,7 @@ public interface SpecialistQueryMapper {
                 COALESCE(sp.status, '') AS status,
                 CASE
                     WHEN #{query.date} IS NULL THEN FALSE
+                    WHEN sp.status != 'ACTIVE' THEN FALSE
                     WHEN EXISTS (
                         SELECT 1
                         FROM time_slots ts
@@ -54,7 +55,9 @@ public interface SpecialistQueryMapper {
             INNER JOIN users u ON u.id = sp.user_id
             LEFT JOIN expertise_categories c ON c.id = sp.category_id
             <where>
-                sp.status = 'ACTIVE'
+                <if test="query.keyword == null or query.keyword == ''">
+                    sp.status = 'ACTIVE'
+                </if>
                 <if test="query.keyword != null and query.keyword != ''">
                     AND (
                         u.full_name LIKE CONCAT('%', #{query.keyword}, '%')
@@ -65,6 +68,7 @@ public interface SpecialistQueryMapper {
                     AND sp.category_id = #{query.categoryId}
                 </if>
                 <if test="query.date != null">
+                    AND sp.status = 'ACTIVE'
                     AND EXISTS (
                         SELECT 1
                         FROM time_slots ts_filter
@@ -76,13 +80,20 @@ public interface SpecialistQueryMapper {
             </where>
             <choose>
                 <when test="query.sortBy == 'feeAsc'">
-                    ORDER BY sp.consultation_fee ASC, sp.id DESC
+                    ORDER BY
+                        CASE WHEN sp.status = 'ACTIVE' THEN 1 ELSE 0 END DESC,
+                        sp.consultation_fee ASC,
+                        sp.id DESC
                 </when>
                 <when test="query.sortBy == 'feeDesc'">
-                    ORDER BY sp.consultation_fee DESC, sp.id DESC
+                    ORDER BY
+                        CASE WHEN sp.status = 'ACTIVE' THEN 1 ELSE 0 END DESC,
+                        sp.consultation_fee DESC,
+                        sp.id DESC
                 </when>
                 <when test="query.sortBy == 'levelDesc'">
                     ORDER BY
+                        CASE WHEN sp.status = 'ACTIVE' THEN 1 ELSE 0 END DESC,
                         CASE sp.level
                             WHEN 'CHIEF' THEN 4
                             WHEN 'SENIOR' THEN 3
@@ -95,6 +106,7 @@ public interface SpecialistQueryMapper {
                 </when>
                 <otherwise>
                     ORDER BY
+                        CASE WHEN sp.status = 'ACTIVE' THEN 1 ELSE 0 END DESC,
                         CASE sp.level
                             WHEN 'CHIEF' THEN 4
                             WHEN 'SENIOR' THEN 3

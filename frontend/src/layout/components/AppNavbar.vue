@@ -97,7 +97,6 @@ const ROLE_MENUS: Record<string, NavMenuItem[]> = {
     { name: AI_NAV_MENU_LABEL, path: AI_NAV_MENU_KEY }
   ],
   [USER_ROLES.SPECIALIST]: [
-    { name: 'Dashboard', path: '/specialist/dashboard' },
     { name: 'Schedule Management', path: '/specialist/schedule' },
     { name: 'Appointment Approval', path: '/specialist/requests' }
   ],

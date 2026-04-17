@@ -2,41 +2,49 @@
 :root {
   color-scheme: light;
 
-  --color-primary: #3390fb;
-  --color-primary-hover: #2a4cba;
-  --color-primary-active: #2e439e;
-  --color-primary-soft: #60A5FA;
-  --color-dashboard-trend-line: #409EFF;
-  --color-dashboard-trend-fill-start: rgba(64, 158, 255, 0.24);
-  --color-dashboard-department-palette: #409EFF,#66B1FF,#8CC5FF,#A0CFFF,#B3D8FF,#C6E2FF;
-  --color-dashboard-habit-line: #409EFF;
-  --color-dashboard-habit-fill: rgba(64, 158, 255, 0.20);
-  --color-dashboard-habit-point: #66B1FF;
-  --color-dashboard-habit-split-line: rgba(64, 158, 255, 0.16);
+  --color-primary: #22a48f;
+  --color-primary-rgb: 34, 164, 143;
+  --color-primary-hover: #1a947f;
+  --color-primary-active: #147c6c;
+  --color-primary-soft: #9fd7cd;
+  --color-dashboard-trend-line: #22a48f;
+  --color-dashboard-trend-fill-start: rgba(var(--color-primary-rgb), 0.24);
+  --color-dashboard-department-palette: #22A48F,#31B19C,#4EBEAA,#6DCBB8,#90D8C8,#B6E6DB;
+  --color-dashboard-habit-line: #22A48F;
+  --color-dashboard-habit-fill: rgba(var(--color-primary-rgb), 0.20);
+  --color-dashboard-habit-point: #58C4B2;
+  --color-dashboard-habit-split-line: rgba(var(--color-primary-rgb), 0.16);
 
-  --color-bg-page: #f3f9ff;
-  --color-bg-surface: #ffffff;
-  --color-bg-muted: #E5E1D8;
+  --color-bg-page: #dbe8dc;
+  --color-bg-surface: #f9fcf9;
+  --color-bg-surface-rgb: 249, 252, 249;
+  --color-bg-muted: #e9f1ea;
   --color-bg-overlay: rgba(255, 255, 255, 0.92);
 
-  --color-text-primary: #4A504D;
-  --color-text-secondary: #8A908C;
-  --color-text-tertiary: #A8ACA9;
+  --color-text-primary: #2f3e36;
+  --color-text-secondary: #64736b;
+  --color-text-tertiary: #87938d;
   --color-text-inverse: #ffffff;
   --color-text-inverse-muted: rgba(255, 255, 255, 0.7);
 
   --color-overlay-inverse: rgba(255, 255, 255, 0.1);
 
-  --color-border: #D8DAD7;
-  --color-border-strong: #BABFBA;
+  --color-border: #c8d7cc;
+  --color-border-rgb: 200, 215, 204;
+  --color-border-strong: #afc2b4;
   --border-width-bold: 2px;
-  --color-shadow: rgba(74, 80, 77, 0.1);
+  --color-shadow-rgb: 47, 62, 54;
+  --color-shadow: rgba(var(--color-shadow-rgb), 0.12);
 
   /* Semantic colors (kept from original) */
   --color-success: #3aa76d;
-  --color-warning: #d39b2e;
+  --color-success-rgb: 58, 167, 109;
+  --color-warning: #c48f2a;
+  --color-warning-rgb: 196, 143, 42;
   --color-danger: #d45c73;
-  --color-info: #5b7cf0;
+  --color-danger-rgb: 212, 92, 115;
+  --color-info: #4f8fcb;
+  --color-info-rgb: 79, 143, 203;
 
   /* Layout */
   --header-height: 64px;
@@ -90,81 +98,89 @@
   --color-btn-text-default-hover: var(--color-primary);
   --color-btn-shadow-default: var(--color-shadow);
 
-  --color-btn-bg-primary: rgba(51, 144, 251, 0.12);
+  --color-btn-bg-primary: rgba(var(--color-primary-rgb), 0.12);
   --color-btn-border-primary: var(--color-primary);
   --color-btn-text-primary: var(--color-primary);
   --color-btn-bg-primary-hover: var(--color-primary);
   --color-btn-border-primary-hover: var(--color-primary-hover);
   --color-btn-text-primary-hover: var(--color-text-inverse);
-  --color-btn-shadow-primary: rgba(51, 144, 251, 0.18);
+  --color-btn-shadow-primary: rgba(var(--color-primary-rgb), 0.2);
 
-  --color-btn-bg-success: rgba(58, 167, 109, 0.10);
+  --color-btn-bg-success: rgba(var(--color-success-rgb), 0.10);
   --color-btn-border-success: var(--color-success);
   --color-btn-text-success: var(--color-success);
   --color-btn-bg-success-hover: var(--color-success);
   --color-btn-text-success-hover: var(--color-text-inverse);
-  --color-btn-shadow-success: rgba(58, 167, 109, 0.15);
+  --color-btn-shadow-success: rgba(var(--color-success-rgb), 0.15);
 
-  --color-btn-bg-warning: rgba(211, 155, 46, 0.10);
+  --color-btn-bg-warning: rgba(var(--color-warning-rgb), 0.10);
   --color-btn-border-warning: var(--color-warning);
   --color-btn-text-warning: var(--color-warning);
   --color-btn-bg-warning-hover: var(--color-warning);
   --color-btn-text-warning-hover: var(--color-text-inverse);
-  --color-btn-shadow-warning: rgba(211, 155, 46, 0.15);
+  --color-btn-shadow-warning: rgba(var(--color-warning-rgb), 0.15);
 
-  --color-btn-bg-danger: rgba(212, 92, 115, 0.10);
+  --color-btn-bg-danger: rgba(var(--color-danger-rgb), 0.10);
   --color-btn-border-danger: var(--color-danger);
   --color-btn-text-danger: var(--color-danger);
   --color-btn-bg-danger-hover: var(--color-danger);
   --color-btn-text-danger-hover: var(--color-text-inverse);
-  --color-btn-shadow-danger: rgba(212, 92, 115, 0.15);
+  --color-btn-shadow-danger: rgba(var(--color-danger-rgb), 0.15);
 
-  --color-btn-bg-info: rgba(91, 124, 240, 0.10);
+  --color-btn-bg-info: rgba(var(--color-info-rgb), 0.10);
   --color-btn-border-info: var(--color-info);
   --color-btn-text-info: var(--color-info);
   --color-btn-bg-info-hover: var(--color-info);
   --color-btn-text-info-hover: var(--color-text-inverse);
-  --color-btn-shadow-info: rgba(91, 124, 240, 0.15);
+  --color-btn-shadow-info: rgba(var(--color-info-rgb), 0.15);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --color-primary: #7087ec;
-  --color-primary-hover: #8ca5f4;
-  --color-primary-active: #95b2fa;
-  --color-primary-soft: #7db9f6;
-  --color-dashboard-trend-line: #7db9f6;
-  --color-dashboard-trend-fill-start: rgba(125, 185, 246, 0.3);
-  --color-dashboard-department-palette: #7DB9F6,#6BA7E9,#5A95DB,#4D83C6,#4674AF,#3E6599;
-  --color-dashboard-habit-line: #7DB9F6;
-  --color-dashboard-habit-fill: rgba(125, 185, 246, 0.24);
-  --color-dashboard-habit-point: #A9D0F8;
-  --color-dashboard-habit-split-line: rgba(125, 185, 246, 0.2);
+  --color-primary: #34b8a0;
+  --color-primary-rgb: 52, 184, 160;
+  --color-primary-hover: #58c8b3;
+  --color-primary-active: #1f8f7b;
+  --color-primary-soft: #2a6d63;
+  --color-dashboard-trend-line: #58c8b3;
+  --color-dashboard-trend-fill-start: rgba(var(--color-primary-rgb), 0.3);
+  --color-dashboard-department-palette: #58C8B3,#48B6A3,#3EA290,#378C7D,#31786B,#2B645A;
+  --color-dashboard-habit-line: #58C8B3;
+  --color-dashboard-habit-fill: rgba(var(--color-primary-rgb), 0.24);
+  --color-dashboard-habit-point: #7dd6c7;
+  --color-dashboard-habit-split-line: rgba(var(--color-primary-rgb), 0.2);
 
 
-  --color-bg-page: #2A2D2C;
-  --color-bg-surface: #373C3B;
-  --color-bg-muted: #444948;
+  --color-bg-page: #25322f;
+  --color-bg-surface: #2f3d39;
+  --color-bg-surface-rgb: 47, 61, 57;
+  --color-bg-muted: #3a4a45;
   --color-bg-overlay: rgba(55, 60, 59, 0.92);
 
-  --color-text-primary: #F3F4F3;
-  --color-text-secondary: #C9CCC9;
-  --color-text-tertiary: #9DA39F;
-  --color-text-inverse: #2A2D2C;
-  --color-text-inverse-muted: rgba(42, 45, 44, 0.7);
+  --color-text-primary: #eff5f2;
+  --color-text-secondary: #c2cfca;
+  --color-text-tertiary: #94a39c;
+  --color-text-inverse: #25322f;
+  --color-text-inverse-muted: rgba(37, 50, 47, 0.7);
 
-  --color-overlay-inverse: rgba(42, 45, 44, 0.1);
+  --color-overlay-inverse: rgba(37, 50, 47, 0.1);
 
-  --color-border: #4E5251;
-  --color-border-strong: #666B69;
+  --color-border: #485954;
+  --color-border-rgb: 72, 89, 84;
+  --color-border-strong: #61736d;
+  --color-shadow-rgb: 0, 0, 0;
   --color-shadow: rgba(0, 0, 0, 0.36);
 
   /* Semantic colors (kept from original dark theme) */
   --color-success: #62c98e;
+  --color-success-rgb: 98, 201, 142;
   --color-warning: #e5b95c;
+  --color-warning-rgb: 229, 185, 92;
   --color-danger: #f07d94;
+  --color-danger-rgb: 240, 125, 148;
   --color-info: #7fa0ff;
+  --color-info-rgb: 127, 160, 255;
 
   --color-btn-bg-default: var(--color-bg-muted);
   --color-btn-border-default: var(--color-border);
@@ -174,41 +190,41 @@
   --color-btn-text-default-hover: var(--color-primary);
   --color-btn-shadow-default: var(--color-shadow);
 
-  --color-btn-bg-primary: rgba(51, 144, 251, 0.12);
+  --color-btn-bg-primary: rgba(var(--color-primary-rgb), 0.12);
   --color-btn-border-primary: var(--color-primary);
   --color-btn-text-primary: var(--color-primary);
   --color-btn-bg-primary-hover: var(--color-primary);
   --color-btn-border-primary-hover: var(--color-primary-hover);
   --color-btn-text-primary-hover: var(--color-text-inverse);
-  --color-btn-shadow-primary: rgba(51, 144, 251, 0.18);
+  --color-btn-shadow-primary: rgba(var(--color-primary-rgb), 0.18);
 
-  --color-btn-bg-success: rgba(58, 167, 109, 0.10);
+  --color-btn-bg-success: rgba(var(--color-success-rgb), 0.10);
   --color-btn-border-success: var(--color-success);
   --color-btn-text-success: var(--color-success);
   --color-btn-bg-success-hover: var(--color-success);
   --color-btn-text-success-hover: var(--color-text-inverse);
-  --color-btn-shadow-success: rgba(58, 167, 109, 0.15);
+  --color-btn-shadow-success: rgba(var(--color-success-rgb), 0.15);
 
-  --color-btn-bg-warning: rgba(211, 155, 46, 0.10);
+  --color-btn-bg-warning: rgba(var(--color-warning-rgb), 0.10);
   --color-btn-border-warning: var(--color-warning);
   --color-btn-text-warning: var(--color-warning);
   --color-btn-bg-warning-hover: var(--color-warning);
   --color-btn-text-warning-hover: var(--color-text-inverse);
-  --color-btn-shadow-warning: rgba(211, 155, 46, 0.15);
+  --color-btn-shadow-warning: rgba(var(--color-warning-rgb), 0.15);
 
-  --color-btn-bg-danger: rgba(212, 92, 115, 0.10);
+  --color-btn-bg-danger: rgba(var(--color-danger-rgb), 0.10);
   --color-btn-border-danger: var(--color-danger);
   --color-btn-text-danger: var(--color-danger);
   --color-btn-bg-danger-hover: var(--color-danger);
   --color-btn-text-danger-hover: var(--color-text-inverse);
-  --color-btn-shadow-danger: rgba(212, 92, 115, 0.15);
+  --color-btn-shadow-danger: rgba(var(--color-danger-rgb), 0.15);
 
-  --color-btn-bg-info: rgba(91, 124, 240, 0.10);
+  --color-btn-bg-info: rgba(var(--color-info-rgb), 0.10);
   --color-btn-border-info: var(--color-info);
   --color-btn-text-info: var(--color-info);
   --color-btn-bg-info-hover: var(--color-info);
   --color-btn-text-info-hover: var(--color-text-inverse);
-  --color-btn-shadow-info: rgba(91, 124, 240, 0.15);
+  --color-btn-shadow-info: rgba(var(--color-info-rgb), 0.15);
   --ai-chat-list-background: var(--color-bg-surface);
   --ai-chat-composer-background: var(--color-bg-surface);
   --ai-chat-user-bubble-bg: var(--color-primary);

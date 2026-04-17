@@ -100,9 +100,9 @@ function clearImage() {
   width: 100%;
   min-height: 200px;
   overflow: hidden;
-  border: 1px dashed #c6d5e8;
+  border: 1px dashed var(--color-border);
   border-radius: 18px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-muted) 100%);
   transition: border-color 0.18s ease, transform 0.18s ease;
 }
 
@@ -121,7 +121,7 @@ function clearImage() {
   display: grid;
   gap: 10px;
   justify-items: center;
-  color: #6b7a90;
+  color: var(--color-text-secondary);
   font-weight: 600;
   text-align: center;
   padding: 24px;
@@ -129,7 +129,7 @@ function clearImage() {
 
 .empty-icon {
   font-size: 28px;
-  color: #5da5ff;
+  color: var(--color-primary);
 }
 
 .empty-state small {
@@ -137,7 +137,7 @@ function clearImage() {
   font-size: 12px;
   line-height: 1.6;
   font-weight: 500;
-  color: #8a95a8;
+  color: var(--color-text-tertiary);
 }
 
 .loading-mask {
@@ -148,7 +148,7 @@ function clearImage() {
   align-content: center;
   justify-items: center;
   color: #fff;
-  background: rgba(34, 56, 96, 0.48);
+  background: rgba(var(--color-shadow-rgb), 0.48);
   backdrop-filter: blur(2px);
 }
 
@@ -164,6 +164,6 @@ function clearImage() {
 .uploader-hint {
   margin: 0;
   font-size: 12px;
-  color: #77839a;
+  color: var(--color-text-tertiary);
 }
 </style>

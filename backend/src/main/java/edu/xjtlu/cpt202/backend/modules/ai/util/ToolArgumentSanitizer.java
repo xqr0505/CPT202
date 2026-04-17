@@ -24,6 +24,9 @@ import java.util.regex.Pattern;
 
 /**
  * Normalizes tool-call arguments so OpenAI-compatible providers receive valid JSON objects.
+ * 
+ * @author QiranXiao
+ * @since 2026/4/17
  */
 public final class ToolArgumentSanitizer {
 
@@ -87,9 +90,14 @@ public final class ToolArgumentSanitizer {
             AiMessage aiMessage,
             Map<String, ToolSpecification> toolSpecifications
     ) {
+        List<ToolExecutionRequest> toolExecutionRequests = aiMessage.toolExecutionRequests();
+        if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
+            return aiMessage;
+        }
+
         boolean changed = false;
-        List<ToolExecutionRequest> sanitizedRequests = new java.util.ArrayList<>(aiMessage.toolExecutionRequests().size());
-        for (ToolExecutionRequest request : aiMessage.toolExecutionRequests()) {
+        List<ToolExecutionRequest> sanitizedRequests = new java.util.ArrayList<>(toolExecutionRequests.size());
+        for (ToolExecutionRequest request : toolExecutionRequests) {
             ToolExecutionRequest sanitizedRequest = sanitizeRequest(request, toolSpecifications.get(request.name()));
             sanitizedRequests.add(sanitizedRequest);
             changed |= sanitizedRequest != request;

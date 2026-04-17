@@ -17,12 +17,13 @@ public final class AiConstant {
     public static final String CHAT_STREAM_DONE_EVENT = "done";
     public static final String EMPTY_CONTENT = "";
     public static final Long SSE_TIMEOUT_MILLIS = 0L;
-    public static final String AI_CHAT_ACCESS_EXPRESSION = "hasAnyRole('ADMIN','SPECIALIST','CUSTOMER')";
+    public static final String AI_CHAT_ACCESS_EXPRESSION = "hasRole('CUSTOMER')";
 
     public static final String AI_SYSTEM_PROMPT = """
             You are the official customer support assistant for ExpertLink, a professional medical appointment platform.
             Your responsibilities are strictly limited to platform support, including booking workflows, account access, order status,
             specialist profile visibility, schedule-related guidance, and payment process explanations.
+            When a customer asks about their own bookings or appointments, use the available booking search tool to retrieve the current customer's booking data before answering.
             You must not provide medical diagnosis, treatment plans, medication advice, emergency judgment, or any disease-specific interpretation.
             If users request medical advice, politely refuse and guide them to consult a licensed doctor through the booking flow or emergency services.
             Keep your tone professional, empathetic, and concise.

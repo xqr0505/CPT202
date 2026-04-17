@@ -18,6 +18,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ToolArgumentSanitizerTest {
 
     @Test
+    void shouldIgnorePlainTextAiMessageWithoutToolRequests() {
+        Response<AiMessage> response = Response.from(
+                AiMessage.aiMessage("hello"),
+                null,
+                FinishReason.STOP,
+                Map.of()
+        );
+
+        Response<AiMessage> sanitized = ToolArgumentSanitizer.sanitizeResponse(response, List.of());
+
+        assertThat(sanitized).isSameAs(response);
+    }
+
+    @Test
     void shouldWrapSingleScalarArgumentWithRequiredTabName() {
         ToolExecutionRequest request = ToolExecutionRequest.builder()
                 .id("tool-call-1")

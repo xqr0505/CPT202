@@ -815,7 +815,7 @@ const handleAction = (action: string, row: BookingListItem) => {
 
   .slot-chip.active {
     border-color: var(--color-primary);
-    background: rgba(51, 144, 251, 0.1);
+    background: rgba(var(--color-primary-rgb), 0.1);
   }
 
   .slot-chip span {

@@ -469,7 +469,11 @@ watch(selectedDate, async () => {
   min-width: 260px;
   padding: var(--space-5);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(51, 144, 251, 0.12), rgba(51, 144, 251, 0.02));
+  background: linear-gradient(
+    145deg,
+    rgba(var(--color-primary-rgb), 0.12),
+    rgba(var(--color-primary-rgb), 0.02)
+  );
   border: 1px solid var(--color-border);
   display: grid;
   gap: var(--space-3);
@@ -559,7 +563,7 @@ watch(selectedDate, async () => {
 
 .slot-chip.active {
   border-color: var(--color-primary);
-  background: rgba(51, 144, 251, 0.1);
+  background: rgba(var(--color-primary-rgb), 0.1);
 }
 
 .slot-chip.unavailable {

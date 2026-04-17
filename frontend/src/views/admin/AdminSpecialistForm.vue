@@ -621,14 +621,14 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #5b9bff;
+  color: var(--color-primary);
 }
 
 .page-header h2 {
   margin: 0;
   font-size: 42px;
   line-height: 1.05;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .page-note {
@@ -636,7 +636,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 15px;
   line-height: 1.7;
-  color: #6c7687;
+  color: var(--color-text-secondary);
 }
 
 .page-grid {
@@ -650,8 +650,8 @@ onMounted(async () => {
 .summary-card,
 .history-card {
   border-radius: 20px;
-  border: 1px solid #d8e4f2;
-  box-shadow: 0 18px 40px rgba(102, 128, 170, 0.08);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 40px rgba(var(--color-shadow-rgb), 0.08);
 }
 
 .card-header {
@@ -664,14 +664,14 @@ onMounted(async () => {
 .card-header h3 {
   margin: 0;
   font-size: 20px;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .card-header p {
   margin: 6px 0 0;
   font-size: 13px;
   line-height: 1.6;
-  color: #7b8698;
+  color: var(--color-text-secondary);
 }
 
 .card-header.compact h3 {
@@ -689,7 +689,7 @@ onMounted(async () => {
   align-items: center;
   text-align: center;
   padding: 6px 0 20px;
-  border-bottom: 1px solid #e7eef8;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .summary-avatar {
@@ -699,12 +699,12 @@ onMounted(async () => {
 .summary-name {
   font-size: 24px;
   font-weight: 700;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .summary-meta {
   margin-top: 6px;
-  color: #6f7b8f;
+  color: var(--color-text-secondary);
 }
 
 .summary-grid {
@@ -719,8 +719,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
-  border: 1px solid #e4edf8;
+  background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-muted) 100%);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
 }
 
@@ -733,17 +733,21 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #7e8aa0;
+  color: var(--color-text-tertiary);
 }
 
 .accent-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+  background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-muted) 100%);
 }
 
 .range-panel {
   padding: 18px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #5da5ff 0%, #87b8ff 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.9) 0%,
+    rgba(var(--color-primary-rgb), 0.65) 100%
+  );
   color: #fff;
 }
 
@@ -762,14 +766,14 @@ onMounted(async () => {
 .empty-tip {
   padding: 16px;
   border-radius: 14px;
-  background: #f5f8fc;
-  color: #7a8598;
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
 }
 
 .tips-list {
   margin: 18px 0 0;
   padding-left: 18px;
-  color: #5c6778;
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
@@ -797,7 +801,7 @@ onMounted(async () => {
 .field-hint {
   margin-top: 8px;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .default-password-tip {

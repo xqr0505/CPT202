@@ -36,6 +36,8 @@ import static edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum.*;
 public class RecurringRuleServiceImpl implements RecurringRuleService {
 
     private static final Long DEV_USER_ID = 1L;
+    private static final int SLOT_DURATION_MINUTES = 30;
+    private static final int OPEN_ENDED_GENERATION_WEEKS = 12;
 
     private final AvailabilityRecurringRuleMapper recurringRuleMapper;
     private final TimeSlotMapper timeSlotMapper;
@@ -60,7 +62,7 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         recurringRuleMapper.insert(rule);
         log.info("Created recurring rule {} for specialist {}", rule.getId(), specialistId);
 
-        generateTimeSlotsForRule(rule);
+        ensureSlotsGeneratedForRule(rule, LocalDate.now(), resolveGenerationEnd(rule, rule.getEffectiveEndDate()));
 
         return convertToVO(rule);
     }
@@ -110,42 +112,103 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         log.info("Deleted recurring rule {} and its generated time slots", ruleId);
     }
 
-    private void generateTimeSlotsForRule(AvailabilityRecurringRule rule) {
-        LocalDate currentDate = LocalDate.now();
-        LocalDate endDate = rule.getEffectiveEndDate();
+    public void ensureSlotsGeneratedForDateRange(LocalDate startDate, LocalDate endDate) {
+        generateSlotsForMatchingRules(startDate, endDate, null);
+    }
 
-        if (currentDate.isAfter(endDate)) {
+    public void ensureSlotsGeneratedForSpecialist(Long specialistId, LocalDate startDate, LocalDate endDate) {
+        generateSlotsForMatchingRules(startDate, endDate, specialistId);
+    }
+
+    private void generateSlotsForMatchingRules(LocalDate startDate, LocalDate endDate, Long specialistId) {
+        if (startDate == null || endDate == null) {
+            return;
+        }
+
+        LocalDate generationStart = startDate.isBefore(LocalDate.now()) ? LocalDate.now() : startDate;
+        if (generationStart.isAfter(endDate)) {
+            return;
+        }
+
+        LambdaQueryWrapper<AvailabilityRecurringRule> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AvailabilityRecurringRule::getIsActive, 1)
+                .and(w -> w.isNull(AvailabilityRecurringRule::getEffectiveEndDate)
+                        .or()
+                        .ge(AvailabilityRecurringRule::getEffectiveEndDate, generationStart));
+        if (specialistId != null) {
+            wrapper.eq(AvailabilityRecurringRule::getSpecialistId, specialistId);
+        }
+
+        List<AvailabilityRecurringRule> rules = recurringRuleMapper.selectList(wrapper);
+        for (AvailabilityRecurringRule rule : rules) {
+            ensureSlotsGeneratedForRule(rule, generationStart, resolveGenerationEnd(rule, endDate));
+        }
+    }
+
+    private void ensureSlotsGeneratedForRule(AvailabilityRecurringRule rule,
+                                             LocalDate generationStart,
+                                             LocalDate generationEnd) {
+        if (generationStart == null || generationEnd == null || generationStart.isAfter(generationEnd)) {
             return;
         }
 
         DayOfWeek targetDayOfWeek = DayOfWeek.of(rule.getDayOfWeek());
-        LocalDate nextOccurrence = currentDate;
+        LocalDate nextOccurrence = generationStart;
 
         while (nextOccurrence.getDayOfWeek() != targetDayOfWeek) {
             nextOccurrence = nextOccurrence.plusDays(1);
         }
 
         int slotsCreated = 0;
-        while (!nextOccurrence.isAfter(endDate)) {
-            if (hasTimeSlotConflict(rule.getSpecialistId(), nextOccurrence, rule.getStartTime(), rule.getEndTime())) {
-                log.info("Skipped recurring slot on {} for rule {} due to conflict", nextOccurrence, rule.getId());
-            } else {
-                createTimeSlotFromRule(rule, nextOccurrence);
-                slotsCreated++;
-            }
+        while (!nextOccurrence.isAfter(generationEnd)) {
+            slotsCreated += createTimeSlotsForOccurrence(rule, nextOccurrence);
             nextOccurrence = nextOccurrence.plusWeeks(1);
         }
 
-        log.info("Generated {} time slots from recurring rule {}", slotsCreated, rule.getId());
+        if (slotsCreated > 0) {
+            log.info("Generated {} time slots from recurring rule {}", slotsCreated, rule.getId());
+        }
     }
 
-    private void createTimeSlotFromRule(AvailabilityRecurringRule rule, LocalDate date) {
+    private int createTimeSlotsForOccurrence(AvailabilityRecurringRule rule, LocalDate date) {
+        int createdSlots = 0;
+        LocalTime slotStart = rule.getStartTime();
+
+        while (slotStart.isBefore(rule.getEndTime())) {
+            LocalTime slotEnd = slotStart.plusMinutes(SLOT_DURATION_MINUTES);
+            if (slotEnd.isAfter(rule.getEndTime())) {
+                break;
+            }
+
+            if (hasTimeSlotConflict(rule.getSpecialistId(), date, slotStart, slotEnd)) {
+                log.info(
+                        "Skipped recurring slot on {} from {} to {} for rule {} due to conflict",
+                        date,
+                        slotStart,
+                        slotEnd,
+                        rule.getId()
+                );
+            } else {
+                createTimeSlotFromRule(rule, date, slotStart, slotEnd);
+                createdSlots++;
+            }
+
+            slotStart = slotEnd;
+        }
+
+        return createdSlots;
+    }
+
+    private void createTimeSlotFromRule(AvailabilityRecurringRule rule,
+                                        LocalDate date,
+                                        LocalTime startTime,
+                                        LocalTime endTime) {
         TimeSlot slot = new TimeSlot();
         slot.setSpecialistId(rule.getSpecialistId());
         slot.setRecurringRuleId(rule.getId());
         slot.setSlotDate(date);
-        slot.setStartTime(rule.getStartTime());
-        slot.setEndTime(rule.getEndTime());
+        slot.setStartTime(startTime);
+        slot.setEndTime(endTime);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
 
         timeSlotMapper.insert(slot);
@@ -179,6 +242,18 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         if (start.isAfter(end) || start.equals(end)) {
             throw new BusinessException(PARAM_ERROR);
         }
+    }
+
+    private LocalDate resolveGenerationEnd(AvailabilityRecurringRule rule, LocalDate requestedEndDate) {
+        LocalDate boundedRequestedEnd = requestedEndDate != null
+                ? requestedEndDate
+                : LocalDate.now().plusWeeks(OPEN_ENDED_GENERATION_WEEKS);
+        if (rule.getEffectiveEndDate() == null) {
+            return boundedRequestedEnd;
+        }
+        return rule.getEffectiveEndDate().isBefore(boundedRequestedEnd)
+                ? rule.getEffectiveEndDate()
+                : boundedRequestedEnd;
     }
 
     private void checkRuleConflict(Long specialistId, Integer dayOfWeek,

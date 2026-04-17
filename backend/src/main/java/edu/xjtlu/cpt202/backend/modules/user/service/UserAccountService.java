@@ -5,11 +5,16 @@ import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 public interface UserAccountService {
 
     UserProfileVO getCurrentUserProfile();
+
+    List<UserSecurityActivityVO> getCurrentUserSecurityActivity();
 
     void updateCurrentUserProfile(UpdateUserProfileDTO request);
 
@@ -17,7 +22,7 @@ public interface UserAccountService {
 
     void changePassword(ChangePasswordDTO request);
 
-    void deactivateCurrentUserAccount();
+    void deactivateCurrentUserAccount(String currentPassword);
 
     User createUser(String email, String rawPassword, String role, String fullName);
 }

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { getUser, getAuthToken, saveToken } from '@/api/request'
+import { clearAuthData, getAuthToken, getUser, saveToken } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -47,8 +47,8 @@ const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; 
     userInfo: storedUser
       ? {
           id: storedUser.userId || 0,
-          username: storedUser.email || storedUser.displayName || 'mockuser',
-          nickname: storedUser.displayName || storedUser.email || 'Mock User',
+          username: storedUser.email || storedUser.displayName || `user-${storedUser.userId || 0}`,
+          nickname: storedUser.displayName || storedUser.email || 'Account User',
           email: storedUser.email
         }
       : null,
@@ -69,7 +69,7 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 export const useUserStore = defineStore('user', () => {
   const storedSession = getStoredSession()
 
-  const token = ref<string | null>(storedSession.token || null)
+  const token = ref<string | null>(storedSession.token ?? null)
   const userInfo = ref<UserInfo | null>(storedSession.userInfo)
   const userRole = ref<UserRole>(storedSession.role)
 
@@ -103,11 +103,15 @@ export const useUserStore = defineStore('user', () => {
       token.value = null
       userInfo.value = null
       userRole.value = null
-      localStorage.removeItem('token')
+      clearAuthData()
     }
   }
 
   const fetchAndSetUserProfile = async () => {
+    if (!token.value) {
+      throw new Error('Authenticated session required to fetch user profile')
+    }
+
     try {
       const user = await fetchUserProfile()
       syncUserProfile(user)

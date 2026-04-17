@@ -8,15 +8,20 @@ import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
-import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,13 +33,23 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserAccountServiceImpl implements UserAccountService {
 
+    private static final Logger logger = LoggerFactory.getLogger(UserAccountServiceImpl.class);
+    private static final String CURRENT_PASSWORD_REQUIRED_MESSAGE = "Current password is required";
+    private static final String CURRENT_PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect";
+    private static final String EVENT_TYPE_PROFILE_UPDATED = "PROFILE_UPDATED";
+    private static final String EVENT_TYPE_PASSWORD_CHANGED = "PASSWORD_CHANGED";
+    private static final String EVENT_TYPE_AVATAR_UPDATED = "AVATAR_UPDATED";
+    private static final String EVENT_TYPE_ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+    private static final int SECURITY_ACTIVITY_LIMIT = 8;
     private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
     private static final Set<String> ALLOWED_AVATAR_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
     private static final Set<String> ALLOWED_AVATAR_CONTENT_TYPES = Set.of(
@@ -46,6 +61,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     private static final long MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024L;
 
     private final UserMapper userMapper;
+    private final UserSecurityActivityMapper userSecurityActivityMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
 
@@ -55,12 +71,31 @@ public class UserAccountServiceImpl implements UserAccountService {
     }
 
     @Override
+    public List<UserSecurityActivityVO> getCurrentUserSecurityActivity() {
+        User user = getCurrentUserOrThrow();
+
+        return userSecurityActivityMapper.selectList(
+                        new LambdaQueryWrapper<UserSecurityActivity>()
+                                .eq(UserSecurityActivity::getUserId, user.getId())
+                                .orderByDesc(UserSecurityActivity::getCreatedAt)
+                                .orderByDesc(UserSecurityActivity::getId)
+                                .last("LIMIT " + SECURITY_ACTIVITY_LIMIT)
+                ).stream()
+                .map(this::toUserSecurityActivityVO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateCurrentUserProfile(UpdateUserProfileDTO request) {
         User user = getCurrentUserOrThrow();
-        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String normalizedEmail = normalizeEmail(request.getEmail());
+        boolean emailChanged = !normalizedEmail.equals(normalizeEmail(user.getEmail()));
 
-        ensureEmailUnique(normalizedEmail, user.getId());
+        if (emailChanged) {
+            assertCurrentPasswordMatches(user, request.getCurrentPassword());
+            ensureEmailUnique(normalizedEmail, user.getId());
+        }
 
         user.setFullName(request.getFullName().trim());
         user.setEmail(normalizedEmail);
@@ -69,6 +104,8 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update profile");
         }
+
+        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PROFILE_UPDATED, "Updated account profile details.");
     }
 
     @Override
@@ -84,6 +121,7 @@ public class UserAccountServiceImpl implements UserAccountService {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to save avatar");
         }
 
+        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_AVATAR_UPDATED, "Updated profile photo.");
         return new UserAvatarUploadVO(avatarUrl);
     }
 
@@ -92,9 +130,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     public void changePassword(ChangePasswordDTO request) {
         User user = getCurrentUserOrThrow();
 
-        if (!PASSWORD_ENCODER.matches(request.getCurrentPassword(), user.getPasswordHash())) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Current password is incorrect");
-        }
+        assertCurrentPasswordMatches(user, request.getCurrentPassword());
 
         if (!request.getNewPassword().equals(request.getConfirmationPassword())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Confirmation password does not match");
@@ -107,18 +143,20 @@ public class UserAccountServiceImpl implements UserAccountService {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update password");
         }
 
-        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", user.getId()));
+        revokeRefreshTokens(user.getId());
+        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PASSWORD_CHANGED, "Changed account password.");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void deactivateCurrentUserAccount() {
+    public void deactivateCurrentUserAccount(String currentPassword) {
         User user = getCurrentUserOrThrow();
 
         if (AccountStatusEnum.DEACTIVATED.name().equalsIgnoreCase(user.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Account is already deactivated");
         }
 
+        assertCurrentPasswordMatches(user, currentPassword);
         user.setStatus(AccountStatusEnum.DEACTIVATED.name());
         user.setLoginFailCount(0);
         user.setLockTime(null);
@@ -126,6 +164,9 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to deactivate account");
         }
+
+        revokeRefreshTokens(user.getId());
+        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_ACCOUNT_DEACTIVATED, "Deactivated this account.");
     }
 
     @Override
@@ -220,6 +261,42 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
     }
 
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void assertCurrentPasswordMatches(User user, String currentPassword) {
+        if (!StringUtils.hasText(currentPassword)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), CURRENT_PASSWORD_REQUIRED_MESSAGE);
+        }
+
+        if (!PASSWORD_ENCODER.matches(currentPassword, user.getPasswordHash())) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), CURRENT_PASSWORD_INCORRECT_MESSAGE);
+        }
+    }
+
+    private void revokeRefreshTokens(Long userId) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", userId));
+    }
+
+    private void recordSecurityActivitySafely(Long userId, String eventType, String summary) {
+        try {
+            userSecurityActivityMapper.insert(UserSecurityActivity.builder()
+                    .userId(userId)
+                    .eventType(eventType)
+                    .summary(summary)
+                    .build());
+        } catch (Exception exception) {
+            logger.warn(
+                    "Failed to record security activity for user {} and event {}: {}",
+                    userId,
+                    eventType,
+                    exception.getMessage(),
+                    exception
+            );
+        }
+    }
+
     private void validateAvatarFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select an image to upload");
@@ -253,5 +330,14 @@ public class UserAccountServiceImpl implements UserAccountService {
         userProfileVO.setAvatarUrl(user.getAvatarUrl());
         userProfileVO.setStatus(user.getStatus());
         return userProfileVO;
+    }
+
+    private UserSecurityActivityVO toUserSecurityActivityVO(UserSecurityActivity activity) {
+        UserSecurityActivityVO userSecurityActivityVO = new UserSecurityActivityVO();
+        userSecurityActivityVO.setId(activity.getId());
+        userSecurityActivityVO.setEventType(activity.getEventType());
+        userSecurityActivityVO.setSummary(activity.getSummary());
+        userSecurityActivityVO.setCreatedAt(activity.getCreatedAt());
+        return userSecurityActivityVO;
     }
 }

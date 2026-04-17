@@ -1,10 +1,11 @@
 <template>
   <section class="page-card style-page">
     <div class="page-header">
-      <p class="page-tag">Customer</p>
+      <p class="page-tag">Account</p>
       <h1 class="page-title">Page Style Settings</h1>
       <p class="page-text">
-        Choose the page style option you want the system to apply across the interface.
+        Review the currently active interface theme without mixing appearance preferences into the
+        live account profile APIs.
       </p>
     </div>
 
@@ -13,7 +14,7 @@
         <div>
           <h2 class="style-panel__title">Loading style settings</h2>
           <p class="style-panel__subtitle">
-            We are preparing your saved interface preference.
+            We are reading the currently active interface theme.
           </p>
         </div>
       </div>
@@ -46,7 +47,7 @@
         <div>
           <h2 class="style-panel__title">Page Style Preference</h2>
           <p class="style-panel__subtitle">
-            Select your preferred page style option. Changes are applied and saved automatically.
+            Saved appearance preferences are not available through the current backend account APIs.
           </p>
         </div>
 
@@ -60,21 +61,12 @@
           <p class="summary-label">Current page style</p>
           <p class="summary-value">{{ selectedPreferenceLabel }}</p>
           <p class="summary-text">
-            <template v-if="savedPreference">
-              A saved page style preference was found. This selected style will continue to be
-              applied across the interface.
-            </template>
-            <template v-else>
-              No page style preference has been saved. The default page style option is Light Mode.
-            </template>
+            This page shows the active interface theme only. Persistent theme preferences are not
+            part of the current backend-backed account settings flow.
           </p>
         </div>
 
-        <el-radio-group
-          v-model="selectedPreference"
-          class="style-options"
-          @change="handlePreferenceChange"
-        >
+        <el-radio-group v-model="selectedPreference" class="style-options" disabled>
           <label
             v-for="option in options"
             :key="option.value"
@@ -87,10 +79,6 @@
             <p class="style-option__text">{{ option.description }}</p>
           </label>
         </el-radio-group>
-
-        <p v-if="saveErrorMessage" class="feedback-message feedback-message--error">
-          {{ saveErrorMessage }}
-        </p>
       </div>
     </div>
   </section>
@@ -98,7 +86,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
 
@@ -107,40 +94,21 @@ defineOptions({ name: 'CustomerStyleSettings' })
 type ViewState = 'loading' | 'ready' | 'error'
 type UserThemePreference = 'light' | 'dark'
 
-const USER_THEME_STORAGE_KEY = 'mock-user-theme-preference'
-
-const wait = async (delay = 250): Promise<void> => {
-  await new Promise(resolve => window.setTimeout(resolve, delay))
-}
-
-const readStoredThemePreference = (): UserThemePreference | null => {
-  const storedPreference = localStorage.getItem(USER_THEME_STORAGE_KEY)
-  return storedPreference === 'dark' || storedPreference === 'light'
-    ? storedPreference
-    : null
-}
-
-const writeStoredThemePreference = (preference: UserThemePreference): void => {
-  localStorage.setItem(USER_THEME_STORAGE_KEY, preference)
-}
-
-const applyThemePreference = (preference: UserThemePreference): void => {
-  const html = document.documentElement
-  html.setAttribute('data-theme', preference)
-
-  if (preference === 'dark') {
-    html.classList.add('dark')
-  } else {
-    html.classList.remove('dark')
+const getCurrentThemePreference = (): UserThemePreference => {
+  if (typeof document === 'undefined') {
+    return 'light'
   }
+
+  const html = document.documentElement
+  return html.getAttribute('data-theme') === 'dark' || html.classList.contains('dark')
+    ? 'dark'
+    : 'light'
 }
 
 const router = useRouter()
 
 const viewState = ref<ViewState>('loading')
 const loadErrorMessage = ref('We could not load style settings.')
-const saveErrorMessage = ref('')
-const savedPreference = ref<UserThemePreference | null>(null)
 const selectedPreference = ref<UserThemePreference>('light')
 
 const options = [
@@ -163,15 +131,9 @@ const selectedPreferenceLabel = computed(() => {
 const loadSettings = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load style settings.'
-  saveErrorMessage.value = ''
 
   try {
-    await wait()
-
-    const preference = readStoredThemePreference()
-    savedPreference.value = preference
-    selectedPreference.value = preference || 'light'
-    applyThemePreference(selectedPreference.value)
+    selectedPreference.value = getCurrentThemePreference()
     viewState.value = 'ready'
   } catch (error) {
     loadErrorMessage.value =
@@ -179,22 +141,6 @@ const loadSettings = async (): Promise<void> => {
         ? error.message
         : 'We could not load style settings.'
     viewState.value = 'error'
-  }
-}
-
-const handlePreferenceChange = (preference: UserThemePreference): void => {
-  saveErrorMessage.value = ''
-
-  try {
-    writeStoredThemePreference(preference)
-    applyThemePreference(preference)
-    savedPreference.value = preference
-  } catch (error) {
-    saveErrorMessage.value =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to update page style settings right now.'
-    ElMessage.error(saveErrorMessage.value)
   }
 }
 

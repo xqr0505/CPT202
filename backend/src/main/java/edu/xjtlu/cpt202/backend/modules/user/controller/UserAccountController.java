@@ -2,9 +2,11 @@ package edu.xjtlu.cpt202.backend.modules.user.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.ConfirmCurrentPasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/user")
 @RequiredArgsConstructor
@@ -27,6 +31,11 @@ public class UserAccountController {
     @GetMapping("/profile")
     public Result<UserProfileVO> getProfile() {
         return Result.success(userAccountService.getCurrentUserProfile());
+    }
+
+    @GetMapping("/security-activity")
+    public Result<List<UserSecurityActivityVO>> getSecurityActivity() {
+        return Result.success(userAccountService.getCurrentUserSecurityActivity());
     }
 
     @PutMapping("/profile")
@@ -47,8 +56,8 @@ public class UserAccountController {
     }
 
     @PostMapping("/deactivate")
-    public Result<Void> deactivateCurrentUserAccount() {
-        userAccountService.deactivateCurrentUserAccount();
+    public Result<Void> deactivateCurrentUserAccount(@Valid @RequestBody ConfirmCurrentPasswordDTO request) {
+        userAccountService.deactivateCurrentUserAccount(request.getCurrentPassword());
         return Result.success();
     }
 }

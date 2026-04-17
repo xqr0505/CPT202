@@ -36,6 +36,9 @@ class SpecialistQueryServiceImplTest {
     @Mock
     private SpecialistQueryMapper specialistQueryMapper;
 
+    @Mock
+    private RecurringRuleServiceImpl recurringRuleServiceImpl;
+
     @InjectMocks
     private SpecialistQueryServiceImpl specialistQueryService;
 
@@ -110,6 +113,7 @@ class SpecialistQueryServiceImplTest {
     void listAvailability_success() {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(66L);
+        detail.setStatus("ACTIVE");
 
         SpecialistAvailabilityVO availability = new SpecialistAvailabilityVO();
         availability.setId(1L);

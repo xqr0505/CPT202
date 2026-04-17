@@ -1,4 +1,4 @@
-import request from './request'
+import request, { getUser } from './request'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
 export interface UserProfile {
@@ -25,6 +25,7 @@ export interface UpdateUserProfilePayload {
   fullName: string
   email: string
   phoneNumber: string
+  currentPassword?: string
 }
 
 export interface ChangePasswordPayload {
@@ -37,25 +38,34 @@ export interface AvatarUploadResponse {
   avatarUrl: string
 }
 
-export const applySavedThemePreference = (): void => {
-  // Safe no-op until theme preference is centralized.
+export interface DeactivateCurrentUserAccountPayload {
+  currentPassword: string
 }
 
-export const isStoredUserAccountDeactivated = (): boolean => {
-  const storedProfile = localStorage.getItem('mock-user-profile')
+export interface SecurityActivityItem {
+  id: number
+  eventType: string
+  summary: string
+  createdAt: string
+}
 
-  if (!storedProfile) {
-    return false
-  }
+interface StoredSessionUser {
+  userId?: number
+  role?: string
+  email?: string
+  displayName?: string
+}
 
-  try {
-    const parsedProfile = JSON.parse(storedProfile) as Partial<AccountProfile>
-    return (
-      typeof parsedProfile.status === 'string' &&
-      parsedProfile.status.trim().toUpperCase() === 'DEACTIVATED'
-    )
-  } catch {
-    return false
+const normalizeUserRole = (value?: string | null): UserRoleType => {
+  switch ((value || '').trim().toUpperCase()) {
+    case 'CUSTOMER':
+      return USER_ROLES.CUSTOMER
+    case 'SPECIALIST':
+      return USER_ROLES.SPECIALIST
+    case 'ADMIN':
+      return USER_ROLES.ADMIN
+    default:
+      throw new Error('Authenticated user role is unavailable.')
   }
 }
 
@@ -64,6 +74,10 @@ const silentAccountRequestConfig = {
 } as const
 
 const sanitizeAvatarUrl = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const sanitizeSecurityActivityText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -99,21 +113,50 @@ const toSafeAccountProfile = (payload: unknown): AccountProfile => {
   }
 }
 
+const toSafeSecurityActivityItem = (payload: unknown): SecurityActivityItem => {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      id: 0,
+      eventType: '',
+      summary: '',
+      createdAt: ''
+    }
+  }
+
+  const item = payload as Partial<SecurityActivityItem>
+
+  return {
+    id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : 0,
+    eventType: sanitizeSecurityActivityText(item.eventType),
+    summary: sanitizeSecurityActivityText(item.summary),
+    createdAt: sanitizeSecurityActivityText(item.createdAt)
+  }
+}
+
 export const getCurrentUserProfile = async (): Promise<AccountProfile> => {
-  const response = await request.get<any, unknown>(
+  const response = await request.get<unknown, unknown>(
     `${getUserAccountApiPrefix()}/profile`,
-    silentAccountRequestConfig as any
+    silentAccountRequestConfig as unknown as Record<string, unknown>
   )
   return toSafeAccountProfile(response)
+}
+
+export const getCurrentUserSecurityActivity = async (): Promise<SecurityActivityItem[]> => {
+  const response = await request.get<unknown, unknown>(
+    `${getUserAccountApiPrefix()}/security-activity`,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
+  )
+
+  return Array.isArray(response) ? response.map(toSafeSecurityActivityItem) : []
 }
 
 export const updateCurrentUserProfile = async (
   payload: UpdateUserProfilePayload
 ): Promise<void> => {
-  return request.put<any, void>(
+  return request.put<unknown, void>(
     `${getUserAccountApiPrefix()}/profile`,
     payload,
-    silentAccountRequestConfig as any
+    silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 }
 
@@ -123,7 +166,7 @@ export const uploadCurrentUserAvatar = async (
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await request.post<any, unknown>(
+  const response = await request.post<unknown, unknown>(
     `${getUserAccountApiPrefix()}/avatar`,
     formData,
     {
@@ -131,7 +174,7 @@ export const uploadCurrentUserAvatar = async (
       headers: {
         'Content-Type': 'multipart/form-data'
       }
-    } as any
+    } as unknown as Record<string, unknown>
   )
 
   return {
@@ -142,44 +185,40 @@ export const uploadCurrentUserAvatar = async (
 export const changeCurrentUserPassword = async (
   payload: ChangePasswordPayload
 ): Promise<void> => {
-  return request.post<any, void>(
+  return request.post<unknown, void>(
     `${getUserAccountApiPrefix()}/change-password`,
     payload,
-    silentAccountRequestConfig as any
+    silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 }
 
-export const deactivateCurrentUserAccount = async (): Promise<void> => {
-  return request.post<any, void>(
+export const deactivateCurrentUserAccount = async (
+  payload: DeactivateCurrentUserAccountPayload
+): Promise<void> => {
+  return request.post<unknown, void>(
     `${getUserAccountApiPrefix()}/deactivate`,
-    undefined,
-    silentAccountRequestConfig as any
+    payload,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 }
 
-// Kept intentionally stable because unrelated layouts/stores still rely on the mock shape.
 export const fetchUserProfile = async (): Promise<UserProfile> => {
-  let storedProfile: Partial<AccountProfile> | null = null
+  const accountProfile = await getCurrentUserProfile()
+  const storedUser = getUser() as StoredSessionUser | null
+  const role = normalizeUserRole(storedUser?.role)
+  const sessionEmail = storedUser?.email?.trim() || ''
+  const sessionDisplayName = storedUser?.displayName?.trim() || ''
+  const email = accountProfile.email || sessionEmail
+  const username = sessionEmail || email || `user-${accountProfile.id}`
 
-  try {
-    const rawProfile = localStorage.getItem('mock-user-profile')
-    storedProfile = rawProfile ? (JSON.parse(rawProfile) as Partial<AccountProfile>) : null
-  } catch {
-    storedProfile = null
+  return {
+    id: accountProfile.id,
+    username,
+    nickname: accountProfile.fullName || sessionDisplayName || email || username,
+    fullName: accountProfile.fullName,
+    email,
+    phoneNumber: accountProfile.phoneNumber,
+    avatar: sanitizeAvatarUrl(accountProfile.avatarUrl),
+    role
   }
-
-  return Promise.resolve({
-    id:
-      typeof storedProfile?.id === 'number' && Number.isFinite(storedProfile.id)
-        ? storedProfile.id
-        : 1,
-    username: 'test_user',
-    nickname: storedProfile?.fullName?.trim() || 'Test User',
-    fullName: typeof storedProfile?.fullName === 'string' ? storedProfile.fullName.trim() : '',
-    email: typeof storedProfile?.email === 'string' ? storedProfile.email.trim() : '',
-    phoneNumber:
-      typeof storedProfile?.phoneNumber === 'string' ? storedProfile.phoneNumber.trim() : '',
-    avatar: sanitizeAvatarUrl(storedProfile?.avatarUrl),
-    role: USER_ROLES.CUSTOMER
-  })
 }

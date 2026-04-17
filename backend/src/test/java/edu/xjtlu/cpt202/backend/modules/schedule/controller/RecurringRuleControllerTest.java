@@ -109,6 +109,26 @@ class RecurringRuleControllerTest {
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 
+    @Test
+    void createRecurringRule_acceptsNullEndDate() throws Exception {
+        when(recurringRuleService.createRecurringRule(any())).thenReturn(buildOpenEndedRecurringRuleVO());
+
+        mockMvc.perform(post("/api/specialist/schedule/rules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "dayOfWeek": 1,
+                                  "startTime": "09:00:00",
+                                  "endTime": "10:00:00",
+                                  "effectiveEndDate": null
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.id").value(2))
+                .andExpect(jsonPath("$.data.effectiveEndDate").doesNotExist());
+    }
+
     private RecurringRuleVO buildRecurringRuleVO() {
         RecurringRuleVO rule = new RecurringRuleVO();
         rule.setId(1L);
@@ -118,6 +138,20 @@ class RecurringRuleControllerTest {
         rule.setStartTime(LocalTime.of(9, 0));
         rule.setEndTime(LocalTime.of(10, 0));
         rule.setEffectiveEndDate(LocalDate.of(2026, 4, 24));
+        rule.setIsActive(1);
+        rule.setStatusDesc("Active");
+        return rule;
+    }
+
+    private RecurringRuleVO buildOpenEndedRecurringRuleVO() {
+        RecurringRuleVO rule = new RecurringRuleVO();
+        rule.setId(2L);
+        rule.setSpecialistId(1L);
+        rule.setDayOfWeek(1);
+        rule.setDayOfWeekDesc("Monday");
+        rule.setStartTime(LocalTime.of(9, 0));
+        rule.setEndTime(LocalTime.of(10, 0));
+        rule.setEffectiveEndDate(null);
         rule.setIsActive(1);
         rule.setStatusDesc("Active");
         return rule;

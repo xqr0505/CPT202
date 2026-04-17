@@ -31,6 +31,7 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
     );
 
     private final SpecialistQueryMapper specialistQueryMapper;
+    private final RecurringRuleServiceImpl recurringRuleServiceImpl;
 
     @Override
     public List<SpecialistCategoryVO> listCategories() {
@@ -40,6 +41,9 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
     @Override
     public PageResult<SpecialistSummaryVO> searchSpecialists(SpecialistSearchQueryDTO query) {
         validateSort(query.getSortBy());
+        if (query.getDate() != null) {
+            recurringRuleServiceImpl.ensureSlotsGeneratedForDateRange(query.getDate(), query.getDate());
+        }
 
         Page<SpecialistSummaryVO> page = new Page<>(query.getPageNo(), query.getPageSize());
         IPage<SpecialistSummaryVO> searchPage = specialistQueryMapper.searchSpecialists(page, query);
@@ -62,6 +66,7 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
         if (!"ACTIVE".equals(detail.getStatus())) {
             return List.of();
         }
+        recurringRuleServiceImpl.ensureSlotsGeneratedForSpecialist(specialistId, date, date);
         return specialistQueryMapper.listAvailabilityByDate(specialistId, date);
     }
 

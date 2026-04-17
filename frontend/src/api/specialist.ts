@@ -7,14 +7,28 @@ import type {
   SpecialistSearchResult,
 } from '@/types/specialist'
 
+const normalizeId = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === '') {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const normalizeCategoryId = (value: unknown): number | undefined => {
+  return normalizeId(value)
+}
+
 const buildSearchParams = (params: SpecialistSearchParams): Record<string, string | number> => {
   const query: Record<string, string | number> = {}
+  const categoryId = normalizeCategoryId(params.categoryId)
 
   if (params.keyword?.trim()) {
     query.keyword = params.keyword.trim()
   }
-  if (typeof params.categoryId === 'number') {
-    query.categoryId = params.categoryId
+  if (categoryId !== undefined) {
+    query.categoryId = categoryId
   }
   if (params.date) {
     query.date = params.date
@@ -32,8 +46,15 @@ const buildSearchParams = (params: SpecialistSearchParams): Record<string, strin
   return query
 }
 
-export const fetchSpecialistCategories = (): Promise<SpecialistCategory[]> => {
-  return request.get('/api/v1/categories')
+export const fetchSpecialistCategories = async (): Promise<SpecialistCategory[]> => {
+  const categories = (await request.get('/api/v1/categories')) as Array<
+    SpecialistCategory & { id: unknown }
+  >
+
+  return categories.map((category) => ({
+    ...category,
+    id: normalizeId(category.id) ?? 0,
+  }))
 }
 
 export const fetchSpecialists = (

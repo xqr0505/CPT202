@@ -37,7 +37,7 @@ export interface RecurringRuleVO {
   dayOfWeekDesc: string
   startTime: string
   endTime: string
-  effectiveEndDate: string
+  effectiveEndDate: string | null
   isActive: number
   statusDesc: string
   createdAt: string
@@ -47,7 +47,7 @@ export interface CreateRecurringRuleRequest {
   dayOfWeek: number
   startTime: string
   endTime: string
-  effectiveEndDate: string
+  effectiveEndDate?: string | null
 }
 
 // ============== Time Slot APIs ==============

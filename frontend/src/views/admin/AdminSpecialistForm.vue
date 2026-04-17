@@ -605,6 +605,11 @@ onMounted(async () => {
   padding: 28px 24px 40px;
   max-width: 1240px;
   margin: 0 auto;
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: color-mix(in srgb, var(--color-primary) 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--color-primary) 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--color-primary) 30%, white);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--color-primary) 80%, black);
 }
 
 .page-header {
@@ -808,8 +813,8 @@ onMounted(async () => {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f4f8ff;
-  color: #4b5a73;
+  background: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-text-primary);
   line-height: 1.6;
 }
 

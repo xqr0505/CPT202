@@ -1,0 +1,117 @@
+package edu.xjtlu.cpt202.backend.modules.booking.controller;
+
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class SpecialistBookingControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private BookingService bookingService;
+
+    @Test
+    @WithMockUser(roles = "SPECIALIST")
+    void getPendingRequests_success() throws Exception {
+        SpecialistPendingBookingVO item = new SpecialistPendingBookingVO();
+        item.setId(1L);
+        item.setCustomerName("Alice");
+        item.setTopic("Career Planning");
+        item.setRequestedStartTime(LocalDateTime.of(2026, 4, 20, 10, 0));
+        item.setRequestedEndTime(LocalDateTime.of(2026, 4, 20, 11, 0));
+        item.setSubmissionTime(LocalDateTime.of(2026, 4, 18, 9, 0));
+
+        when(bookingService.listPendingRequestsForSpecialist(anyLong())).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].customerName").value("Alice"));
+    }
+
+    @Test
+    @WithMockUser(roles = "SPECIALIST")
+    void getHandledRequests_success() throws Exception {
+        SpecialistHandledBookingVO item = new SpecialistHandledBookingVO();
+        item.setId(2L);
+        item.setCustomerName("Bob");
+        item.setStatus("REJECTED");
+        item.setDecisionTime(LocalDateTime.of(2026, 4, 18, 12, 0));
+
+        when(bookingService.listHandledRequestsForSpecialist(anyLong())).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].status").value("REJECTED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "SPECIALIST")
+    void getBookingRequestDetail_success() throws Exception {
+        SpecialistBookingDetailVO detail = new SpecialistBookingDetailVO();
+        detail.setId(3L);
+        detail.setCustomerName("Carol");
+        detail.setStatus("PENDING");
+
+        when(bookingService.getBookingRequestDetailForSpecialist(anyLong(), anyLong())).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.customerName").value("Carol"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    @WithMockUser(roles = "SPECIALIST")
+    void approveBookingRequest_success() throws Exception {
+        doNothing().when(bookingService).approveBookingRequest(anyLong(), anyLong());
+
+        mockMvc.perform(post("/api/v1/specialist/booking-requests/3/approve")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @WithMockUser(roles = "SPECIALIST")
+    void rejectBookingRequest_success() throws Exception {
+        doNothing().when(bookingService).rejectBookingRequest(anyLong(), anyLong(), any(SpecialistRejectBookingRequestDTO.class));
+
+        mockMvc.perform(post("/api/v1/specialist/booking-requests/3/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "rejectionReason": "I am unavailable at that time."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+}

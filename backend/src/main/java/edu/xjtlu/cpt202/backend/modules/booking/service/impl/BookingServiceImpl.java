@@ -14,30 +14,34 @@ import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
-import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
-import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -59,25 +63,43 @@ import java.util.concurrent.TimeUnit;
  * @author QiranXiao
  * @since 2026/4/1
  */
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> implements BookingService {
+
+    private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
 
     private final BookingMapper bookingMapper;
     private final BookingTopicMapper bookingTopicMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistQueryService specialistQueryService;
-
     private final CustomerBookingChangePolicyService customerBookingChangePolicyService;
-
-    @Qualifier("jsonRedisTemplate")
     private final RedisTemplate<String, Object> jsonRedisTemplate;
+
+    public BookingServiceImpl(
+            BookingMapper bookingMapper,
+            BookingTopicMapper bookingTopicMapper,
+            TimeSlotMapper timeSlotMapper,
+            SpecialistQueryService specialistQueryService,
+            CustomerBookingChangePolicyService customerBookingChangePolicyService,
+            @Qualifier("jsonRedisTemplate") RedisTemplate<String, Object> jsonRedisTemplate
+    ) {
+        this.bookingMapper = bookingMapper;
+        this.bookingTopicMapper = bookingTopicMapper;
+        this.timeSlotMapper = timeSlotMapper;
+        this.specialistQueryService = specialistQueryService;
+        this.customerBookingChangePolicyService = customerBookingChangePolicyService;
+        this.jsonRedisTemplate = jsonRedisTemplate;
+    }
 
     @Override
     public List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit) {
         LocalDateTime now = LocalDateTime.now();
-        List<UpcomingBookingVO> result = bookingMapper.selectUpcomingBookings(customerId, BookingStatusEnum.CONFIRMED.name(), now, limit);
+        List<UpcomingBookingVO> result = bookingMapper.selectUpcomingBookings(
+                customerId,
+                BookingStatusEnum.CONFIRMED.name(),
+                now,
+                limit
+        );
 
         if (result != null) {
             result.forEach(booking -> booking.setToday(booking.getStartTime().toLocalDate().isEqual(now.toLocalDate())));
@@ -85,7 +107,6 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
         return result != null ? result : List.of();
     }
-
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -100,6 +121,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (!TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot already booked");
         }
+
         String normalizedTopic = normalizeTopic(createDTO.getTopic());
         validateTopic(normalizedTopic);
         String normalizedNotes = normalizeNotes(createDTO.getCustomerNotes());
@@ -107,22 +129,21 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(createDTO.getSpecialistId());
         validateSpecialistCanBeBooked(specialist);
 
-        Booking booking = Booking.builder()
-                .customerId(customerId)
-                .specialistId(createDTO.getSpecialistId())
-                .slotId(createDTO.getSlotId())
-                .status(BookingStatusEnum.PENDING.name())
-                .price(resolvePrice(specialist.getConsultationFee()))
-                .topic(normalizedTopic)
-                .customerNotes(normalizedNotes)
-                .parentBookingId(null)
-                .decisionTime(null)
-                .cancelledBy(null)
-                .cancelReason(null)
-                .changeType(null)
-                .refundStatus("NONE")
-                .rejectionReason(null)
-                .build();
+        Booking booking = new Booking();
+        booking.setCustomerId(customerId);
+        booking.setSpecialistId(createDTO.getSpecialistId());
+        booking.setSlotId(createDTO.getSlotId());
+        booking.setStatus(BookingStatusEnum.PENDING.name());
+        booking.setPrice(resolvePrice(specialist.getConsultationFee()));
+        booking.setTopic(normalizedTopic);
+        booking.setCustomerNotes(normalizedNotes);
+        booking.setParentBookingId(null);
+        booking.setDecisionTime(null);
+        booking.setCancelledBy(null);
+        booking.setCancelReason(null);
+        booking.setChangeType(null);
+        booking.setRefundStatus("NONE");
+        booking.setRejectionReason(null);
         bookingMapper.insert(booking);
 
         slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
@@ -158,7 +179,14 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
         LocalDateTime currentTime = LocalDateTime.now();
         long offset = (long) (dto.getPageNo() - 1) * dto.getPageSize();
-        List<BookingItemVO> list = bookingMapper.selectBookingList(customerId, dto.getTab(), dto.getStatus(), currentTime, offset, dto.getPageSize());
+        List<BookingItemVO> list = bookingMapper.selectBookingList(
+                customerId,
+                dto.getTab(),
+                dto.getStatus(),
+                currentTime,
+                offset,
+                dto.getPageSize()
+        );
         Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), dto.getStatus(), currentTime);
         PageResult<BookingItemVO> pageResult = new PageResult<>(total, list);
         writeCache(cacheKey, pageResult, RedisCacheConstant.BOOKING_LIST_CACHE_TTL_SECONDS);
@@ -227,6 +255,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return statistics;
     }
 
+    @Override
     public BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId) {
         String cacheKey = RedisKeyUtils.buildCustomerBookingDetailKey(currentCustomerId, bookingId);
         Optional<BookingDetailVO> cachedBookingDetail = readCache(cacheKey, BookingDetailVO.class);
@@ -242,8 +271,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
         Booking booking = bookingMapper.selectById(bookingId);
         if (booking == null || !booking.getCustomerId().equals(currentCustomerId)) {
-            log.warn("Data isolation violation detected: customerId={}, bookingId={}, actual customerId={}",
-                    currentCustomerId, bookingId, booking != null ? booking.getCustomerId() : "N/A");
+            log.warn(
+                    "Data isolation violation detected: customerId={}, bookingId={}, actual customerId={}",
+                    currentCustomerId,
+                    bookingId,
+                    booking != null ? booking.getCustomerId() : "N/A"
+            );
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
 
@@ -251,27 +284,84 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return detail;
     }
 
+    @Override
+    public List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId) {
+        return bookingMapper.selectPendingRequestsForSpecialist(currentUserId, BookingStatusEnum.PENDING.name());
+    }
+
+    @Override
+    public List<SpecialistHandledBookingVO> listHandledRequestsForSpecialist(Long currentUserId) {
+        return bookingMapper.selectHandledRequestsForSpecialist(currentUserId);
+    }
+
+    @Override
+    public SpecialistBookingDetailVO getBookingRequestDetailForSpecialist(Long bookingId, Long currentUserId) {
+        validateBookingOwnershipForSpecialist(bookingId, currentUserId);
+        SpecialistBookingDetailVO detail = bookingMapper.selectBookingRequestDetailForSpecialist(bookingId, currentUserId);
+        if (detail == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        return detail;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void approveBookingRequest(Long bookingId, Long currentUserId) {
+        Booking booking = loadPendingBookingForSpecialist(bookingId, currentUserId);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setDecisionTime(LocalDateTime.now());
+        booking.setRejectionReason(null);
+        bookingMapper.updateById(booking);
+
+        TimeSlot timeSlot = timeSlotMapper.selectById(booking.getSlotId());
+        if (timeSlot != null) {
+            timeSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+            timeSlotMapper.updateById(timeSlot);
+        }
+
+        invalidateCustomerBookingCache(booking.getCustomerId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectBookingRequest(Long bookingId, Long currentUserId, SpecialistRejectBookingRequestDTO requestDTO) {
+        Booking booking = loadPendingBookingForSpecialist(bookingId, currentUserId);
+        String rejectionReason = requestDTO.getRejectionReason().trim();
+
+        booking.setStatus(BookingStatusEnum.CANCELLED.name());
+        booking.setDecisionTime(LocalDateTime.now());
+        booking.setRejectionReason(rejectionReason);
+        booking.setCancelledBy("SPECIALIST");
+        booking.setCancelReason(rejectionReason);
+        booking.setChangeType("REJECT");
+        bookingMapper.updateById(booking);
+
+        TimeSlot timeSlot = timeSlotMapper.selectById(booking.getSlotId());
+        if (timeSlot != null) {
+            timeSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+            timeSlotMapper.updateById(timeSlot);
+        }
+
+        invalidateCustomerBookingCache(booking.getCustomerId());
+    }
 
     @Override
     public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
         Booking booking = bookingMapper.selectById(bookingId);
-
         if (booking == null) {
             log.warn("Booking not found for cancel quote: bookingId={}", bookingId);
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
-
-        //customer can only cancel their own booking
         if (!booking.getCustomerId().equals(currentCustomerId)) {
             log.warn("Cancel quote forbidden: customerId={}, bookingId={}", currentCustomerId, bookingId);
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
 
-
         TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
         if (slot == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
         }
+
         LocalDateTime slotStart = resolveSlotStart(slot);
         return customerBookingChangePolicyService.customerCancellationQuote(
                 booking.getStatus(),
@@ -301,11 +391,9 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (currentSlot == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
         }
-
         if (newSlotId.equals(booking.getSlotId())) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Choose a different time slot to reschedule");
         }
-
 
         TimeSlot newSlot = timeSlotMapper.selectById(newSlotId);
         if (newSlot == null) {
@@ -343,10 +431,8 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             log.warn("Booking not found for cancel confirm: bookingId={}", bookingId);
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
-        
-        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
 
-        
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
         if (slot == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
         }
@@ -356,14 +442,13 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.FORBIDDEN);
         }
 
-        //customer cancellation quote
         BookingCancelQuoteVO quote = customerBookingChangePolicyService.customerCancellationQuote(
                 booking.getStatus(),
                 resolveSlotStart(slot),
                 now,
                 booking.getPrice()
         );
-        
+
         if (!quote.isAllowed()) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
         }
@@ -490,6 +575,29 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 .build();
     }
 
+    private Booking loadPendingBookingForSpecialist(Long bookingId, Long currentUserId) {
+        validateBookingOwnershipForSpecialist(bookingId, currentUserId);
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!BookingStatusEnum.PENDING.name().equals(booking.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only pending booking requests can be handled");
+        }
+        return booking;
+    }
+
+    private void validateBookingOwnershipForSpecialist(Long bookingId, Long currentUserId) {
+        Long count = bookingMapper.countBookingOwnedBySpecialist(bookingId, currentUserId);
+        if (count == null || count == 0) {
+            Booking booking = bookingMapper.selectById(bookingId);
+            if (booking == null) {
+                throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+            }
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN);
+        }
+    }
+
     private static LocalDateTime resolveSlotStart(TimeSlot slot) {
         LocalDate date = slot.getSlotDate();
         LocalTime start = slot.getStartTime();
@@ -530,7 +638,6 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         } catch (Exception exception) {
             log.warn("Redis cache invalidation failed, continue without cache eviction: pattern={}, reason={}", cachePattern, exception.getMessage());
         }
-
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {
@@ -583,7 +690,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
     }
 
-    private List<DashboardStatisticsVO.TrendChartVO> loadTrendData(Long customerId, String completedStatus, LocalDate startDate, LocalDate endDate) {
+    private List<DashboardStatisticsVO.TrendChartVO> loadTrendData(
+            Long customerId,
+            String completedStatus,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
         if (shouldUseDailyTrend(startDate, endDate)) {
             return Optional.ofNullable(
                             bookingMapper.selectDashboardTrendByDay(customerId, completedStatus, startDate, endDate)
@@ -604,7 +716,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return daySpan <= DashboardConstant.TREND_DAILY_THRESHOLD_DAYS;
     }
 
-    private List<DashboardStatisticsVO.HabitChartVO> buildHabitData(Long customerId, String completedStatus, LocalDate startDate, LocalDate endDate) {
+    private List<DashboardStatisticsVO.HabitChartVO> buildHabitData(
+            Long customerId,
+            String completedStatus,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
         List<DashboardHabitRawVO> rawData = Optional.ofNullable(
                         bookingMapper.selectDashboardHabitData(customerId, completedStatus, startDate, endDate)
                 )

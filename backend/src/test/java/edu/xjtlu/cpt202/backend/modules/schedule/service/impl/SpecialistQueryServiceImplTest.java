@@ -110,6 +110,7 @@ class SpecialistQueryServiceImplTest {
     void listAvailability_success() {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(66L);
+        detail.setStatus("ACTIVE");
 
         SpecialistAvailabilityVO availability = new SpecialistAvailabilityVO();
         availability.setId(1L);

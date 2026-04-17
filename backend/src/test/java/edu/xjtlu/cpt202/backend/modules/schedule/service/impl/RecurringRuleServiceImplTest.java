@@ -71,7 +71,15 @@ class RecurringRuleServiceImplTest {
         assertEquals(31L, result.getId());
         assertEquals(1L, result.getSpecialistId());
         assertEquals("Active", result.getStatusDesc());
-        verify(timeSlotMapper, times(2)).insert(any(TimeSlot.class));
+
+        ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
+        verify(timeSlotMapper, times(4)).insert(slotCaptor.capture());
+
+        List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
+        assertEquals(LocalTime.of(9, 0), generatedSlots.get(0).getStartTime());
+        assertEquals(LocalTime.of(9, 30), generatedSlots.get(0).getEndTime());
+        assertEquals(LocalTime.of(9, 30), generatedSlots.get(1).getStartTime());
+        assertEquals(LocalTime.of(10, 0), generatedSlots.get(1).getEndTime());
     }
 
     @Test
@@ -177,7 +185,7 @@ class RecurringRuleServiceImplTest {
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
-        when(timeSlotMapper.selectCount(any())).thenReturn(1L, 0L);
+        when(timeSlotMapper.selectCount(any())).thenReturn(1L, 0L, 0L, 0L);
 
         ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
         when(recurringRuleMapper.insert(ruleCaptor.capture())).thenAnswer(invocation -> {
@@ -189,8 +197,12 @@ class RecurringRuleServiceImplTest {
         recurringRuleService.createRecurringRule(request);
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
-        verify(timeSlotMapper, times(1)).insert(slotCaptor.capture());
-        assertEquals(TimeSlotStatusEnum.AVAILABLE.name(), slotCaptor.getValue().getStatus());
+        verify(timeSlotMapper, times(3)).insert(slotCaptor.capture());
+
+        List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
+        assertEquals(TimeSlotStatusEnum.AVAILABLE.name(), generatedSlots.get(0).getStatus());
+        assertEquals(LocalTime.of(9, 30), generatedSlots.get(0).getStartTime());
+        assertEquals(LocalTime.of(10, 0), generatedSlots.get(0).getEndTime());
     }
 
     @Test
@@ -215,10 +227,10 @@ class RecurringRuleServiceImplTest {
         recurringRuleService.createRecurringRule(request);
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
-        verify(timeSlotMapper, times(2)).insert(slotCaptor.capture());
+        verify(timeSlotMapper, times(4)).insert(slotCaptor.capture());
 
         List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
-        assertEquals(2, generatedSlots.size());
+        assertEquals(4, generatedSlots.size());
         assertTrue(generatedSlots.stream().allMatch(slot -> TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())));
         assertTrue(generatedSlots.stream().allMatch(slot -> Long.valueOf(61L).equals(slot.getRecurringRuleId())));
         assertTrue(generatedSlots.stream().allMatch(slot -> !slot.getSlotDate().isAfter(request.getEffectiveEndDate())));

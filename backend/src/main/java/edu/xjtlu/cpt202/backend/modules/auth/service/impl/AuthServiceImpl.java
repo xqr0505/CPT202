@@ -9,16 +9,22 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LogoutRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.VerifyResetCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.mail.internet.MimeMessage;
 
 import org.slf4j.Logger;
@@ -30,6 +36,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.UUID;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -43,19 +50,25 @@ public class AuthServiceImpl implements AuthService {
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$");
 
     private final UserMapper userMapper;
+    private final UserAccountService userAccountService;
     private final VerificationCodeMapper verificationCodeMapper;
+    private final RefreshTokenMapper refreshTokenMapper;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final Environment env;
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
+                           UserAccountService userAccountService,
                            VerificationCodeMapper verificationCodeMapper,
+                           RefreshTokenMapper refreshTokenMapper,
                            PasswordEncoder passwordEncoder,
                            JavaMailSender mailSender,
                            Environment env) {
         this.userMapper = userMapper;
+        this.userAccountService = userAccountService;
         this.verificationCodeMapper = verificationCodeMapper;
+        this.refreshTokenMapper = refreshTokenMapper;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
         this.env = env;
@@ -68,15 +81,7 @@ public class AuthServiceImpl implements AuthService {
         
         // 1. 根据类型执行不同校验
         if ("REGISTER".equals(type)) {
-            // 注册模式：必须有角色，且角色合法
-            if (StrUtil.isBlank(request.getRole())) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first.");
-            }
-            String role = request.getRole().toUpperCase(Locale.ROOT);
-            if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first.");
-            }
-            // 邮箱必须未被注册
+            // 注册模式：只允许创建 CUSTOMER 账号，邮箱必须未被注册
             Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
             if (existingCount != null && existingCount > 0) {
                 throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
@@ -162,7 +167,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest request) {
         // 8/9/10 校验
-        if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword(), request.getRole())) {
+        if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please enter every field");
         }
 
@@ -194,21 +199,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), "Verification code incorrect or expired. Please request a new one.");
         }
 
-        String role = request.getRole().trim().toUpperCase(Locale.ROOT);
-        if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER or SPECIALIST can register.");
-        }
-
-        User newUser = User.builder()
-                .email(email)
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(role)
-                .status(AccountStatusEnum.ACTIVE.name())
-                .loginFailCount(0)
-                .lockTime(null)
-                .build();
-
-        userMapper.insert(newUser);
+        User newUser = userAccountService.createUser(email, request.getPassword(), "CUSTOMER", null);
 
         codeRecord.setIsUsed(true);
         verificationCodeMapper.updateById(codeRecord);
@@ -302,16 +293,82 @@ public class AuthServiceImpl implements AuthService {
         // user.setLastLoginTime(LocalDateTime.now());
         userMapper.updateById(user);
 
-        String token = JwtUtils.generateToken(user.getId(), user.getRole());
+        String accessToken = JwtUtils.generateToken(user.getId(), user.getRole());
+        String refreshToken = generateRefreshToken();
+        persistRefreshToken(user.getId(), refreshToken);
 
         return LoginResponse.builder()
-                .token(token)
+                .token(accessToken)
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .role(user.getRole())
                 .email(user.getEmail())
                 .displayName(user.getFullName() != null ? user.getFullName() : user.getEmail())
                 .expiresIn(System.currentTimeMillis() + SecurityConstant.JWT_EXPIRATION_MILLISECONDS)
                 .build();
+    }
+
+    @Override
+    public RefreshTokenResponse refreshToken(RefreshTokenRequest request) {
+        String refreshTokenValue = request.getRefreshToken().trim();
+        if (StrUtil.isBlank(refreshTokenValue)) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Invalid refresh token");
+        }
+
+        RefreshToken persistedToken = refreshTokenMapper.selectOne(new QueryWrapper<RefreshToken>()
+                .eq("token", refreshTokenValue)
+                .ge("expires_at", LocalDateTime.now())
+        );
+
+        if (persistedToken == null) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Refresh token invalid or expired");
+        }
+
+        User user = userMapper.selectById(persistedToken.getUserId());
+        if (user == null || !AccountStatusEnum.ACTIVE.name().equalsIgnoreCase(user.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "User session is invalid");
+        }
+
+        if (user.getPasswordChangedAt() != null && persistedToken.getCreatedAt() != null &&
+                persistedToken.getCreatedAt().isBefore(user.getPasswordChangedAt())) {
+            invalidateRefreshToken(refreshTokenValue);
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "Refresh token invalid due to password change");
+        }
+
+        String accessToken = JwtUtils.generateToken(user.getId(), user.getRole());
+
+        return RefreshTokenResponse.builder()
+                .token(accessToken)
+                .expiresIn(System.currentTimeMillis() + SecurityConstant.JWT_EXPIRATION_MILLISECONDS)
+                .build();
+    }
+
+    @Override
+    public void logout(LogoutRequest request) {
+        if (request != null && StrUtil.isNotBlank(request.getRefreshToken())) {
+            invalidateRefreshToken(request.getRefreshToken().trim());
+        }
+    }
+
+    private String generateRefreshToken() {
+        return UUID.randomUUID().toString() + UUID.randomUUID().toString();
+    }
+
+    private void persistRefreshToken(Long userId, String refreshTokenValue) {
+        RefreshToken refreshToken = RefreshToken.builder()
+                .userId(userId)
+                .token(refreshTokenValue)
+                .expiresAt(LocalDateTime.now().plusDays(SecurityConstant.REFRESH_TOKEN_EXPIRATION_DAYS))
+                .build();
+        refreshTokenMapper.insert(refreshToken);
+    }
+
+    private void invalidateRefreshToken(String refreshTokenValue) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("token", refreshTokenValue));
+    }
+
+    private void invalidateAllRefreshTokensForUser(Long userId) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", userId));
     }
 
     @Override
@@ -490,7 +547,8 @@ public class AuthServiceImpl implements AuthService {
             user.setStatus(AccountStatusEnum.ACTIVE.name());
         }
         userMapper.updateById(user);
-        
+        invalidateAllRefreshTokensForUser(user.getId());
+
         logger.info("Password reset successfully for email: {}", email);
     }
 }

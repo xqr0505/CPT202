@@ -4,6 +4,9 @@ import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LogoutRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
@@ -17,9 +20,13 @@ public interface AuthService {
 
     LoginResponse login(LoginRequest request);
 
+    RefreshTokenResponse refreshToken(RefreshTokenRequest request);
+
+    void logout(LogoutRequest request);
+
     void sendResetPasswordCode(SendResetCodeRequest request);
 
-    void verifyResetCode(VerifyResetCodeRequest request);  
+    void verifyResetCode(VerifyResetCodeRequest request);
     
     void resetPassword(ResetPasswordRequest request);
 

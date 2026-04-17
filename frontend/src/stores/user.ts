@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { getUser } from '@/api/request'
+import { getUser, getAuthToken, saveToken } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -43,7 +43,7 @@ const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; 
   const storedUser = getUser() as StoredUser | null
 
   return {
-    token: localStorage.getItem('token') || sessionStorage.getItem('token'),
+    token: getAuthToken(),
     userInfo: storedUser
       ? {
           id: storedUser.userId || 0,
@@ -69,24 +69,18 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 export const useUserStore = defineStore('user', () => {
   const storedSession = getStoredSession()
 
-  const token = ref<string | null>(storedSession.token || 'fake-jwt-token-12345')
-  const userInfo = ref<UserInfo | null>(
-    storedSession.userInfo || {
-      id: 1,
-      username: 'mockuser',
-      nickname: 'Mock Customer'
-    }
-  )
-  const userRole = ref<UserRole>(storedSession.role || USER_ROLES.CUSTOMER)
+  const token = ref<string | null>(storedSession.token || null)
+  const userInfo = ref<UserInfo | null>(storedSession.userInfo)
+  const userRole = ref<UserRole>(storedSession.role)
 
   const isLoggedIn = computed(() => !!token.value)
   const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)
   const isSpecialist = computed(() => userRole.value === USER_ROLES.SPECIALIST)
   const isAdmin = computed(() => userRole.value === USER_ROLES.ADMIN)
 
-  const setToken = (newToken: string) => {
+  const setToken = (newToken: string, rememberMe: boolean = false) => {
     token.value = newToken
-    localStorage.setItem('token', newToken)
+    saveToken(newToken, rememberMe)
   }
 
   const setUserInfo = (info: UserInfo, role: UserRole) => {

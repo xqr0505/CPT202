@@ -4,6 +4,9 @@ import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LogoutRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
@@ -40,9 +43,16 @@ public class AuthController {
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return Result.success(authService.login(request));
     }
+
     @PostMapping("/auth/logout")
-    public Result<Void> logout() {
+    public Result<Void> logout(@RequestBody(required = false) LogoutRequest request) {
+        authService.logout(request == null ? null : request);
         return Result.success();
+    }
+
+    @PostMapping("/auth/refresh-token")
+    public Result<RefreshTokenResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+        return Result.success(authService.refreshToken(request));
     }
 
     @PostMapping("/auth/reset-password/send-code")

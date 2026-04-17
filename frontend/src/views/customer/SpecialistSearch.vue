@@ -169,7 +169,8 @@ const loadSpecialists = async () => {
     }
     const result = await fetchSpecialists(params)
     specialists.value = result.list
-    total.value = result.total
+    const parsedTotal = Number((result as unknown as { total?: unknown })?.total)
+    total.value = Number.isFinite(parsedTotal) ? parsedTotal : 0
   } finally {
     loading.value = false
   }
@@ -177,7 +178,7 @@ const loadSpecialists = async () => {
 
 const pushSearchState = (pageNo = 1) => {
   router.push({
-    path: '/customer/specialists',
+    path: '/customer/search',
     query: buildSearchQuery(pageNo),
   })
 }

@@ -13,5 +13,5 @@ RUN mvn -q -DskipTests dependency:go-offline
 COPY src ./src
 
 EXPOSE 8081
-EXPOSE 5331
+
 CMD ["mvn", "-DskipTests", "spring-boot:run", "-Dspring-boot.run.profiles=dev"]

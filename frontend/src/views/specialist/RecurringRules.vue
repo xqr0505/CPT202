@@ -40,7 +40,7 @@
           <div class="rule-meta">
             <div class="meta-item">
               <el-icon><Calendar /></el-icon>
-              <span>Until {{ formatDate(rule.effectiveEndDate) }}</span>
+              <span>{{ rule.effectiveEndDate ? `Until ${formatDate(rule.effectiveEndDate)}` : 'No end date' }}</span>
             </div>
             <div class="meta-item">
               <el-tag :type="rule.isActive === 1 ? 'success' : 'info'" size="small">
@@ -109,6 +109,17 @@
         </el-form-item>
 
         <el-form-item label="Effective Until" prop="effectiveEndDate">
+          <div class="end-date-toggle">
+            <el-switch
+              v-model="form.noEndDate"
+              active-text="No end date"
+              @change="() => {
+                if (form.noEndDate) {
+                  form.effectiveEndDate = ''
+                }
+              }"
+            />
+          </div>
           <el-date-picker
             v-model="form.effectiveEndDate"
             type="date"
@@ -116,6 +127,7 @@
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             :disabled-date="disabledPastDates"
+            :disabled="form.noEndDate"
             style="width: 100%"
           />
         </el-form-item>
@@ -154,6 +166,7 @@ interface RecurringRuleForm {
   dayOfWeek: number | null
   startTime: string
   endTime: string
+  noEndDate: boolean
   effectiveEndDate: string
 }
 
@@ -161,6 +174,7 @@ const form = ref<RecurringRuleForm>({
   dayOfWeek: 1,
   startTime: '',
   endTime: '',
+  noEndDate: true,
   effectiveEndDate: ''
 })
 
@@ -189,7 +203,16 @@ const rulesForm: FormRules = {
     { validator: validateTimeRange, trigger: 'change' }
   ],
   effectiveEndDate: [
-    { required: true, message: 'Please select effective end date', trigger: 'change' }
+    {
+      validator: (_rule, value, callback) => {
+        if (form.value.noEndDate || value) {
+          callback()
+          return
+        }
+        callback(new Error('Please select effective end date or choose no end date'))
+      },
+      trigger: 'change'
+    }
   ]
 }
 
@@ -200,7 +223,7 @@ function disabledPastDates(date: Date): boolean {
   return date < today
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-'
   const [year, month, day] = dateStr.split('-').map(Number)
   if (!year || !month || !day) return dateStr
@@ -224,6 +247,7 @@ function resetForm() {
     dayOfWeek: null,
     startTime: '',
     endTime: '',
+    noEndDate: true,
     effectiveEndDate: ''
   }
   formRef.value?.resetFields()
@@ -240,7 +264,7 @@ async function handleCreate() {
           dayOfWeek: form.value.dayOfWeek as number,
           startTime: form.value.startTime,
           endTime: form.value.endTime,
-          effectiveEndDate: form.value.effectiveEndDate
+          effectiveEndDate: form.value.noEndDate ? null : form.value.effectiveEndDate
         }
         await createRecurringRule(payload)
         ElMessage.success('Recurring rule created successfully')
@@ -376,6 +400,10 @@ onMounted(() => {
       display: flex;
       justify-content: flex-end;
     }
+  }
+
+  .end-date-toggle {
+    margin-bottom: var(--space-3);
   }
 
   .empty-state {

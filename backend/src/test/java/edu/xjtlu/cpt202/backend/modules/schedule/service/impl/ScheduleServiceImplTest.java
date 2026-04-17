@@ -44,6 +44,9 @@ class ScheduleServiceImplTest {
     @Mock
     private SpecialistProfileMapper specialistProfileMapper;
 
+    @Mock
+    private RecurringRuleServiceImpl recurringRuleServiceImpl;
+
     @InjectMocks
     private ScheduleServiceImpl scheduleService;
 
@@ -367,6 +370,30 @@ class ScheduleServiceImplTest {
     }
 
     @Test
+    void createSlot_acceptsOpenEndedRule() {
+        CreateSlotRequest request = new CreateSlotRequest();
+        request.setSlotDate(LocalDate.of(2026, 4, 10));
+        request.setStartTime(LocalTime.of(9, 0));
+        request.setEndTime(LocalTime.of(10, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(buildOpenEndedRule(5, "12:00")));
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
+
+        ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
+        when(timeSlotMapper.insert(slotCaptor.capture())).thenAnswer(invocation -> {
+            TimeSlot slot = slotCaptor.getValue();
+            slot.setId(151L);
+            return 1;
+        });
+
+        TimeSlotVO result = scheduleService.createSlot(request);
+
+        assertEquals(151L, result.getId());
+        assertEquals(LocalTime.of(9, 0), result.getStartTime());
+    }
+
+    @Test
     void deleteSlot_outsideConsultationHours_stillAllowed() {
         TimeSlot slot = new TimeSlot();
         slot.setId(32L);
@@ -389,6 +416,17 @@ class ScheduleServiceImplTest {
         rule.setStartTime(LocalTime.of(8, 0));
         rule.setEndTime(LocalTime.parse(end));
         rule.setEffectiveEndDate(LocalDate.of(2026, 12, 31));
+        rule.setIsActive(1);
+        return rule;
+    }
+
+    private AvailabilityRecurringRule buildOpenEndedRule(Integer dayOfWeek, String end) {
+        AvailabilityRecurringRule rule = new AvailabilityRecurringRule();
+        rule.setSpecialistId(1L);
+        rule.setDayOfWeek(dayOfWeek);
+        rule.setStartTime(LocalTime.of(8, 0));
+        rule.setEndTime(LocalTime.parse(end));
+        rule.setEffectiveEndDate(null);
         rule.setIsActive(1);
         return rule;
     }

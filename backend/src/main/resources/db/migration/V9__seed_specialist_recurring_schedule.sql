@@ -88,7 +88,7 @@ LEFT JOIN `availability_recurring_rules` existing
    AND existing.day_of_week = seed.day_of_week
    AND existing.start_time = seed.start_time
    AND existing.end_time = seed.end_time
-   AND existing.effective_end_date = '2026-05-17'
+   AND (existing.effective_end_date = '2026-05-17' OR existing.effective_end_date IS NULL)
    AND existing.is_active = 1
 WHERE existing.id IS NULL;
 
@@ -196,23 +196,20 @@ JOIN (
         arr.specialist_id,
         arr.day_of_week,
         arr.start_time,
-        arr.end_time,
-        arr.effective_end_date
+        arr.end_time
     FROM `availability_recurring_rules` arr
-    WHERE arr.effective_end_date = '2026-05-17'
+    WHERE (arr.effective_end_date = '2026-05-17' OR arr.effective_end_date IS NULL)
       AND arr.is_active = 1
     GROUP BY
         arr.specialist_id,
         arr.day_of_week,
         arr.start_time,
-        arr.end_time,
-        arr.effective_end_date
+        arr.end_time
 ) rl
     ON rl.specialist_id = sp.id
    AND rl.day_of_week = seed.day_of_week
    AND rl.start_time = seed.start_time
    AND rl.end_time = seed.end_time
-   AND rl.effective_end_date = '2026-05-17'
 JOIN (
     SELECT DATE('2026-04-20') AS slot_date
     UNION ALL SELECT DATE('2026-04-21')

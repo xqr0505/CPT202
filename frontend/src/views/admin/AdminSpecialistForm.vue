@@ -26,6 +26,30 @@
             <el-input v-model="form.name" placeholder="Please enter specialist name" />
           </el-form-item>
 
+          <el-form-item label="Email" prop="email">
+            <el-input
+              v-model="form.email"
+              placeholder="Please enter specialist email"
+              type="email"
+            />
+          </el-form-item>
+
+          <el-form-item v-if="isEditMode" label="New Password" prop="password">
+            <el-input
+              v-model="form.password"
+              placeholder="Leave empty to keep current password"
+              type="password"
+              show-password
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item v-else label="Initial Password">
+            <div class="default-password-tip">
+              New specialist accounts are created with default password: <strong>12345Expertlink</strong>
+            </div>
+          </el-form-item>
+
           <el-form-item label="Category" prop="categoryId">
             <el-select
               v-model="form.categoryId"
@@ -217,12 +241,15 @@ import {
   getSpecialistLevels,
   updateSpecialist,
   type SpecialistLevelOption,
-  type SpecialistPayload,
+  type CreateSpecialistPayload,
+  type UpdateSpecialistPayload,
   type SpecialistStatus
 } from '@/api/adminSpecialist'
 
 interface SpecialistFormModel {
   name: string
+  email: string
+  password: string
   categoryId?: number
   level: string
   consultationFee: number
@@ -262,6 +289,8 @@ const avatarFallback = computed(() => (form.name.trim().slice(0, 1).toUpperCase(
 
 const form = reactive<SpecialistFormModel>({
   name: '',
+  email: '',
+  password: '',
   categoryId: undefined,
   level: '',
   consultationFee: 0,
@@ -311,6 +340,26 @@ function showFeeAdjustedMessage(originalValue: number, adjustedValue: number) {
 
 const rules: FormRules<SpecialistFormModel> = {
   name: [{ required: true, message: 'Please enter name', trigger: 'blur' }],
+  email: [
+    { required: true, message: 'Please enter email', trigger: 'blur' },
+    { type: 'email', message: 'Please enter a valid email', trigger: ['blur', 'change'] }
+  ],
+  password: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!isEditMode.value) {
+          callback()
+          return
+        }
+        if (value && value.length < 8) {
+          callback(new Error('Password must be at least 8 characters'))
+          return
+        }
+        callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
   categoryId: [{ required: true, message: 'Please select category', trigger: 'change' }],
   level: [{ required: true, message: 'Please select level', trigger: 'change' }],
   consultationFee: [
@@ -356,6 +405,8 @@ async function fetchSpecialistDetail() {
   try {
     const detail = await getSpecialistDetail(specialistId.value)
     form.name = detail.name ?? ''
+    form.email = detail.email ?? ''
+    form.password = ''
     form.categoryId = detail.categoryId
     form.level = detail.level ?? ''
     form.consultationFee = detail.consultationFee ?? 0
@@ -469,15 +520,32 @@ async function confirmOutOfRangeFeeIfNeeded() {
   }
 }
 
-function buildPayload(): SpecialistPayload {
+function buildCreatePayload(): CreateSpecialistPayload {
   return {
     name: form.name.trim(),
+    email: form.email.trim().toLowerCase(),
     categoryId: Number(form.categoryId),
     level: form.level.trim(),
     consultationFee: Number(form.consultationFee),
     status: form.status,
     avatarUrl: form.avatarUrl.trim() || undefined
   }
+}
+
+function buildUpdatePayload(): UpdateSpecialistPayload {
+  const payload: UpdateSpecialistPayload = {
+    name: form.name.trim(),
+    email: form.email.trim().toLowerCase(),
+    categoryId: Number(form.categoryId),
+    level: form.level.trim(),
+    consultationFee: Number(form.consultationFee),
+    status: form.status,
+    avatarUrl: form.avatarUrl.trim() || undefined
+  }
+  if (form.password.trim()) {
+    payload.password = form.password.trim()
+  }
+  return payload
 }
 
 async function handleSubmit() {
@@ -496,14 +564,13 @@ async function handleSubmit() {
 
     submitLoading.value = true
     try {
-      const payload = buildPayload()
       if (isEditMode.value && specialistId.value !== null) {
-        await updateSpecialist(specialistId.value, payload)
+        await updateSpecialist(specialistId.value, buildUpdatePayload())
         await fetchFeeChangeRecords()
         ElMessage.success('Specialist updated successfully')
       } else {
-        await createSpecialist(payload)
-        ElMessage.success('Specialist created successfully')
+        await createSpecialist(buildCreatePayload())
+        ElMessage.success('Specialist created successfully (default password: 12345Expertlink)')
       }
       goBack()
     } catch (error) {
@@ -731,6 +798,15 @@ onMounted(async () => {
   margin-top: 8px;
   font-size: 12px;
   color: #606266;
+}
+
+.default-password-tip {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f4f8ff;
+  color: #4b5a73;
+  line-height: 1.6;
 }
 
 @media (max-width: 980px) {

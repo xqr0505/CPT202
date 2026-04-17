@@ -1,6 +1,6 @@
 import request from './request'
 
-const USE_MOCK = true
+const USE_MOCK = false
 
 export interface SpecialistPendingBookingVO {
   id: number
@@ -131,7 +131,7 @@ export const approveBookingRequest = (id: number): Promise<void> => {
       return Promise.reject(new Error('Pending booking request not found'))
     }
 
-    const item = mockPendingRequests[index]
+    const item = mockPendingRequests[index]!
     mockPendingRequests.splice(index, 1)
 
     mockHandledRequests.unshift({
@@ -160,7 +160,7 @@ export const rejectBookingRequest = (
       return Promise.reject(new Error('Pending booking request not found'))
     }
 
-    const item = mockPendingRequests[index]
+    const item = mockPendingRequests[index]!
     mockPendingRequests.splice(index, 1)
 
     mockHandledRequests.unshift({

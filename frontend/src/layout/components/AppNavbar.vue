@@ -86,7 +86,7 @@ const ROLE_MENUS = {
   [USER_ROLES.SPECIALIST]: [
     { name: 'Dashboard', path: '/specialist/dashboard' },
     { name: 'Schedule Management', path: '/specialist/schedule' },
-    { name: 'Appointment Approval', path: '/specialist/requests' }
+    { name: 'Appointment Approval', path: '/specialist/booking-requests' }
   ],
   [USER_ROLES.ADMIN]: [
     { name: 'Specialist Management', path: '/admin/specialists' },

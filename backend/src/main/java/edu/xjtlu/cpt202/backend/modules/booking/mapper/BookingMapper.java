@@ -7,6 +7,8 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import org.apache.ibatis.annotations.Mapper;
@@ -43,5 +45,19 @@ public interface BookingMapper extends BaseMapper<Booking> {
     List<SpecialistPendingBookingVO> selectPendingRequestsForSpecialist(
             @Param("currentUserId") Long currentUserId,
             @Param("status") String status
+    );
+
+    List<SpecialistHandledBookingVO> selectHandledRequestsForSpecialist(
+            @Param("currentUserId") Long currentUserId
+    );
+
+    SpecialistBookingDetailVO selectBookingRequestDetailForSpecialist(
+            @Param("bookingId") Long bookingId,
+            @Param("currentUserId") Long currentUserId
+    );
+
+    Long countBookingOwnedBySpecialist(
+            @Param("bookingId") Long bookingId,
+            @Param("currentUserId") Long currentUserId
     );
 }

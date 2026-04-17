@@ -3,9 +3,12 @@ package edu.xjtlu.cpt202.backend.modules.booking.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 
@@ -24,4 +27,12 @@ public interface BookingService extends IService<Booking> {
     BookingDetailVO getBookingDetail(Long bookingId, Long customerId);
 
     List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId);
+
+    List<SpecialistHandledBookingVO> listHandledRequestsForSpecialist(Long currentUserId);
+
+    SpecialistBookingDetailVO getBookingRequestDetailForSpecialist(Long bookingId, Long currentUserId);
+
+    void approveBookingRequest(Long bookingId, Long currentUserId);
+
+    void rejectBookingRequest(Long bookingId, Long currentUserId, SpecialistRejectBookingRequestDTO requestDTO);
 }

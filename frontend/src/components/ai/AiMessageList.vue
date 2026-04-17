@@ -13,7 +13,7 @@
     >
       <p class="ai-message__label">{{ messageLabel(message.role) }}</p>
       <div class="ai-message__bubble">
-        <p class="ai-message__content">{{ messageContent(message) }}</p>
+        <div class="ai-message__content" v-html="renderMessageContent(message)" />
       </div>
     </article>
   </div>
@@ -21,6 +21,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import MarkdownIt from 'markdown-it'
 import {
   AI_CHAT_EMPTY_STATE_TEXT,
   AI_CHAT_MESSAGE_ROLE,
@@ -39,9 +40,29 @@ interface Props {
 
 const props = defineProps<Props>()
 const scrollContainer = ref<HTMLElement | null>(null)
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  breaks: true,
+  linkify: true,
+  typographer: true
+})
+
+const defaultLinkOpenRenderer =
+  markdownRenderer.renderer.rules.link_open ??
+  ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+
+markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]
+  if (token) {
+    token.attrSet('target', '_blank')
+    token.attrSet('rel', 'noopener noreferrer')
+  }
+
+  return defaultLinkOpenRenderer(tokens, idx, options, env, self)
+}
 
 const lastMessageSignature = computed<string>(() => {
-  const lastMessage = props.messages.at(-1)
+  const lastMessage = props.messages[props.messages.length - 1]
   if (!lastMessage) {
     return ''
   }
@@ -89,6 +110,10 @@ const messageContent = (message: AiChatMessage): string => {
   }
 
   return message.content
+}
+
+const renderMessageContent = (message: AiChatMessage): string => {
+  return markdownRenderer.render(messageContent(message))
 }
 </script>
 
@@ -171,9 +196,92 @@ const messageContent = (message: AiChatMessage): string => {
 }
 
 .ai-message__content {
-  white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.65;
+}
+
+.ai-message__content :deep(p) {
+  margin: 0;
+}
+
+.ai-message__content :deep(p + p) {
+  margin-top: var(--space-3);
+}
+
+.ai-message__content :deep(ul),
+.ai-message__content :deep(ol) {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.4em;
+}
+
+.ai-message__content :deep(li + li) {
+  margin-top: var(--space-1);
+}
+
+.ai-message__content :deep(blockquote) {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid rgba(15, 23, 42, 0.16);
+  color: var(--color-text-secondary);
+}
+
+.ai-message__content :deep(h1),
+.ai-message__content :deep(h2),
+.ai-message__content :deep(h3),
+.ai-message__content :deep(h4) {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.ai-message__content :deep(hr) {
+  margin: var(--space-4) 0;
+  border: none;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.ai-message__content :deep(pre) {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.ai-message__content :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+}
+
+.ai-message__content :deep(:not(pre) > code) {
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.ai-message__content :deep(a) {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.ai-message__content :deep(table) {
+  width: 100%;
+  margin-top: var(--space-3);
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ai-message__content :deep(th),
+.ai-message__content :deep(td) {
+  padding: var(--space-2);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ai-message__content :deep(th) {
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.04);
 }
 
 @media (max-width: 640px) {

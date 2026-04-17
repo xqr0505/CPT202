@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -28,6 +29,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final UserMapper userMapper;
@@ -65,8 +67,6 @@ public class SecurityConfig {
                                 "/auth/verify-email",
                                 "/auth/logout",           
                                 "/auth/reset-password/**", 
-                                "/api/v1/categories",
-                                "/api/v1/specialists",
                                 "/doc.html",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
@@ -74,6 +74,19 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/error/**"
                         ).permitAll()
+
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/specialist/**").hasRole("SPECIALIST")
+                        .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/user/**").hasAnyRole("ADMIN", "SPECIALIST", "CUSTOMER")
+                        .requestMatchers("/api/v1/ai/**").hasAnyRole("ADMIN", "SPECIALIST", "CUSTOMER")
+                        .requestMatchers(
+                                "/api/v1/categories",
+                                "/api/v1/specialists",
+                                "/api/v1/specialists/**",
+                                "/api/v1/booking-topics",
+                                "/api/v1/booking-topics/**"
+                        ).authenticated()
 
                         .anyRequest().authenticated()
                 )

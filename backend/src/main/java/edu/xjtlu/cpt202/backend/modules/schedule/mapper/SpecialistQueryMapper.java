@@ -67,7 +67,7 @@ public interface SpecialistQueryMapper {
                 <if test="query.categoryId != null">
                     AND sp.category_id = #{query.categoryId}
                 </if>
-                <if test="query.date != null">
+                <if test="query.date != null and (query.keyword == null or query.keyword == '')">
                     AND sp.status = 'ACTIVE'
                     AND EXISTS (
                         SELECT 1

@@ -26,6 +26,5 @@ public class CreateRecurringRuleRequest {
     @NotNull(message = "End time is required")
     private LocalTime endTime;
 
-    @NotNull(message = "Effective end date is required")
     private LocalDate effectiveEndDate;
 }

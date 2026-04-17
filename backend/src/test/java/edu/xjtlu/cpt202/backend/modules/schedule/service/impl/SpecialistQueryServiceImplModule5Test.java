@@ -44,6 +44,9 @@ class SpecialistQueryServiceImplModule5Test {
     @Mock
     private SpecialistQueryMapper specialistQueryMapper;
 
+    @Mock
+    private RecurringRuleServiceImpl recurringRuleServiceImpl;
+
     @InjectMocks
     private SpecialistQueryServiceImpl specialistQueryService;
 

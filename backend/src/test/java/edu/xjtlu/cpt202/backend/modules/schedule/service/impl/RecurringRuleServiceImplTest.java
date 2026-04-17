@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -234,5 +235,31 @@ class RecurringRuleServiceImplTest {
         assertTrue(generatedSlots.stream().allMatch(slot -> TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())));
         assertTrue(generatedSlots.stream().allMatch(slot -> Long.valueOf(61L).equals(slot.getRecurringRuleId())));
         assertTrue(generatedSlots.stream().allMatch(slot -> !slot.getSlotDate().isAfter(request.getEffectiveEndDate())));
+    }
+
+    @Test
+    void createRecurringRule_withoutEndDate_generatesInitialRollingHorizon() {
+        CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
+        request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
+        request.setStartTime(LocalTime.of(9, 0));
+        request.setEndTime(LocalTime.of(10, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
+
+        ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
+        when(recurringRuleMapper.insert(ruleCaptor.capture())).thenAnswer(invocation -> {
+            AvailabilityRecurringRule rule = ruleCaptor.getValue();
+            rule.setId(71L);
+            return 1;
+        });
+
+        RecurringRuleVO result = recurringRuleService.createRecurringRule(request);
+
+        assertNotNull(result);
+        assertEquals(71L, result.getId());
+        assertEquals(null, result.getEffectiveEndDate());
+        verify(timeSlotMapper, atLeastOnce()).insert(any(TimeSlot.class));
     }
 }

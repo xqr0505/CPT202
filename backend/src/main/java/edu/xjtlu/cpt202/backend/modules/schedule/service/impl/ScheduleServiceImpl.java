@@ -43,6 +43,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final TimeSlotMapper timeSlotMapper;
     private final AvailabilityRecurringRuleMapper recurringRuleMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
+    private final RecurringRuleServiceImpl recurringRuleServiceImpl;
 
     private static final Map<String, String> STATUS_DESC_MAP = Map.of(
         TimeSlotStatusEnum.AVAILABLE.name(), "Available",
@@ -83,6 +84,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     public List<TimeSlotVO> getWeeklySchedule(LocalDate weekStartDate) {
         LocalDate weekEnd = weekStartDate.plusDays(6);
         Long specialistId = getCurrentSpecialistId();
+        recurringRuleServiceImpl.ensureSlotsGeneratedForSpecialist(specialistId, weekStartDate, weekEnd);
 
         return timeSlotMapper.selectWeeklyScheduleBySpecialistId(specialistId, weekStartDate, weekEnd)
                 .stream()
@@ -236,7 +238,9 @@ public class ScheduleServiceImpl implements ScheduleService {
         wrapper.eq(AvailabilityRecurringRule::getSpecialistId, specialistId)
                .eq(AvailabilityRecurringRule::getIsActive, 1)
                .eq(AvailabilityRecurringRule::getDayOfWeek, dayOfWeek)
-               .ge(AvailabilityRecurringRule::getEffectiveEndDate, slotDate);
+               .and(w -> w.isNull(AvailabilityRecurringRule::getEffectiveEndDate)
+                       .or()
+                       .ge(AvailabilityRecurringRule::getEffectiveEndDate, slotDate));
 
         List<AvailabilityRecurringRule> rules = recurringRuleMapper.selectList(wrapper);
         if (rules == null) {

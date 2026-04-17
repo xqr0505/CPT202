@@ -349,6 +349,67 @@
       <section class="settings-card">
         <div class="settings-card__header">
           <div>
+            <p class="settings-card__eyebrow">Recent Security Activity</p>
+            <h2 class="settings-card__title">Recent account timeline</h2>
+            <p class="settings-card__subtitle">
+              Review recent profile and account security actions recorded by the backend so you can
+              quickly confirm what changed.
+            </p>
+          </div>
+          <el-tag effect="plain">{{ securityActivityStatusText }}</el-tag>
+        </div>
+
+        <div class="settings-card__body">
+          <div
+            v-if="securityActivityNotice"
+            class="status-banner"
+            :class="`status-banner--${securityActivityNotice.tone}`"
+            aria-live="polite"
+          >
+            <div class="status-banner__body">
+              <strong class="status-banner__title">{{ securityActivityNotice.title }}</strong>
+              <p class="status-banner__text">{{ securityActivityNotice.message }}</p>
+            </div>
+          </div>
+
+          <div v-if="isLoadingSecurityActivity && !securityActivityTimelineItems.length" class="activity-loading">
+            <el-skeleton animated :rows="3" />
+          </div>
+
+          <div v-else-if="securityActivityTimelineItems.length" class="activity-timeline">
+            <article
+              v-for="item in securityActivityTimelineItems"
+              :key="item.id"
+              class="activity-timeline__item"
+            >
+              <span class="activity-timeline__marker" />
+              <div class="activity-timeline__content">
+                <div class="activity-timeline__header">
+                  <strong class="activity-timeline__title">{{ item.label }}</strong>
+                  <span class="activity-timeline__time">{{ item.timestamp }}</span>
+                </div>
+                <p class="activity-timeline__summary">{{ item.summary }}</p>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="activity-empty">
+            <strong class="activity-empty__title">No recent security activity yet</strong>
+            <p class="activity-empty__text">
+              Completed profile, password, avatar, and account-status actions will appear here once
+              the backend records them.
+            </p>
+          </div>
+
+          <div v-if="securityActivityNotice" class="activity-actions">
+            <CustomButton @click="loadSecurityActivity()">Retry Activity Feed</CustomButton>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-card__header">
+          <div>
             <p class="settings-card__eyebrow">Appearance</p>
             <h2 class="settings-card__title">Light mode and style settings</h2>
             <p class="settings-card__subtitle">
@@ -443,6 +504,187 @@
         </div>
       </section>
 
+      <el-dialog
+        v-model="isProfileSaveDialogOpen"
+        title="Review profile changes"
+        width="min(640px, calc(100vw - 32px))"
+        destroy-on-close
+        :close-on-click-modal="!isSavingProfile"
+        :close-on-press-escape="!isSavingProfile"
+        @closed="resetProfileSaveDialogState"
+      >
+        <div class="change-summary-dialog">
+          <p class="change-summary-dialog__text">
+            Confirm the updated profile details below before saving them to the backend.
+          </p>
+
+          <div class="change-summary">
+            <article
+              v-for="item in profileChangeSummaryItems"
+              :key="item.key"
+              class="change-summary__item"
+            >
+              <div class="change-summary__header">
+                <strong class="change-summary__label">{{ item.label }}</strong>
+                <el-tag
+                  v-if="item.isSensitive"
+                  class="change-summary__tag"
+                  type="warning"
+                  effect="light"
+                  size="small"
+                >
+                  Sensitive
+                </el-tag>
+              </div>
+
+              <div class="change-summary__values">
+                <div class="change-summary__value-group">
+                  <span class="change-summary__caption">Current</span>
+                  <p
+                    class="change-summary__value"
+                    :class="{ 'change-summary__value--empty': !item.previousValue }"
+                  >
+                    {{ item.previousDisplayValue }}
+                  </p>
+                </div>
+
+                <div class="change-summary__value-group">
+                  <span class="change-summary__caption">New</span>
+                  <p
+                    class="change-summary__value"
+                    :class="{ 'change-summary__value--empty': !item.nextValue }"
+                  >
+                    {{ item.nextDisplayValue }}
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div
+            v-if="requiresProfileReauthentication"
+            class="status-banner status-banner--warning"
+            aria-live="polite"
+          >
+            <div class="status-banner__body">
+              <strong class="status-banner__title">Current password required</strong>
+              <p class="status-banner__text">
+                Changing the email on this account is a sensitive action, so please confirm your
+                current password before saving.
+              </p>
+            </div>
+          </div>
+
+          <div v-if="requiresProfileReauthentication" class="dialog-field">
+            <label class="dialog-field__label" for="profile-save-current-password">
+              Current password
+            </label>
+            <el-input
+              id="profile-save-current-password"
+              v-model="profileSaveCurrentPassword"
+              type="password"
+              show-password
+              autocomplete="current-password"
+              placeholder="Enter your current password"
+            />
+            <p class="dialog-field__hint">
+              This password is only used to confirm the email change in this save request.
+            </p>
+          </div>
+
+          <div
+            v-if="profileSaveDialogError"
+            class="status-banner status-banner--error"
+            aria-live="polite"
+          >
+            <div class="status-banner__body">
+              <strong class="status-banner__title">Unable to confirm profile changes</strong>
+              <p class="status-banner__text">{{ profileSaveDialogError }}</p>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="change-summary-dialog__actions">
+            <CustomButton :disabled="isSavingProfile" @click="isProfileSaveDialogOpen = false">
+              Cancel
+            </CustomButton>
+            <CustomButton
+              type="primary"
+              :loading="isSavingProfile"
+              @click="confirmProfileSave"
+            >
+              Confirm Save
+            </CustomButton>
+          </div>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="isDeactivationDialogOpen"
+        title="Confirm account deactivation"
+        width="min(640px, calc(100vw - 32px))"
+        destroy-on-close
+        :close-on-click-modal="!isDeactivatingAccount"
+        :close-on-press-escape="!isDeactivatingAccount"
+        @closed="resetDeactivationDialogState"
+      >
+        <div class="change-summary-dialog">
+          <div class="status-banner status-banner--warning" aria-live="polite">
+            <div class="status-banner__body">
+              <strong class="status-banner__title">Deactivate and sign out</strong>
+              <p class="status-banner__text">
+                This is a real soft-deactivation. Your data stays in the database, but normal
+                account access should stop and you will be signed out immediately.
+              </p>
+            </div>
+          </div>
+
+          <div class="dialog-field">
+            <label class="dialog-field__label" for="deactivation-current-password">
+              Current password
+            </label>
+            <el-input
+              id="deactivation-current-password"
+              v-model="deactivationCurrentPassword"
+              type="password"
+              show-password
+              autocomplete="current-password"
+              placeholder="Enter your current password"
+            />
+            <p class="dialog-field__hint">
+              Current password confirmation is required before this account can be deactivated.
+            </p>
+          </div>
+
+          <div
+            v-if="deactivationDialogError"
+            class="status-banner status-banner--error"
+            aria-live="polite"
+          >
+            <div class="status-banner__body">
+              <strong class="status-banner__title">Unable to confirm deactivation</strong>
+              <p class="status-banner__text">{{ deactivationDialogError }}</p>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="change-summary-dialog__actions">
+            <CustomButton :disabled="isDeactivatingAccount" @click="isDeactivationDialogOpen = false">
+              Cancel
+            </CustomButton>
+            <CustomButton
+              type="danger"
+              :loading="isDeactivatingAccount"
+              @click="confirmDeactivation"
+            >
+              Deactivate Account
+            </CustomButton>
+          </div>
+        </template>
+      </el-dialog>
+
       <section
         ref="statusSectionRef"
         class="settings-card settings-card--danger"
@@ -536,11 +778,13 @@ import {
   changeCurrentUserPassword,
   deactivateCurrentUserAccount,
   getCurrentUserProfile,
+  getCurrentUserSecurityActivity,
   uploadCurrentUserAvatar,
   updateCurrentUserProfile,
   type AccountProfile,
   type AvatarUploadResponse,
   type ChangePasswordPayload,
+  type SecurityActivityItem,
   type UpdateUserProfilePayload
 } from '@/api/user'
 import {
@@ -555,6 +799,7 @@ defineOptions({ name: 'AccountSettingsDashboard' })
 type ViewState = 'loading' | 'ready' | 'error'
 type StatusTone = 'success' | 'error' | 'info' | 'warning'
 type SectionKey = 'personal' | 'contact' | 'security' | 'status'
+type ProfileChangeFieldKey = 'fullName' | 'email' | 'phoneNumber'
 
 interface Props {
   initialSection?: SectionKey | 'overview'
@@ -589,6 +834,23 @@ interface CompletionItem {
   missingLabel: string
   complete: boolean
   section: SectionKey
+}
+
+interface ProfileChangeSummaryItem {
+  key: ProfileChangeFieldKey
+  label: string
+  previousValue: string
+  nextValue: string
+  previousDisplayValue: string
+  nextDisplayValue: string
+  isSensitive: boolean
+}
+
+interface SecurityActivityTimelineItem {
+  id: string
+  label: string
+  summary: string
+  timestamp: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -653,11 +915,20 @@ const avatarNotice = ref<SectionNotice | null>(null)
 const profileNotice = ref<SectionNotice | null>(null)
 const passwordNotice = ref<SectionNotice | null>(null)
 const deactivationNotice = ref<SectionNotice | null>(null)
+const securityActivityNotice = ref<SectionNotice | null>(null)
 const isUploadingAvatar = ref(false)
 const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
 const isDeactivatingAccount = ref(false)
+const isLoadingSecurityActivity = ref(false)
+const isProfileSaveDialogOpen = ref(false)
+const isDeactivationDialogOpen = ref(false)
+const profileSaveCurrentPassword = ref('')
+const profileSaveDialogError = ref('')
+const deactivationCurrentPassword = ref('')
+const deactivationDialogError = ref('')
 const originalProfile = ref<AccountProfile | null>(null)
+const securityActivityItems = ref<SecurityActivityItem[]>([])
 const lastProfileSavedAt = ref<Date | null>(null)
 const lastPasswordUpdatedAt = ref<Date | null>(null)
 const highlightedSection = ref<SectionKey | null>(null)
@@ -849,6 +1120,63 @@ const hasUnsavedProfileChanges = computed(() => {
   )
 })
 
+const requiresProfileReauthentication = computed(() => {
+  if (!originalProfile.value) {
+    return false
+  }
+
+  return trimmedProfileDraft.value.email !== originalProfile.value.email
+})
+
+const profileChangeSummaryItems = computed<ProfileChangeSummaryItem[]>(() => {
+  if (!originalProfile.value) {
+    return []
+  }
+
+  const fieldDefinitions: ReadonlyArray<{
+    key: ProfileChangeFieldKey
+    label: string
+    isSensitive: boolean
+  }> = [
+    {
+      key: 'fullName',
+      label: 'Full name',
+      isSensitive: false
+    },
+    {
+      key: 'email',
+      label: 'Email address',
+      isSensitive: true
+    },
+    {
+      key: 'phoneNumber',
+      label: 'Phone number',
+      isSensitive: true
+    }
+  ]
+
+  return fieldDefinitions
+    .map(field => {
+      const previousValue = String(originalProfile.value?.[field.key] ?? '').trim()
+      const nextValue = trimmedProfileDraft.value[field.key]
+
+      if (previousValue === nextValue) {
+        return null
+      }
+
+      return {
+        key: field.key,
+        label: field.label,
+        previousValue,
+        nextValue,
+        previousDisplayValue: formatProfileSummaryValue(previousValue),
+        nextDisplayValue: formatProfileSummaryValue(nextValue),
+        isSensitive: field.isSensitive
+      }
+    })
+    .filter((item): item is ProfileChangeSummaryItem => item !== null)
+})
+
 const profileMetaText = computed(() => {
   if (currentAccountStatus.value === 'DEACTIVATED') {
     return 'Account is currently deactivated'
@@ -871,6 +1199,27 @@ const passwordMetaText = computed(() => {
   }
 
   return 'Ready for a secure password update'
+})
+
+const securityActivityStatusText = computed(() => {
+  if (isLoadingSecurityActivity.value && !securityActivityItems.value.length) {
+    return 'Loading'
+  }
+
+  if (!securityActivityItems.value.length) {
+    return 'No recent activity'
+  }
+
+  return `${securityActivityItems.value.length} recent event${securityActivityItems.value.length === 1 ? '' : 's'}`
+})
+
+const securityActivityTimelineItems = computed<SecurityActivityTimelineItem[]>(() => {
+  return securityActivityItems.value.map(item => ({
+    id: `${item.id || item.eventType}-${item.createdAt || item.summary}`,
+    label: getSecurityActivityLabel(item.eventType),
+    summary: item.summary || 'Completed an account security action.',
+    timestamp: formatTimestamp(item.createdAt)
+  }))
 })
 
 const passwordChecklist = computed(() => {
@@ -1034,13 +1383,56 @@ const buildPhoneNumber = (countryCode: string, localPhoneNumber: string): string
   return `${countryCode.trim()} ${trimmedNumber}`.trim()
 }
 
-const formatTimestamp = (value: Date): string => {
+const toDisplayDate = (value: Date | string): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
+  const normalizedValue = value.trim()
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  const parsedDate = new Date(
+    normalizedValue.includes('T') ? normalizedValue : normalizedValue.replace(' ', 'T')
+  )
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
+
+const formatTimestamp = (value: Date | string): string => {
+  const parsedDate = toDisplayDate(value)
+
+  if (!parsedDate) {
+    return 'Unknown time'
+  }
+
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit'
-  }).format(value)
+  }).format(parsedDate)
+}
+
+const formatProfileSummaryValue = (value: string): string => {
+  return value ? value : 'Not provided'
+}
+
+const getSecurityActivityLabel = (eventType: string): string => {
+  switch (eventType.trim().toUpperCase()) {
+    case 'PROFILE_UPDATED':
+      return 'Profile updated'
+    case 'PASSWORD_CHANGED':
+      return 'Password changed'
+    case 'AVATAR_UPDATED':
+      return 'Avatar updated'
+    case 'ACCOUNT_DEACTIVATED':
+      return 'Account deactivated'
+    default:
+      return 'Account activity'
+  }
 }
 
 const buildAvatarInitials = (value: string): string => {
@@ -1111,8 +1503,25 @@ const resetProfileFormState = (): void => {
   profileFormRef.value?.clearValidate()
 }
 
+const resetProfileSaveDialogState = (): void => {
+  profileSaveCurrentPassword.value = ''
+  profileSaveDialogError.value = ''
+}
+
+const resetDeactivationDialogState = (): void => {
+  deactivationCurrentPassword.value = ''
+  deactivationDialogError.value = ''
+}
+
+const resetSecurityActivityState = (): void => {
+  securityActivityItems.value = []
+  securityActivityNotice.value = null
+  isLoadingSecurityActivity.value = false
+}
+
 const clearSensitiveAccountState = (): void => {
   originalProfile.value = null
+  resetSecurityActivityState()
   lastProfileSavedAt.value = null
   lastPasswordUpdatedAt.value = null
   highlightedSection.value = null
@@ -1120,6 +1529,10 @@ const clearSensitiveAccountState = (): void => {
   profileNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
+  isProfileSaveDialogOpen.value = false
+  isDeactivationDialogOpen.value = false
+  resetProfileSaveDialogState()
+  resetDeactivationDialogState()
   resetProfileFormState()
   resetPasswordForm(false)
   viewState.value = 'loading'
@@ -1418,6 +1831,7 @@ const handleAvatarFileChange = async (event: Event): Promise<void> => {
       title: 'Avatar updated successfully',
       message: 'Your new avatar was uploaded and saved to your profile.'
     }
+    void loadSecurityActivity(true)
   } catch (error) {
     if (isAuthFailureError(error)) {
       handleAuthenticationLoss()
@@ -1435,6 +1849,42 @@ const handleAvatarFileChange = async (event: Event): Promise<void> => {
   }
 }
 
+const loadSecurityActivity = async (preserveExisting = false): Promise<void> => {
+  if (!hasApiSession.value) {
+    return
+  }
+
+  const previousItems = preserveExisting ? [...securityActivityItems.value] : []
+
+  if (!preserveExisting) {
+    securityActivityItems.value = []
+  }
+
+  securityActivityNotice.value = null
+  isLoadingSecurityActivity.value = true
+
+  try {
+    securityActivityItems.value = await getCurrentUserSecurityActivity()
+  } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
+    if (preserveExisting) {
+      securityActivityItems.value = previousItems
+    }
+
+    securityActivityNotice.value = {
+      tone: 'error',
+      title: 'Unable to load recent activity',
+      message: getErrorMessage(error, 'We could not load your recent security activity.')
+    }
+  } finally {
+    isLoadingSecurityActivity.value = false
+  }
+}
+
 const loadDashboard = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load your account settings.'
@@ -1442,6 +1892,7 @@ const loadDashboard = async (): Promise<void> => {
   profileNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
+  resetSecurityActivityState()
 
   try {
     if (!hasApiSession.value) {
@@ -1456,6 +1907,7 @@ const loadDashboard = async (): Promise<void> => {
     syncUserStoreProfile(normalizedProfile)
 
     viewState.value = 'ready'
+    void loadSecurityActivity()
 
     if (props.initialSection !== 'overview') {
       await scrollToSection(props.initialSection, 'auto')
@@ -1501,10 +1953,41 @@ const saveProfile = async (): Promise<void> => {
     return
   }
 
+  if (!profileChangeSummaryItems.value.length) {
+    profileNotice.value = {
+      tone: 'info',
+      title: 'No changes to save',
+      message: 'Edit a profile field before saving, or keep the current values as they are.'
+    }
+    return
+  }
+
+  resetProfileSaveDialogState()
+  isProfileSaveDialogOpen.value = true
+}
+
+const confirmProfileSave = async (): Promise<void> => {
+  if (!originalProfile.value || !profileChangeSummaryItems.value.length) {
+    isProfileSaveDialogOpen.value = false
+    return
+  }
+
+  profileSaveDialogError.value = ''
+
+  if (requiresProfileReauthentication.value && !profileSaveCurrentPassword.value.trim()) {
+    profileSaveDialogError.value = 'Current password is required to change your email address.'
+    return
+  }
+
   isSavingProfile.value = true
 
   try {
-    const payload = trimmedProfileDraft.value
+    const payload: UpdateUserProfilePayload = {
+      ...trimmedProfileDraft.value,
+      ...(requiresProfileReauthentication.value
+        ? { currentPassword: profileSaveCurrentPassword.value.trim() }
+        : {})
+    }
     await updateCurrentUserProfile(payload)
 
     const savedProfile = normalizeProfile({
@@ -1518,22 +2001,25 @@ const saveProfile = async (): Promise<void> => {
     populateProfileForm(savedProfile)
     syncUserStoreProfile(savedProfile)
     lastProfileSavedAt.value = new Date()
+    isProfileSaveDialogOpen.value = false
 
     profileNotice.value = {
       tone: 'success',
       title: 'Profile saved successfully',
       message: 'Your personal and contact details were updated using the existing profile endpoint.'
     }
+    void loadSecurityActivity(true)
   } catch (error) {
     if (isAuthFailureError(error)) {
       handleAuthenticationLoss()
       return
     }
 
+    profileSaveDialogError.value = getErrorMessage(error, 'Unable to save your profile right now.')
     profileNotice.value = {
       tone: 'error',
       title: 'Unable to save profile changes',
-      message: getErrorMessage(error, 'Unable to save your profile right now.')
+      message: profileSaveDialogError.value
     }
   } finally {
     isSavingProfile.value = false
@@ -1570,24 +2056,41 @@ const deactivateAccount = async (): Promise<void> => {
     return
   }
 
-  try {
-    await ElMessageBox.confirm(
-      'Deactivate this account? This is a soft deactivation: your data stays in the database, but normal account access should stop and you will be signed out immediately.',
-      'Deactivate Account',
-      {
-        type: 'warning',
-        confirmButtonText: 'Deactivate Account',
-        cancelButtonText: 'Cancel'
-      }
-    )
-  } catch {
+  resetDeactivationDialogState()
+  isDeactivationDialogOpen.value = true
+}
+
+const confirmDeactivation = async (): Promise<void> => {
+  deactivationNotice.value = null
+
+  if (!hasApiSession.value) {
+    isDeactivationDialogOpen.value = false
+    handleAuthenticationLoss()
+    return
+  }
+
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    isDeactivationDialogOpen.value = false
+    deactivationNotice.value = {
+      tone: 'warning',
+      title: 'Account cannot be deactivated again',
+      message: 'This account is no longer in an active state.'
+    }
+    return
+  }
+
+  if (!deactivationCurrentPassword.value.trim()) {
+    deactivationDialogError.value = 'Current password is required to deactivate this account.'
     return
   }
 
   isDeactivatingAccount.value = true
+  deactivationDialogError.value = ''
 
   try {
-    await deactivateCurrentUserAccount()
+    await deactivateCurrentUserAccount({
+      currentPassword: deactivationCurrentPassword.value.trim()
+    })
 
     const deactivatedProfile = normalizeProfile({
       ...(originalProfile.value ?? EMPTY_PROFILE),
@@ -1595,20 +2098,39 @@ const deactivateAccount = async (): Promise<void> => {
     })
 
     originalProfile.value = deactivatedProfile
+    isDeactivationDialogOpen.value = false
 
     ElMessage.success('Account deactivated successfully. Redirecting to login.')
     shouldBypassUnsavedChangesPrompt.value = true
     clearAuthAndRedirect()
   } catch (error) {
     if (isAuthFailureError(error)) {
+      isDeactivationDialogOpen.value = false
       handleAuthenticationLoss()
       return
     }
 
+    const message = getErrorMessage(error, 'Unable to deactivate your account right now.')
+
+    if (message === 'Account is already deactivated') {
+      originalProfile.value = normalizeProfile({
+        ...(originalProfile.value ?? EMPTY_PROFILE),
+        status: 'DEACTIVATED'
+      })
+      isDeactivationDialogOpen.value = false
+      deactivationNotice.value = {
+        tone: 'warning',
+        title: 'Account cannot be deactivated again',
+        message: 'This account is no longer in an active state.'
+      }
+      return
+    }
+
+    deactivationDialogError.value = message
     deactivationNotice.value = {
       tone: 'error',
       title: 'Unable to deactivate account',
-      message: getErrorMessage(error, 'Unable to deactivate your account right now.')
+      message
     }
   } finally {
     isDeactivatingAccount.value = false
@@ -1977,6 +2499,83 @@ onBeforeUnmount(() => {
   gap: var(--space-3);
 }
 
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.activity-timeline__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(216, 218, 215, 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.activity-timeline__marker {
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 6px rgba(51, 144, 251, 0.12);
+}
+
+.activity-timeline__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.activity-timeline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.activity-timeline__title {
+  color: var(--color-text-primary);
+}
+
+.activity-timeline__time {
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.activity-timeline__summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.activity-empty,
+.activity-loading {
+  padding: var(--space-4);
+  border: 1px solid rgba(216, 218, 215, 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.activity-empty__title {
+  color: var(--color-text-primary);
+}
+
+.activity-empty__text {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.activity-actions {
+  display: flex;
+}
+
 .contact-summary__item,
 .status-overview__item {
   padding: var(--space-4);
@@ -2033,6 +2632,104 @@ onBeforeUnmount(() => {
 
 .appearance-actions {
   display: flex;
+}
+
+.change-summary-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.change-summary-dialog__text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.change-summary-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.change-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.change-summary__item {
+  padding: var(--space-4);
+  border: 1px solid rgba(216, 218, 215, 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.change-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.change-summary__label {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.change-summary__tag {
+  flex-shrink: 0;
+}
+
+.change-summary__values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.change-summary__value-group {
+  min-width: 0;
+}
+
+.change-summary__caption {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.change-summary__value {
+  margin: 0;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.change-summary__value--empty {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dialog-field__label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dialog-field__hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
 }
 
 .strength-panel {
@@ -2380,9 +3077,18 @@ onBeforeUnmount(() => {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .activity-timeline__header {
+    flex-direction: column;
+  }
+
+  .change-summary__values {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .form-footer__actions,
   .state-actions,
-  .appearance-actions {
+  .appearance-actions,
+  .activity-actions {
     width: 100%;
   }
 

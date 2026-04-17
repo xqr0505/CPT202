@@ -25,6 +25,7 @@ export interface UpdateUserProfilePayload {
   fullName: string
   email: string
   phoneNumber: string
+  currentPassword?: string
 }
 
 export interface ChangePasswordPayload {
@@ -35,6 +36,17 @@ export interface ChangePasswordPayload {
 
 export interface AvatarUploadResponse {
   avatarUrl: string
+}
+
+export interface DeactivateCurrentUserAccountPayload {
+  currentPassword: string
+}
+
+export interface SecurityActivityItem {
+  id: number
+  eventType: string
+  summary: string
+  createdAt: string
 }
 
 interface StoredSessionUser {
@@ -62,6 +74,10 @@ const silentAccountRequestConfig = {
 } as const
 
 const sanitizeAvatarUrl = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const sanitizeSecurityActivityText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -97,12 +113,41 @@ const toSafeAccountProfile = (payload: unknown): AccountProfile => {
   }
 }
 
+const toSafeSecurityActivityItem = (payload: unknown): SecurityActivityItem => {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      id: 0,
+      eventType: '',
+      summary: '',
+      createdAt: ''
+    }
+  }
+
+  const item = payload as Partial<SecurityActivityItem>
+
+  return {
+    id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : 0,
+    eventType: sanitizeSecurityActivityText(item.eventType),
+    summary: sanitizeSecurityActivityText(item.summary),
+    createdAt: sanitizeSecurityActivityText(item.createdAt)
+  }
+}
+
 export const getCurrentUserProfile = async (): Promise<AccountProfile> => {
   const response = await request.get<unknown, unknown>(
     `${getUserAccountApiPrefix()}/profile`,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
   return toSafeAccountProfile(response)
+}
+
+export const getCurrentUserSecurityActivity = async (): Promise<SecurityActivityItem[]> => {
+  const response = await request.get<unknown, unknown>(
+    `${getUserAccountApiPrefix()}/security-activity`,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
+  )
+
+  return Array.isArray(response) ? response.map(toSafeSecurityActivityItem) : []
 }
 
 export const updateCurrentUserProfile = async (
@@ -147,10 +192,12 @@ export const changeCurrentUserPassword = async (
   )
 }
 
-export const deactivateCurrentUserAccount = async (): Promise<void> => {
+export const deactivateCurrentUserAccount = async (
+  payload: DeactivateCurrentUserAccountPayload
+): Promise<void> => {
   return request.post<unknown, void>(
     `${getUserAccountApiPrefix()}/deactivate`,
-    undefined,
+    payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 }

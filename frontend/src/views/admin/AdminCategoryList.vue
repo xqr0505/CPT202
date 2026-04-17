@@ -162,7 +162,10 @@ async function handleDelete(row: CategoryItem) {
       {
         type: 'warning',
         confirmButtonText: 'Delete',
-        cancelButtonText: 'Cancel'
+        cancelButtonText: 'Cancel',
+        customClass: 'admin-confirm-dialog',
+        confirmButtonClass: 'admin-confirm-primary',
+        cancelButtonClass: 'admin-confirm-default'
       }
     )
   } catch {
@@ -193,6 +196,11 @@ watch(
 <style scoped>
 .admin-category-page {
   padding: 20px;
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: color-mix(in srgb, var(--color-primary) 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--color-primary) 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--color-primary) 30%, white);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--color-primary) 80%, black);
 }
 
 .create-button {
@@ -236,5 +244,39 @@ watch(
     justify-content: space-between;
     flex-wrap: wrap;
   }
+}
+</style>
+
+<style>
+.admin-confirm-dialog .el-message-box__btns .admin-confirm-primary {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.admin-confirm-dialog .el-message-box__btns .admin-confirm-primary:hover {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.admin-confirm-dialog .el-message-box__btns .admin-confirm-default {
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+}
+
+.admin-confirm-dialog .el-message-box__btns .admin-confirm-default:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.admin-confirm-dialog .el-message-box__headerbtn:focus-visible {
+  outline: 2px solid rgba(var(--color-primary-rgb), 0.35);
+  border-radius: 6px;
+}
+
+.admin-confirm-dialog .el-message-box__headerbtn:hover .el-message-box__close,
+.admin-confirm-dialog .el-message-box__headerbtn:focus-visible .el-message-box__close {
+  color: var(--color-primary);
 }
 </style>

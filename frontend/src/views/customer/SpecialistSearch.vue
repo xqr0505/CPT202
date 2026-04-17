@@ -95,7 +95,7 @@ const pageSize = ref(DEFAULT_PAGE_SIZE)
 
 const resultSummary = computed(() => {
   if (!total.value) {
-    return 'Adjust the filters and run a search to discover active specialists.'
+    return 'Adjust the filters and run a search to discover specialists.'
   }
 
   const dateNote = filters.value.date ? ` available on ${filters.value.date}` : ''

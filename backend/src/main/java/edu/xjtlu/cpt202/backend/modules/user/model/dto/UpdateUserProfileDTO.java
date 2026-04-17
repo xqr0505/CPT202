@@ -21,4 +21,6 @@ public class UpdateUserProfileDTO {
             message = "Please enter a valid phone number."
     )
     private String phoneNumber;
+
+    private String currentPassword;
 }

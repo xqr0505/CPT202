@@ -51,4 +51,16 @@ class UserAccountDtoValidationTest {
                 "Password must be at least 8 characters and include uppercase, lowercase, and number"
         ));
     }
+
+    @Test
+    void confirmCurrentPasswordDto_rejectsBlankPassword() {
+        ConfirmCurrentPasswordDTO request = new ConfirmCurrentPasswordDTO();
+        request.setCurrentPassword(" ");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("Current password is required"));
+    }
 }

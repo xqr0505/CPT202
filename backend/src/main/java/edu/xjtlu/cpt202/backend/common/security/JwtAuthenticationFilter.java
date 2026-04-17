@@ -1,7 +1,10 @@
 package edu.xjtlu.cpt202.backend.common.security;
 
+import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -12,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.ZoneId;
+import java.util.Date;
 
 /**
  * JWT Authentication Filter - Executes before each request
@@ -20,6 +25,17 @@ import java.io.IOException;
  * @date 2026/3/29
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final UserMapper userMapper;
+
+    public JwtAuthenticationFilter(UserMapper userMapper) {
+        this.userMapper = userMapper;
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -39,13 +55,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = claims.get("role", String.class);
 
                 if (userId != null && role != null) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(userId, null, null);
+                    User user = userMapper.selectById(userId);
 
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-
-                    UserContextHolder.setUserId(userId);
-                    UserContextHolder.setRole(role);
+                    if (user != null && AccountStatusEnum.ACTIVE.name().equalsIgnoreCase(user.getStatus())) {
+                        if (isTokenInvalidatedByPasswordChange(claims, user)) {
+                            SecurityContextHolder.clearContext();
+                        } else {
+                            UsernamePasswordAuthenticationToken authentication =
+                                    new UsernamePasswordAuthenticationToken(userId, null, null);
+                            SecurityContextHolder.getContext().setAuthentication(authentication);
+                            UserContextHolder.setUserId(userId);
+                            UserContextHolder.setRole(role);
+                        }
+                    } else {
+                        SecurityContextHolder.clearContext();
+                    }
                 }
 
             } catch (Exception e) {
@@ -58,5 +82,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } finally {
             UserContextHolder.clear();
         }
+    }
+
+    private boolean isTokenInvalidatedByPasswordChange(Claims claims, User user) {
+        Date issuedAt = claims.getIssuedAt();
+
+        if (issuedAt == null || user.getPasswordChangedAt() == null) {
+            return false;
+        }
+
+        return issuedAt.toInstant().isBefore(
+                user.getPasswordChangedAt().atZone(ZoneId.systemDefault()).toInstant()
+        );
     }
 }

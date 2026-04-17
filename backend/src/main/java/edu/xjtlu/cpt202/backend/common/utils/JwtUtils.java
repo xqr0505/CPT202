@@ -6,6 +6,9 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
 import javax.crypto.SecretKey;
+
+import edu.xjtlu.cpt202.backend.common.constant.SecurityConstant;
+
 import java.util.Date;
 /**
  * JWT - generation and parsing of Tokens
@@ -17,7 +20,6 @@ public class JwtUtils {
 
     private static String secretKey;
     private static SecretKey KEY;
-    private static final long EXPIRATION = 1000 * 60 * 30; // 30 minutes
 
     public static void initSecret(String key) {
         secretKey = key;
@@ -34,12 +36,13 @@ public class JwtUtils {
         if (KEY == null) {
             throw new IllegalStateException("JWT secret key not initialized");
         }
+        long expirationMillis = SecurityConstant.JWT_EXPIRATION_MILLISECONDS;
         return Jwts.builder()
                 .subject("user")
                 .claim("userId", userId)
                 .claim("role", role)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + EXPIRATION))
+                .expiration(new Date(System.currentTimeMillis() + expirationMillis))
                 .signWith(KEY)
                 .compact();
     }

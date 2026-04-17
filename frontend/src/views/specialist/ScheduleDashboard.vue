@@ -10,7 +10,6 @@
       </div>
     </div>
 
-    <!-- Week Navigation -->
     <div class="week-navigator">
       <el-button circle @click="prevWeek">
         <el-icon><ArrowLeft /></el-icon>
@@ -22,13 +21,11 @@
       <el-button @click="goToToday">Today</el-button>
     </div>
 
-    <!-- Loading State -->
     <div v-if="loading" class="loading-container">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>Loading schedule...</span>
     </div>
 
-    <!-- Schedule Grid -->
     <div v-else class="schedule-grid">
       <div
         v-for="day in weekDays"
@@ -46,17 +43,16 @@
             v-for="slot in day.slots"
             :key="slot.id"
             class="time-slot-card"
-            :class="getSlotStatusClass(slot.status)"
+            :class="getSlotStatusClass(slot)"
             @click="openSlotDetail(slot)"
           >
-            <div class="slot-time">
-              {{ slot.startTime }} - {{ slot.endTime }}
-            </div>
+            <div class="slot-time">{{ slot.startTime }} - {{ slot.endTime }}</div>
             <div class="slot-status">
-              <el-tag :type="getStatusTagType(slot.status)" size="small">
-                {{ slot.status }}
+              <el-tag :type="getStatusTagType(slot)" size="small">
+                {{ getSlotDisplayLabel(slot) }}
               </el-tag>
             </div>
+            <div v-if="slot.customerName" class="slot-customer">{{ slot.customerName }}</div>
             <div v-if="slot.recurringRuleId" class="slot-badge">
               <el-icon><Refresh /></el-icon>
             </div>
@@ -72,14 +68,13 @@
       </div>
     </div>
 
-    <!-- Create Slot Dialog -->
     <el-dialog
       v-model="showCreateDialog"
       title="Add Time Slot"
       width="500px"
       @close="resetCreateForm"
     >
-      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="120px">
         <el-form-item label="Date" prop="slotDate">
           <el-date-picker
             v-model="createForm.slotDate"
@@ -120,39 +115,37 @@
       </template>
     </el-dialog>
 
-    <!-- Slot Detail Dialog -->
-    <el-dialog
-      v-model="showDetailDialog"
-      title="Time Slot Details"
-      width="500px"
-    >
+    <el-dialog v-model="showDetailDialog" title="Time Slot Details" width="500px">
       <div v-if="selectedSlot" class="slot-detail">
         <el-descriptions :column="1" border>
-          <el-descriptions-item label="Date">
-            {{ selectedSlot.slotDate }}
-          </el-descriptions-item>
+          <el-descriptions-item label="Date">{{ selectedSlot.slotDate }}</el-descriptions-item>
           <el-descriptions-item label="Time">
             {{ selectedSlot.startTime }} - {{ selectedSlot.endTime }}
           </el-descriptions-item>
           <el-descriptions-item label="Status">
-            <el-tag :type="getStatusTagType(selectedSlot.status)">
-              {{ selectedSlot.status }}
+            <el-tag :type="getStatusTagType(selectedSlot)">
+              {{ getSlotDisplayLabel(selectedSlot) }}
             </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedSlot.customerName" label="Customer">
+            {{ selectedSlot.customerName }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedSlot.customerEmail" label="Customer Email">
+            {{ selectedSlot.customerEmail }}
           </el-descriptions-item>
           <el-descriptions-item v-if="selectedSlot.recurringRuleId" label="Recurring">
             <el-tag type="info">From Recurring Rule</el-tag>
           </el-descriptions-item>
         </el-descriptions>
+        <p v-if="!canEditSlot(selectedSlot)" class="detail-tip">
+          This slot already has a booking and cannot be edited or deleted.
+        </p>
       </div>
       <template #footer>
-        <div v-if="selectedSlot && selectedSlot.status !== 'BOOKED'">
+        <div v-if="selectedSlot && canEditSlot(selectedSlot)">
           <el-button @click="showDetailDialog = false">Close</el-button>
-          <el-button type="primary" @click="openUpdateDialog">
-            Update
-          </el-button>
-          <el-button type="danger" @click="handleDelete">
-            Delete
-          </el-button>
+          <el-button type="primary" @click="openUpdateDialog">Update</el-button>
+          <el-button type="danger" @click="handleDelete">Delete</el-button>
         </div>
         <div v-else>
           <el-button @click="showDetailDialog = false">Close</el-button>
@@ -160,14 +153,13 @@
       </template>
     </el-dialog>
 
-    <!-- Update Slot Dialog -->
     <el-dialog
       v-model="showUpdateDialog"
       title="Update Time Slot"
       width="500px"
       @close="resetUpdateForm"
     >
-      <el-form :model="updateForm" :rules="updateRules" ref="updateFormRef" label-width="120px">
+      <el-form ref="updateFormRef" :model="updateForm" :rules="updateRules" label-width="120px">
         <el-form-item label="Start Time" prop="startTime">
           <el-time-select
             v-model="updateForm.startTime"
@@ -188,13 +180,6 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="Status" prop="status">
-          <el-select v-model="updateForm.status" placeholder="Select status" style="width: 100%">
-            <el-option label="Available" value="AVAILABLE" />
-            <el-option label="Blocked" value="BLOCKED" />
-            <el-option label="Unavailable" value="UNAVAILABLE" />
-          </el-select>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showUpdateDialog = false">Cancel</el-button>
@@ -207,20 +192,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, ArrowLeft, ArrowRight, Refresh, Loading } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Loading, Plus, Refresh } from '@element-plus/icons-vue'
 import {
-  getWeeklySchedule,
   createSlot,
-  updateSlot,
   deleteSlot,
-  type TimeSlotVO,
+  getWeeklySchedule,
+  updateSlot,
   type CreateSlotRequest,
+  type TimeSlotVO,
   type UpdateSlotRequest
 } from '@/api/schedule'
 
-// ============== State ==============
 const loading = ref(false)
 const submitting = ref(false)
 const slots = ref<TimeSlotVO[]>([])
@@ -243,43 +227,42 @@ const createForm = ref<CreateSlotRequest>({
 
 const updateForm = ref<UpdateSlotRequest>({
   startTime: '',
-  endTime: '',
-  status: ''
+  endTime: ''
 })
 
-// ============== Validation Rules ==============
-const validateTimeRange = (rule: any, value: any, callback: any) => {
-  if (createForm.value.startTime && createForm.value.endTime) {
-    if (createForm.value.startTime >= createForm.value.endTime) {
-      callback(new Error('End time must be after start time'))
-    } else {
-      callback()
-    }
-  } else {
-    callback()
+const validateCreateTimeRange = (rule: unknown, value: unknown, callback: (error?: Error) => void) => {
+  if (createForm.value.startTime && createForm.value.endTime && createForm.value.startTime >= createForm.value.endTime) {
+    callback(new Error('End time must be after start time'))
+    return
   }
+  callback()
+}
+
+const validateUpdateTimeRange = (rule: unknown, value: unknown, callback: (error?: Error) => void) => {
+  if (updateForm.value.startTime && updateForm.value.endTime && updateForm.value.startTime >= updateForm.value.endTime) {
+    callback(new Error('End time must be after start time'))
+    return
+  }
+  callback()
 }
 
 const createRules: FormRules = {
-  slotDate: [
-    { required: true, message: 'Please select a date', trigger: 'change' }
-  ],
-  startTime: [
-    { required: true, message: 'Please select start time', trigger: 'change' }
-  ],
+  slotDate: [{ required: true, message: 'Please select a date', trigger: 'change' }],
+  startTime: [{ required: true, message: 'Please select start time', trigger: 'change' }],
   endTime: [
     { required: true, message: 'Please select end time', trigger: 'change' },
-    { validator: validateTimeRange, trigger: 'change' }
+    { validator: validateCreateTimeRange, trigger: 'change' }
   ]
 }
 
 const updateRules: FormRules = {
-  status: [
-    { required: true, message: 'Please select status', trigger: 'change' }
+  startTime: [{ required: true, message: 'Please select start time', trigger: 'change' }],
+  endTime: [
+    { required: true, message: 'Please select end time', trigger: 'change' },
+    { validator: validateUpdateTimeRange, trigger: 'change' }
   ]
 }
 
-// ============== Computed ==============
 const weekLabel = computed(() => {
   const start = currentWeekStart.value
   const end = new Date(start)
@@ -295,40 +278,41 @@ const weekLabel = computed(() => {
 
 const weekDays = computed(() => {
   const days = []
-  for (let i = 0; i < 7; i++) {
+  for (let index = 0; index < 7; index += 1) {
     const date = new Date(currentWeekStart.value)
-    date.setDate(date.getDate() + i)
+    date.setDate(date.getDate() + index)
     const dateStr = formatDate(date)
-    const daySlots = slots.value.filter(s => s.slotDate === dateStr)
-    
+    const daySlots = slots.value.filter(slot => slot.slotDate === dateStr)
+
     days.push({
       date: dateStr,
       dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.getDate().toString(),
       isToday: isToday(date),
-      slots: daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime))
+      slots: daySlots.sort((left, right) => left.startTime.localeCompare(right.startTime))
     })
   }
   return days
 })
 
-// ============== Methods ==============
 function getWeekStart(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
+  const copy = new Date(date)
+  const day = copy.getDay()
+  const diff = copy.getDate() - day + (day === 0 ? -6 : 1)
+  copy.setDate(diff)
+  copy.setHours(0, 0, 0, 0)
+  return copy
 }
 
 function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0] as string
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function isToday(date: Date): boolean {
-  const today = new Date()
-  return date.toDateString() === today.toDateString()
+  return date.toDateString() === new Date().toDateString()
 }
 
 function disabledPastDates(date: Date): boolean {
@@ -337,28 +321,59 @@ function disabledPastDates(date: Date): boolean {
   return date < today
 }
 
+function getSlotStatusKey(slot: TimeSlotVO): string {
+  return slot.bookingStatus || slot.status
+}
+
+function getSlotDisplayLabel(slot: TimeSlotVO): string {
+  return slot.bookingStatusDesc || slot.statusDesc || slot.bookingStatus || slot.status
+}
+
+function canEditSlot(slot: TimeSlotVO): boolean {
+  return slot.status === 'AVAILABLE' && !slot.bookingStatus
+}
+
+function getSlotStatusClass(slot: TimeSlotVO): string {
+  const statusMap: Record<string, string> = {
+    AVAILABLE: 'status-available',
+    PENDING: 'status-pending',
+    CONFIRMED: 'status-confirmed',
+    BOOKED: 'status-booked',
+    LOCKED: 'status-locked'
+  }
+  return statusMap[getSlotStatusKey(slot)] || ''
+}
+
+function getStatusTagType(slot: TimeSlotVO): string {
+  const typeMap: Record<string, string> = {
+    AVAILABLE: 'success',
+    PENDING: 'warning',
+    CONFIRMED: 'primary',
+    BOOKED: 'warning',
+    LOCKED: 'info'
+  }
+  return typeMap[getSlotStatusKey(slot)] || 'info'
+}
+
 async function fetchSchedule() {
   loading.value = true
   try {
-    const weekStartStr = formatDate(currentWeekStart.value)
-    slots.value = await getWeeklySchedule(weekStartStr)
-  } catch (error) {
-    console.error('Failed to fetch schedule:', error)
+    slots.value = await getWeeklySchedule(formatDate(currentWeekStart.value))
   } finally {
     loading.value = false
   }
 }
 
 function prevWeek() {
-  const newStart = new Date(currentWeekStart.value)
-  newStart.setDate(newStart.getDate() - 7)
-  currentWeekStart.value = newStart
+  const next = new Date(currentWeekStart.value)
+  next.setDate(next.getDate() - 7)
+  currentWeekStart.value = next
 }
 
 function nextWeek() {
-  const newStart = new Date(currentWeekStart.value)
-  newStart.setDate(newStart.getDate() + 7)
-  currentWeekStart.value = newStart
+  const next = new Date(currentWeekStart.value)
+  next.setDate(next.getDate() + 7)
+  currentWeekStart.value = next
 }
 
 function goToToday() {
@@ -376,51 +391,64 @@ function openCreateForDay(date: string) {
 }
 
 function openUpdateDialog() {
-  if (selectedSlot.value) {
-    updateForm.value = {
-      startTime: selectedSlot.value.startTime,
-      endTime: selectedSlot.value.endTime,
-      status: selectedSlot.value.status
-    }
+  if (!selectedSlot.value || !canEditSlot(selectedSlot.value)) {
+    return
+  }
+  updateForm.value = {
+    startTime: selectedSlot.value.startTime,
+    endTime: selectedSlot.value.endTime
   }
   showDetailDialog.value = false
   showUpdateDialog.value = true
 }
 
 function resetCreateForm() {
-  createForm.value = { slotDate: '', startTime: '', endTime: '' }
   createFormRef.value?.resetFields()
+  createForm.value = { slotDate: '', startTime: '', endTime: '' }
 }
 
 function resetUpdateForm() {
-  updateForm.value = { startTime: '', endTime: '', status: '' }
   updateFormRef.value?.resetFields()
+  updateForm.value = { startTime: '', endTime: '' }
 }
 
 async function handleCreate() {
-  if (!createFormRef.value) return
-  
-  await createFormRef.value.validate(async (valid) => {
-    if (valid) {
-      submitting.value = true
-      try {
-        await createSlot(createForm.value)
-        ElMessage.success('Time slot created successfully')
-        showCreateDialog.value = false
-        resetCreateForm()
-        await fetchSchedule()
-      } catch (error) {
-        console.error('Failed to create slot:', error)
-      } finally {
-        submitting.value = false
-      }
-    }
-  })
+  if (!createFormRef.value) {
+    return
+  }
+  const valid = await createFormRef.value.validate().catch(() => false)
+  if (!valid) {
+    return
+  }
+
+  submitting.value = true
+  try {
+    await createSlot(createForm.value)
+    ElMessage.success('Time slot created successfully')
+    showCreateDialog.value = false
+    resetCreateForm()
+    await fetchSchedule()
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function handleUpdate() {
-  if (!selectedSlot.value) return
-  
+  if (!selectedSlot.value) {
+    return
+  }
+  if (!canEditSlot(selectedSlot.value)) {
+    ElMessage.warning('Only available slots can be modified')
+    return
+  }
+  if (!updateFormRef.value) {
+    return
+  }
+  const valid = await updateFormRef.value.validate().catch(() => false)
+  if (!valid) {
+    return
+  }
+
   submitting.value = true
   try {
     await updateSlot(selectedSlot.value.id, updateForm.value)
@@ -428,55 +456,37 @@ async function handleUpdate() {
     showUpdateDialog.value = false
     resetUpdateForm()
     await fetchSchedule()
-  } catch (error) {
-    console.error('Failed to update slot:', error)
   } finally {
     submitting.value = false
   }
 }
 
 async function handleDelete() {
-  if (!selectedSlot.value) return
-  
+  if (!selectedSlot.value) {
+    return
+  }
+  if (!canEditSlot(selectedSlot.value)) {
+    ElMessage.warning('Only available slots can be deleted')
+    return
+  }
+
   try {
     await ElMessageBox.confirm(
-      'Are you sure you want to delete this time slot?',
+      'Are you sure you want to delete this available time slot?',
       'Confirm Delete',
       { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
     )
-    
     await deleteSlot(selectedSlot.value.id)
     ElMessage.success('Time slot deleted successfully')
     showDetailDialog.value = false
     await fetchSchedule()
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error !== 'cancel') {
       console.error('Failed to delete slot:', error)
     }
   }
 }
 
-function getSlotStatusClass(status: string): string {
-  const statusMap: Record<string, string> = {
-    AVAILABLE: 'status-available',
-    BOOKED: 'status-booked',
-    BLOCKED: 'status-blocked',
-    UNAVAILABLE: 'status-unavailable'
-  }
-  return statusMap[status] || ''
-}
-
-function getStatusTagType(status: string): any {
-  const typeMap: Record<string, string> = {
-    AVAILABLE: 'success',
-    BOOKED: 'warning',
-    BLOCKED: 'danger',
-    UNAVAILABLE: 'info'
-  }
-  return typeMap[status] || 'info'
-}
-
-// ============== Lifecycle ==============
 onMounted(() => {
   fetchSchedule()
 })
@@ -520,11 +530,11 @@ watch(currentWeekStart, () => {
   }
 
   .week-label {
+    min-width: 200px;
+    text-align: center;
     font-size: 16px;
     font-weight: 600;
     color: var(--color-text-primary);
-    min-width: 200px;
-    text-align: center;
   }
 
   .loading-container {
@@ -544,11 +554,11 @@ watch(currentWeekStart, () => {
   }
 
   .day-column {
-    background: var(--color-bg-overlay);
+    min-height: 400px;
+    overflow: hidden;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    overflow: hidden;
-    min-height: 400px;
+    background: var(--color-bg-overlay);
 
     &.is-today .day-header {
       background: var(--color-primary-soft);
@@ -558,59 +568,57 @@ watch(currentWeekStart, () => {
 
   .day-header {
     padding: var(--space-3);
-    background: var(--color-bg-muted);
     text-align: center;
+    background: var(--color-bg-muted);
     border-bottom: 1px solid var(--color-border);
   }
 
   .day-name {
     display: block;
-    font-weight: 600;
     font-size: 14px;
+    font-weight: 600;
   }
 
   .day-date {
     display: block;
+    margin-top: 2px;
     font-size: 12px;
     opacity: 0.8;
-    margin-top: 2px;
   }
 
   .day-slots {
-    padding: var(--space-2);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     min-height: 350px;
+    padding: var(--space-2);
   }
 
   .time-slot-card {
+    position: relative;
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-fast);
-    position: relative;
     font-size: 12px;
 
     &.status-available {
       background: rgba(103, 194, 58, 0.15);
       border: 1px solid rgba(103, 194, 58, 0.3);
-      color: var(--color-text-primary);
     }
 
+    &.status-pending,
     &.status-booked {
       background: rgba(230, 162, 60, 0.15);
       border: 1px solid rgba(230, 162, 60, 0.3);
-      color: var(--color-text-primary);
     }
 
-    &.status-blocked {
-      background: rgba(245, 108, 108, 0.15);
-      border: 1px solid rgba(245, 108, 108, 0.3);
-      color: var(--color-text-primary);
+    &.status-confirmed {
+      background: rgba(64, 158, 255, 0.14);
+      border: 1px solid rgba(64, 158, 255, 0.28);
     }
 
-    &.status-unavailable {
+    &.status-locked {
       background: var(--color-bg-muted);
       border: 1px solid var(--color-border);
       color: var(--color-text-secondary);
@@ -623,8 +631,17 @@ watch(currentWeekStart, () => {
   }
 
   .slot-time {
-    font-weight: 600;
     margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .slot-customer {
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .slot-badge {
@@ -639,14 +656,20 @@ watch(currentWeekStart, () => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--space-2);
     padding: var(--space-4);
     color: var(--color-text-secondary);
     font-size: 13px;
-    gap: var(--space-2);
   }
 
   .slot-detail {
     padding: var(--space-2);
+  }
+
+  .detail-tip {
+    margin: 12px 0 0;
+    color: var(--color-text-secondary);
+    font-size: 13px;
   }
 }
 

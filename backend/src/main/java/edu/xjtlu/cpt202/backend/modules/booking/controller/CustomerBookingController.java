@@ -1,14 +1,21 @@
 package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
+import edu.xjtlu.cpt202.backend.common.annotation.Idempotent;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,12 +23,15 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * @author QiranXiao
- * @date 2026/4/1
+ * @since 2026/4/1
  */
 @Slf4j
 @RestController
@@ -32,22 +42,73 @@ public class CustomerBookingController {
 
     private final BookingService bookingService;
 
-    @GetMapping
-    @Operation(summary = "Get cooking history", description = "Get paginated list of bookings based on time scope and status.")
+    @PostMapping
+    @Idempotent(message = "Booking request is being processed. Please do not submit it again.")
+    @Operation(summary = "Create booking", description = "Create a booking for a specialist time slot.")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public Result<PageResult<BookingHistoryListVO>> getBookings(@ModelAttribute BookingHistoryQueryDTO queryDTO) {
+    public Result<BookingCreateVO> createBooking(@Valid @RequestBody BookingCreateDTO createDTO) {
         Long customerId = SecurityUtils.getCurrentUserId();
-        PageResult<BookingHistoryListVO> result = bookingService.listBookings(customerId, queryDTO);
+        BookingCreateVO result = bookingService.createBooking(customerId, createDTO);
         return Result.success(result);
     }
 
-    @GetMapping("/{bookingId}")
-    @Operation(summary = "Get booking detail", description = "Get detailed information for a specific booking.")
+    @GetMapping("/list")
+    @Operation(summary = "Get customer booking list", description = "Get paginated list of customer bookings by tab (UPCOMING or HISTORY).")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public Result<BookingDetailVO> getBookingDetail(
-            @Parameter(description = "Booking ID") @PathVariable Long bookingId) {
+    public Result<PageResult<BookingItemVO>> getBookingList(@ModelAttribute BookingPageQueryDTO dto) {
         Long customerId = SecurityUtils.getCurrentUserId();
-        BookingDetailVO detail = bookingService.getBookingDetail(bookingId, customerId);
-        return Result.success(detail);
+        PageResult<BookingItemVO> result = bookingService.getBookingList(customerId, dto);
+        return Result.success(result);
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get booking detail", description = "Get detailed information about a specific booking by ID. " +
+            "The booking must belong to the current logged-in customer (AC4: data isolation).")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingDetailVO> getBookingDetail(@PathVariable("id") Long bookingId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingDetailVO result = bookingService.getBookingDetailById(bookingId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/cancel/quote")
+    @Operation(summary = "Quote customer cancellation", description = "Quote customer cancellation for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingCancelQuoteVO> customerCancellationQuote(@PathVariable("id") Long bookingId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingCancelQuoteVO result = bookingService.customerCancellationQuote(bookingId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/cancel/confirm")
+    @Operation(summary = "Confirm customer cancellation", description = "Confirm customer cancellation for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingCancelConfirmVO> customerCancellationConfirm(@PathVariable("id") Long bookingId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingCancelConfirmVO result = bookingService.customerCancellationConfirm(bookingId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/reschedule/quote")
+    @Operation(summary = "Quote customer reschedule", description = "Quote customer reschedule for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingRescheduleQuoteVO> customerRescheduleQuote(
+            @PathVariable("id") Long bookingId,
+            @RequestParam("newSlotId") Long newSlotId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingRescheduleQuoteVO result = bookingService.customerRescheduleQuote(bookingId, newSlotId, currentCustomerId);
+        return Result.success(result);
+    }
+
+    @PostMapping("/{id}/reschedule/confirm")
+    @Operation(summary = "Confirm customer reschedule", description = "Confirm customer reschedule for a specific booking.")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public Result<BookingRescheduleConfirmVO> customerRescheduleConfirm(
+            @PathVariable("id") Long bookingId,
+            @RequestParam("newSlotId") Long newSlotId) {
+        Long currentCustomerId = SecurityUtils.getCurrentUserId();
+        BookingRescheduleConfirmVO result = bookingService.customerRescheduleConfirm(bookingId, newSlotId, currentCustomerId);
+        return Result.success(result);
+    }
+
 }

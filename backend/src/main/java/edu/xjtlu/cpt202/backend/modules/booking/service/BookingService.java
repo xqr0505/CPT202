@@ -2,15 +2,25 @@ package edu.xjtlu.cpt202.backend.modules.booking.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
-import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingHistoryQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingHistoryListVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 
 import java.util.List;
 
@@ -22,9 +32,23 @@ public interface BookingService extends IService<Booking> {
 
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);
 
-    PageResult<BookingHistoryListVO> listBookings(Long customerId, BookingHistoryQueryDTO queryDTO);
+    BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO);
 
-    BookingDetailVO getBookingDetail(Long bookingId, Long customerId);
+    PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto);
+
+    UsageSummaryVO getUsageSummary(UsageSummaryQueryDTO queryDTO);
+
+    DashboardStatisticsVO getDashboardStatistics(DashboardQueryDTO queryDTO);
+
+    BookingDetailVO getBookingDetailById(Long bookingId, Long currentCustomerId);
+
+    BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId);
+
+    BookingCancelConfirmVO customerCancellationConfirm(Long bookingId, Long currentCustomerId);
+
+    BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId);
+
+    BookingRescheduleConfirmVO customerRescheduleConfirm(Long bookingId, Long newSlotId, Long currentCustomerId);
 
     List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId);
 

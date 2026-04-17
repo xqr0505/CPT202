@@ -6,7 +6,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BookingStatus } from '@/constants/booking.ts'
+import { BOOKING_STATUS } from '@/constants/booking.ts'
+import type { BookingStatus } from '@/constants/booking.ts'
 
 interface Props {
   status: BookingStatus | string
@@ -15,14 +16,15 @@ interface Props {
 const props = defineProps<Props>()
 
 const tagType = computed(() => {
-  switch (props.status) {
-    case BookingStatus.PENDING:
+  const normalizedStatus = String(props.status || '').toUpperCase()
+  switch (normalizedStatus) {
+    case 'PENDING':
       return 'warning'
-    case BookingStatus.CONFIRMED:
+    case 'CONFIRMED':
       return 'success'
-    case BookingStatus.CANCELLED:
+    case 'CANCELLED':
       return 'danger'
-    case BookingStatus.COMPLETED:
+    case 'COMPLETED':
       return 'info'
     default:
       return 'info'

@@ -1,6 +1,5 @@
 package edu.xjtlu.cpt202.backend.modules.schedule.model.dto;
 
-import edu.xjtlu.cpt202.backend.common.validation.ValidationGroups;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -14,12 +13,12 @@ import java.time.LocalTime;
 @Data
 public class CreateSlotRequest {
 
-    @NotNull(groups = ValidationGroups.Create.class, message = "Slot date is required")
+    @NotNull(message = "Slot date is required")
     private LocalDate slotDate;
 
-    @NotNull(groups = ValidationGroups.Create.class, message = "Start time is required")
+    @NotNull(message = "Start time is required")
     private LocalTime startTime;
 
-    @NotNull(groups = ValidationGroups.Create.class, message = "End time is required")
+    @NotNull(message = "End time is required")
     private LocalTime endTime;
 }

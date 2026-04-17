@@ -6,7 +6,7 @@
     <div class="section-card">
       <h2>BookingStatusTag</h2>
       <div class="demo-flex">
-        <BookingStatusTag v-for="s in statuses" :key="s" :status="s" />
+        <BookingStatusTag v-for="(s, index) in statuses" :key="String(s) || index" :status="s" />
       </div>
     </div>
 
@@ -37,13 +37,34 @@
         <template #status="{ row }">
           <BookingStatusTag :status="row.status" />
         </template>
+        <template #mobile-item="{ row }">
+          <div class="booking-card">
+            <div class="card-header">
+              <div class="datetime-cell">
+                <span>{{ row.date }} {{ row.time }}</span>
+              </div>
+              <BookingStatusTag :status="row.status" />
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="info-label">Specialist:</span>
+                <span class="info-value">{{ row.specialist }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Topic:</span>
+                <span class="info-value">{{ row.topic }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </PaginationTable>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { BookingStatus } from '@/constants/booking.ts'
+import { BOOKING_STATUS } from '@/constants/booking.ts'
+import type { BookingStatus } from '@/constants/booking.ts'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
@@ -52,7 +73,7 @@ import type { TableColumn, FetchDataParams, FetchDataResult } from '@/components
 
 defineOptions({ name: 'DevDemo' })
 
-const statuses = Object.values(BookingStatus)
+const statuses = Object.values(BOOKING_STATUS) as BookingStatus[]
 
 const tableColumns: TableColumn[] = [
   { label: 'ID', prop: 'id', width: 100 },
@@ -127,5 +148,47 @@ const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResu
   gap: var(--space-4);
   align-items: center;
 }
-</style>
 
+.booking-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-light, #ebeef5);
+    padding-bottom: var(--space-2);
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+
+      .info-label {
+        color: var(--color-text-secondary);
+        width: 80px;
+        font-size: var(--font-size-sm);
+      }
+
+      .info-value {
+        color: var(--color-text-primary);
+        font-weight: 500;
+        font-size: var(--font-size-sm);
+      }
+    }
+  }
+}
+</style>

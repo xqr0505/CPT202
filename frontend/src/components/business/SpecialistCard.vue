@@ -30,7 +30,9 @@
         <strong class="price">¥{{ formatFee(specialist.consultationFee) }}</strong>
       </div>
 
-      <CustomButton type="primary" @click="$emit('view', specialist.id)">View details</CustomButton>
+      <div class="card-actions">
+        <CustomButton @click="$emit('view', specialist.id)">View details</CustomButton>
+      </div>
     </div>
   </article>
 </template>
@@ -128,6 +130,13 @@ const formatFee = (value: number) => Number(value || 0).toFixed(2)
   gap: var(--space-4);
 }
 
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .price-block {
   display: grid;
   gap: var(--space-1);
@@ -148,6 +157,11 @@ const formatFee = (value: number) => Number(value || 0).toFixed(2)
 @media (max-width: 640px) {
   .card-bottom {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-actions {
+    width: 100%;
     flex-direction: column;
   }
 

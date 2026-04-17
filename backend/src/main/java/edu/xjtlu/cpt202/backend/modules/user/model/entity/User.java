@@ -33,8 +33,11 @@ public class User {
     private String status;
     private String fullName;
     private String phoneNumber;
+    private String avatarUrl;
     private Integer loginFailCount;
     private LocalDateTime lockTime;
+    private LocalDateTime firstFailTime;
+    private LocalDateTime passwordChangedAt;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
@@ -45,4 +48,3 @@ public class User {
     @TableLogic
     private LocalDateTime deletedAt;
 }
-

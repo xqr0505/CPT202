@@ -50,6 +50,8 @@ public enum ResultCodeEnum implements BaseEnum<Integer> {
      * User related error block starting range.
      */
     USER_ERROR_BLOCK(2001, "Account Locked"),
+    
+    EMAIL_ALREADY_EXISTS(2002, "Email already registered"),
     /**
      * Booking related error block starting range.
      */

@@ -1,0 +1,96 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: expertlink-db-dev
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - "9001:3306"
+    volumes:
+      - db_data_dev:/var/lib/mysql
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: expertlink-redis-dev
+    restart: always
+    environment:
+      - REDIS_ARGS=--appendonly yes --protected-mode no
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "no"]
+    ports:
+      - "9002:6379"
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: expertlink-redisinsight-dev
+    restart: always
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis
+      
+
+  pma:
+    image: phpmyadmin:5
+    container_name: expertlink-pma-dev
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "9003:80"
+    depends_on:
+      - db
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: expertlink-backend-dev
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/${DB_NAME}?useUnicode=true&characterEncoding=utf8&serverTimezone=GMT%2B8&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DATABASE=${REDIS_DATABASE:-0}
+      - REDIS_TIMEOUT=${REDIS_TIMEOUT:-5000ms}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+    volumes:
+      - ./backend:/app
+      - maven_repo_dev:/root/.m2
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: expertlink-frontend-dev
+    restart: always
+    ports:
+      - "5331:5331"
+    volumes:
+      - ./frontend:/app
+      - node_modules_dev:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  db_data_dev:
+  maven_repo_dev:
+  node_modules_dev:
+

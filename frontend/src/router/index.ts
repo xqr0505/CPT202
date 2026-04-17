@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { setupRouterGuard } from './permission'
 
 const routes = [
   {
@@ -9,23 +10,36 @@ const routes = [
     ]
   },
   {
+    path: '/register',
+    component: () => import('../views/auth/Register.vue'),
+    name: 'Register'
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('../views/auth/ForgotPassword.vue')
+  },
+  {
     path: '/admin',
     component: () => import('../layout/AdminLayout.vue'),
     meta: { requiresAuth: true, role: 'ADMIN' },
     children: [
-      { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') }
+      { path: 'categories', component: () => import('../views/admin/AdminCategoryList.vue') },
+      { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') },
+      { path: 'specialists/create', component: () => import('../views/admin/AdminSpecialistForm.vue') },
+      { path: 'specialists/:id/edit', component: () => import('../views/admin/AdminSpecialistForm.vue') }
     ]
   },
-{
-  path: '/specialist',
-  component: () => import('../layout/SpecialistLayout.vue'),
-  meta: { requiresAuth: true, role: 'SPECIALIST' },
-  children: [
-    { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
-    { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') },
-    { path: 'booking-requests', component: () => import('../views/specialist/BookingRequests.vue') }
-  ]
-},
+  {
+    path: '/specialist',
+    component: () => import('../layout/SpecialistLayout.vue'),
+    meta: { requiresAuth: true, role: 'SPECIALIST' },
+    children: [
+      { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
+      { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') },
+      { path: 'booking-requests', component: () => import('../views/specialist/BookingRequests.vue') }
+    ]
+  },
   {
     path: '/customer',
     component: () => import('../layout/DefaultLayout.vue'),
@@ -41,12 +55,33 @@ const routes = [
         path: 'specialists/:id',
         component: () => import('../views/customer/SpecialistDetail.vue')
       },
+      {
+        name: 'CustomerSpecialistBooking',
+        path: 'specialists/:id/book',
+        component: () => import('../views/customer/SpecialistBooking.vue')
+      },
       { path: 'dashboard', component: () => import('../views/customer/Dashboard.vue') },
       { path: 'bookings', component: () => import('../views/customer/Bookings.vue') },
-      { path: 'profile', component: () => import('../views/customer/Profile.vue') },
-      { path: 'profile/edit', component: () => import('../views/customer/ProfileEdit.vue') },
-      { path: 'profile/password', component: () => import('../views/customer/ChangePassword.vue') },
-      { path: 'profile/style-settings', component: () => import('../views/customer/StyleSettings.vue') }
+      {
+        name: 'CustomerProfile',
+        path: 'profile',
+        component: () => import('../views/customer/Profile.vue')
+      },
+      {
+        name: 'CustomerProfileEdit',
+        path: 'profile/edit',
+        component: () => import('../views/customer/ProfileEdit.vue')
+      },
+      {
+        name: 'CustomerChangePassword',
+        path: 'profile/password',
+        component: () => import('../views/customer/ChangePassword.vue')
+      },
+      {
+        name: 'CustomerStyleSettings',
+        path: 'profile/style-settings',
+        component: () => import('../views/customer/StyleSettings.vue')
+      }
     ]
   },
   {
@@ -63,6 +98,10 @@ const routes = [
     component: () => import('../views/dev/DevDemo.vue')
   },
   {
+    path: '/login',
+    redirect: '/auth/login'
+  },
+  {
     path: '/',
     redirect: '/customer/search'
   },
@@ -74,7 +113,9 @@ const routes = [
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
+  routes
 })
+
+setupRouterGuard(router)
 
 export default router

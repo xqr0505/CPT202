@@ -9,9 +9,44 @@ spring:
     baseline-on-migrate: true
     validate-on-migrate: true
     fail-on-missing-locations: true
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 2906326615@qq.com
+    password: ${MAIL_PASSWORD}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true   # 开启STARTTLS
+            required: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:5MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:5MB}
 
-server:
-  port: 8081
+expertlink:
+  oss:
+    endpoint: ${OSS_ENDPOINT:}
+    region: ${OSS_REGION:}
+    access-key-id: ${OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${OSS_BUCKET:}
+    base-url: ${OSS_BASE_URL:}
+
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model-name: ${OPENAI_MODEL_NAME:}
+    base-url: ${OPENAI_BASE_URL:}
+  chat:
+    memory:
+      max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:20}
+      ttl-seconds: ${AI_CHAT_MEMORY_TTL_SECONDS:86400}
+      key-prefix: ${AI_CHAT_MEMORY_KEY_PREFIX:expertlink:ai:memory}
+
 
 # Logging
 logging:
@@ -29,6 +64,13 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+      logic-delete-field: deletedAt
+      logic-delete-value: "now()"
+      logic-not-delete-value: "null"
+
+# 客户取消 / 改期规则（第一步：试算接口读取）
+booking:
+  customer-change:
+    full-refund-lead-hours: 24
+    min-lead-hours: 2
+    late-window-penalty-ratio: "0.30"

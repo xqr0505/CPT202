@@ -49,7 +49,9 @@ ehthumbs.db
 Thumbs.db
 .factorypath
 .mvn/
+.m2/
 mvnw.cmd
 mvnw
 
+.env
 node_modules/

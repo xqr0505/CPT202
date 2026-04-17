@@ -1,6 +1,7 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import { logout as apiLogout } from '@/api/auth'
+import { getUser, getAuthToken, saveToken } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -16,6 +17,45 @@ export interface UserInfo {
 
 export type UserRole = UserRoleType | null
 
+interface StoredUser {
+  userId?: number
+  role?: string
+  email?: string
+  displayName?: string
+}
+
+const normalizeRole = (role?: string | null): UserRole => {
+  if (!role) return null
+
+  switch (role.toUpperCase()) {
+    case 'CUSTOMER':
+      return USER_ROLES.CUSTOMER
+    case 'SPECIALIST':
+      return USER_ROLES.SPECIALIST
+    case 'ADMIN':
+      return USER_ROLES.ADMIN
+    default:
+      return null
+  }
+}
+
+const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; role: UserRole } => {
+  const storedUser = getUser() as StoredUser | null
+
+  return {
+    token: getAuthToken(),
+    userInfo: storedUser
+      ? {
+          id: storedUser.userId || 0,
+          username: storedUser.email || storedUser.displayName || 'mockuser',
+          nickname: storedUser.displayName || storedUser.email || 'Mock User',
+          email: storedUser.email
+        }
+      : null,
+    role: normalizeRole(storedUser?.role)
+  }
+}
+
 const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
   id: user.id,
   username: user.username,
@@ -27,17 +67,20 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 })
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref<string | null>(localStorage.getItem('token') || null)
-  const userInfo = ref<UserInfo | null>(null)
-  const userRole = ref<UserRole>(null)
+  const storedSession = getStoredSession()
+
+  const token = ref<string | null>(storedSession.token || null)
+  const userInfo = ref<UserInfo | null>(storedSession.userInfo)
+  const userRole = ref<UserRole>(storedSession.role)
 
   const isLoggedIn = computed(() => !!token.value)
   const isCustomer = computed(() => userRole.value === USER_ROLES.CUSTOMER)
   const isSpecialist = computed(() => userRole.value === USER_ROLES.SPECIALIST)
+  const isAdmin = computed(() => userRole.value === USER_ROLES.ADMIN)
 
-  const setToken = (newToken: string) => {
+  const setToken = (newToken: string, rememberMe: boolean = false) => {
     token.value = newToken
-    localStorage.setItem('token', newToken)
+    saveToken(newToken, rememberMe)
   }
 
   const setUserInfo = (info: UserInfo, role: UserRole) => {
@@ -64,7 +107,6 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-
   const fetchAndSetUserProfile = async () => {
     try {
       const user = await fetchUserProfile()
@@ -83,6 +125,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     isCustomer,
     isSpecialist,
+    isAdmin,
     setToken,
     setUserInfo,
     syncUserProfile,

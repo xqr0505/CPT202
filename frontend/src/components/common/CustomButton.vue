@@ -19,78 +19,117 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables.scss';
+@use '@/styles/variables' as *;
 
 .custom-button {
   border-radius: var(--radius-md);
-  font-weight: 600;
+  font-weight: 500;
   transition: all var(--transition-base);
   height: auto;
-  padding: 10px 20px;
-  border-width: 1px;
+  padding: 8px 20px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  font-size: 14px;
+  letter-spacing: 0.01em;
 
   &:hover {
-    transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--color-shadow);
   }
 
   &:active {
     transform: translateY(0);
-  }
-
-  &--primary {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-text-inverse);
-
-    &:hover {
-      background-color: var(--color-primary-hover);
-      border-color: var(--color-primary-hover);
-    }
+    opacity: 0.85;
   }
 
   &--default {
-    background-color: var(--color-bg-surface);
-    border-color: var(--color-border);
-    color: var(--color-text-primary);
+    background-color: var(--color-btn-bg-default);
+    border-color: var(--color-btn-border-default);
+    color: var(--color-btn-text-default);
 
     &:hover {
-      border-color: var(--color-primary);
-      color: var(--color-primary);
+      border-color: var(--color-btn-border-default-hover);
+      color: var(--color-text-inverse);
+      background-color: var(--color-btn-bg-default-hover);
+      box-shadow: 0 4px 12px var(--color-btn-shadow-default, var(--color-shadow));
+    }
+  }
+
+  &--primary {
+    background-color: var(--color-btn-bg-primary);
+    border-color: var(--color-btn-border-primary);
+    color: var(--color-btn-text-primary);
+
+    &:hover {
+      background-color: var(--color-btn-bg-primary-hover);
+      color: var(--color-btn-text-primary-hover);
+      border-color: var(--color-btn-border-primary-hover);
+      box-shadow: 0 4px 15px var(--color-btn-shadow-primary);
     }
   }
 
   &--success {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
-    color: white;
+    background-color: var(--color-btn-bg-success);
+    border-color: var(--color-btn-border-success);
+    color: var(--color-btn-text-success);
+
+    &:hover {
+      background-color: var(--color-btn-bg-success-hover);
+      color: var(--color-btn-text-success-hover);
+      box-shadow: 0 4px 12px var(--color-btn-shadow-success);
+    }
   }
 
   &--warning {
-    background-color: var(--color-warning);
-    border-color: var(--color-warning);
-    color: white;
+    background-color: var(--color-btn-bg-warning);
+    border-color: var(--color-btn-border-warning);
+    color: var(--color-btn-text-warning);
+
+    &:hover {
+      background-color: var(--color-btn-bg-warning-hover);
+      color: var(--color-btn-text-warning-hover);
+      box-shadow: 0 4px 12px var(--color-btn-shadow-warning);
+    }
   }
 
   &--danger {
-    background-color: var(--color-danger);
-    border-color: var(--color-danger);
-    color: white;
+    background-color: var(--color-btn-bg-danger);
+    border-color: var(--color-btn-border-danger);
+    color: var(--color-btn-text-danger);
+
+    &:hover {
+      background-color: var(--color-btn-bg-danger-hover);
+      color: var(--color-btn-text-danger-hover);
+      box-shadow: 0 4px 12px var(--color-btn-shadow-danger);
+    }
   }
 
   &--info {
-    background-color: var(--color-info);
-    border-color: var(--color-info);
-    color: white;
+    background-color: var(--color-btn-bg-info);
+    border-color: var(--color-btn-border-info);
+    color: var(--color-btn-text-info);
+
+    &:hover {
+      background-color: var(--color-btn-bg-info-hover);
+      color: var(--color-btn-text-info-hover);
+      box-shadow: 0 4px 12px var(--color-btn-shadow-info);
+    }
   }
 }
 
-/* Ensure Element Plus styles are overridden if needed */
-:deep(.el-button--primary) {
-  --el-button-bg-color: var(--color-primary);
-  --el-button-border-color: var(--color-primary);
-  --el-button-hover-bg-color: var(--color-primary-hover);
-  --el-button-hover-border-color: var(--color-primary-hover);
+:deep(.el-button) {
+  border: inherit;
+  background: inherit;
+  color: inherit;
+  padding: inherit;
+  height: inherit;
+  font-family: inherit;
+
+  & [class*='el-icon'] + span {
+    margin-left: 8px;
+  }
 }
 </style>
-

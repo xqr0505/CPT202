@@ -7,9 +7,12 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.util.stream.Collectors;
 /**
+ * global exception handler
  * @author QiranXiao
  * @date 2026/3/26
  */
@@ -39,9 +42,19 @@ public class GlobalExceptionHandler {
         return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), message);
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
+        return Result.fail(ResultCodeEnum.BAD_REQUEST.getCode(), "Uploaded image is too large. Please choose a smaller file.");
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public Result<Void> handleMultipartException(MultipartException e) {
+        return Result.fail(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid image upload request. Please try again.");
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
-        // Log the actual exception here in a real application
         return Result.fail(ResultCodeEnum.SYSTEM_ERROR.getCode(), ResultCodeEnum.SYSTEM_ERROR.getMessage());
     }
+
 }

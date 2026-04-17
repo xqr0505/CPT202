@@ -2,7 +2,6 @@
   <section class="search-page">
     <header class="hero card">
       <div>
-        <p class="eyebrow">Customer</p>
         <h1>Find the right specialist for your next consultation</h1>
         <p class="hero-copy">
           Search by name, category, price, and date availability. The list keeps your filter state in the URL so detail-page back navigation stays intact.
@@ -170,7 +169,8 @@ const loadSpecialists = async () => {
     }
     const result = await fetchSpecialists(params)
     specialists.value = result.list
-    total.value = result.total
+    const parsedTotal = Number((result as unknown as { total?: unknown })?.total)
+    total.value = Number.isFinite(parsedTotal) ? parsedTotal : 0
   } finally {
     loading.value = false
   }
@@ -178,7 +178,7 @@ const loadSpecialists = async () => {
 
 const pushSearchState = (pageNo = 1) => {
   router.push({
-    path: '/customer/specialists',
+    path: '/customer/search',
     query: buildSearchQuery(pageNo),
   })
 }

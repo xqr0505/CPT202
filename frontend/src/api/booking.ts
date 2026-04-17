@@ -1,6 +1,161 @@
 import request from './request'
+import type { BookingStatus } from '@/constants/booking.ts'
 
-const USE_MOCK = false
+export interface UpcomingBookingResponse {
+  id: string
+  specialistName: string
+  serviceName: string
+  startTime: string
+  today: boolean
+  status: string
+}
+
+export interface CreateBookingRequest {
+  specialistId: number
+  slotId: number
+  topic: string
+  customerNotes?: string
+}
+
+export interface CreateBookingResponse {
+  bookingId: number
+  status: BookingStatus | string
+}
+
+export interface BookingListItem {
+  id: string
+  specialistId: string
+  specialistName: string
+  specialistAvatar?: string
+  specialistTitle?: string
+  appointmentDateTime: string
+  serviceName: string
+  status: BookingStatus | string
+  amount?: number
+}
+
+export interface BookingListResponse {
+  total: number
+  list: BookingListItem[]
+}
+
+export interface BookingListQuery {
+  pageNo?: number
+  pageSize?: number
+  tab?: 'UPCOMING' | 'HISTORY'
+  status?: string
+}
+
+export type BookingItem = BookingListItem
+
+export interface ConsultedExpertSummary {
+  specialistId: string
+  specialistName: string
+  specialistAvatar?: string
+}
+
+export interface CustomerDashboardSummary {
+  totalCompletedAppointments: number
+  totalAmountSpent: number
+  totalConsultationHours: number
+  consultedExperts: ConsultedExpertSummary[]
+}
+
+export interface CustomerDashboardSummaryQuery {
+  startDate?: string
+  endDate?: string
+}
+
+export interface DashboardTrendItem {
+  dateLabel: string
+  count: number
+  hours: number
+}
+
+export interface DashboardCategoryItem {
+  categoryName: string
+  amount: number
+  count: number
+}
+
+export interface DashboardHabitItem {
+  dayOfWeek: string
+  count: number
+}
+
+export interface DashboardStatistics {
+  totalCompletedAppointments: number
+  totalAmountSpent: number
+  totalConsultationHours: number
+  consultedExperts: ConsultedExpertSummary[]
+  trendData: DashboardTrendItem[]
+  categoryData: DashboardCategoryItem[]
+  habitData: DashboardHabitItem[]
+}
+
+export interface DashboardStatisticsQuery {
+  startDate?: string
+  endDate?: string
+}
+
+export interface BookingDetail {
+  bookingId: number
+  status: string
+  specialistId: number
+  specialistName: string
+  specialistAvatar: string
+  slotDate: string
+  startTime: string
+  endTime: string
+  price: number
+  topic: string
+  customerNotes: string
+}
+
+export interface BookingCancelQuote {
+  allowed: boolean
+  reasonCode?: string
+  message?: string
+  policyType?: string
+  bookingStartAt?: string
+  orderAmount?: number
+  refundAmount?: number
+  penaltyAmount?: number
+}
+
+export interface BookingCancelConfirm {
+  bookingId: number
+  bookingStatus: string
+  policyType?: string
+  refundAmount?: number
+  penaltyAmount?: number
+  message?: string
+}
+
+export interface BookingRescheduleQuote {
+  allowed: boolean
+  reasonCode?: string
+  message?: string
+  policyType?: string
+  bookingStartAt?: string
+  originalPrice?: number
+  newPrice?: number
+  priceDifference?: number
+  penaltyAmount?: number
+  refundAmount?: number
+  payableAmount?: number
+}
+
+export interface BookingRescheduleConfirm {
+  bookingId: number
+  bookingStatus: string
+  policyType?: string
+  priceDifference?: number
+  penaltyAmount?: number
+  refundAmount?: number
+  payableAmount?: number
+  message?: string
+}
 
 export interface SpecialistPendingBookingVO {
   id: number
@@ -38,141 +193,83 @@ export interface SpecialistBookingDetailVO {
   rejectionReason?: string
 }
 
-let mockPendingRequests: SpecialistPendingBookingVO[] = [
-  {
-    id: 101,
-    customerName: 'Alice Zhang',
-    requestedStartTime: '2026-04-05T10:00:00',
-    requestedEndTime: '2026-04-05T11:00:00',
-    topic: 'Career Planning',
-    submissionTime: '2026-04-02T09:15:00',
-    customerNotes: 'I want advice on switching from software testing to backend development.'
-  },
-  {
-    id: 102,
-    customerName: 'Bob Li',
-    requestedStartTime: '2026-04-06T14:00:00',
-    requestedEndTime: '2026-04-06T15:00:00',
-    topic: 'Interview Preparation',
-    submissionTime: '2026-04-02T11:30:00',
-    customerNotes: 'I need help preparing for Java backend interviews.'
-  }
-]
+export const getUpcomingBookings = () => {
+  return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
+}
 
-let mockHandledRequests: SpecialistHandledBookingVO[] = [
-  {
-    id: 88,
-    customerName: 'Cathy Wang',
-    requestedStartTime: '2026-03-28T09:00:00',
-    requestedEndTime: '2026-03-28T10:00:00',
-    topic: 'CV Review',
-    submissionTime: '2026-03-25T16:20:00',
-    customerNotes: 'Please review my CV for internship applications.',
-    status: 'APPROVED',
-    decisionTime: '2026-03-26T10:05:00'
-  },
-  {
-    id: 89,
-    customerName: 'David Chen',
-    requestedStartTime: '2026-03-29T15:00:00',
-    requestedEndTime: '2026-03-29T16:00:00',
-    topic: 'Graduate Study Advice',
-    submissionTime: '2026-03-25T18:10:00',
-    customerNotes: 'I want to discuss master programme applications.',
-    status: 'REJECTED',
-    decisionTime: '2026-03-26T08:40:00',
-    rejectionReason: 'I am unavailable during the requested period.'
-  }
-]
+export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQuery) => {
+  return request
+    .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
+    .then(response => response as unknown as CustomerDashboardSummary)
+}
+
+export const getCustomerDashboardStatistics = (params?: DashboardStatisticsQuery) => {
+  return request
+    .get<DashboardStatistics>('/api/v1/customer/dashboard/statistics', { params })
+    .then(response => response as unknown as DashboardStatistics)
+}
+
+export const getBookingTopics = (): Promise<string[]> => {
+  return request.get<any, string[]>('/api/v1/booking-topics')
+}
+
+export const createBooking = (data: CreateBookingRequest, suppressErrorMessage = false) => {
+  return request.post<any, CreateBookingResponse>(
+    '/api/v1/customer/bookings',
+    data,
+    suppressErrorMessage ? ({ suppressErrorMessage: true } as any) : undefined
+  )
+}
+
+export const getBookingList = (params: BookingListQuery) => {
+  return request.get<BookingListResponse>('/api/v1/customer/bookings/list', { params })
+}
+
+export const getBookingDetail = (bookingId: number | string) => {
+  return request.get<BookingDetail>(`/api/v1/customer/bookings/${bookingId}`)
+}
+
+export const getBookingCancelQuote = (bookingId: number | string) => {
+  return request.post<any, BookingCancelQuote>(`/api/v1/customer/bookings/${bookingId}/cancel/quote`)
+}
+
+export const confirmBookingCancel = (bookingId: number | string) => {
+  return request.post<any, BookingCancelConfirm>(`/api/v1/customer/bookings/${bookingId}/cancel/confirm`)
+}
+
+export const getBookingRescheduleQuote = (bookingId: number | string, newSlotId: number | string) => {
+  return request.post<any, BookingRescheduleQuote>(
+    `/api/v1/customer/bookings/${bookingId}/reschedule/quote`,
+    null,
+    { params: { newSlotId } } as any
+  )
+}
+
+export const confirmBookingReschedule = (bookingId: number | string, newSlotId: number | string) => {
+  return request.post<any, BookingRescheduleConfirm>(
+    `/api/v1/customer/bookings/${bookingId}/reschedule/confirm`,
+    null,
+    { params: { newSlotId } } as any
+  )
+}
 
 export const getPendingBookingRequests = (): Promise<SpecialistPendingBookingVO[]> => {
-  if (USE_MOCK) {
-    return Promise.resolve([...mockPendingRequests])
-  }
   return request.get('/api/v1/specialist/booking-requests/pending')
 }
 
 export const getHandledBookingRequests = (): Promise<SpecialistHandledBookingVO[]> => {
-  if (USE_MOCK) {
-    return Promise.resolve([...mockHandledRequests])
-  }
   return request.get('/api/v1/specialist/booking-requests/history')
 }
 
-export const getBookingRequestDetail = (
-  id: number
-): Promise<SpecialistBookingDetailVO> => {
-  if (USE_MOCK) {
-    const pending = mockPendingRequests.find(item => item.id === id)
-    if (pending) {
-      return Promise.resolve({
-        ...pending,
-        status: 'PENDING'
-      })
-    }
-
-    const handled = mockHandledRequests.find(item => item.id === id)
-    if (handled) {
-      return Promise.resolve({
-        ...handled
-      })
-    }
-
-    return Promise.reject(new Error('Booking request not found'))
-  }
-
+export const getBookingRequestDetail = (id: number): Promise<SpecialistBookingDetailVO> => {
   return request.get(`/api/v1/specialist/booking-requests/${id}`)
 }
 
 export const approveBookingRequest = (id: number): Promise<void> => {
-  if (USE_MOCK) {
-    const index = mockPendingRequests.findIndex(item => item.id === id)
-    if (index === -1) {
-      return Promise.reject(new Error('Pending booking request not found'))
-    }
-
-    const item = mockPendingRequests[index]!
-    mockPendingRequests.splice(index, 1)
-
-    mockHandledRequests.unshift({
-      ...item,
-      status: 'APPROVED',
-      decisionTime: new Date().toISOString()
-    })
-
-    return Promise.resolve()
-  }
-
   return request.post(`/api/v1/specialist/booking-requests/${id}/approve`)
 }
 
-export const rejectBookingRequest = (
-  id: number,
-  rejectionReason: string
-): Promise<void> => {
-  if (USE_MOCK) {
-    if (!rejectionReason.trim()) {
-      return Promise.reject(new Error('Rejection reason is required'))
-    }
-
-    const index = mockPendingRequests.findIndex(item => item.id === id)
-    if (index === -1) {
-      return Promise.reject(new Error('Pending booking request not found'))
-    }
-
-    const item = mockPendingRequests[index]!
-    mockPendingRequests.splice(index, 1)
-
-    mockHandledRequests.unshift({
-      ...item,
-      status: 'REJECTED',
-      decisionTime: new Date().toISOString(),
-      rejectionReason
-    })
-
-    return Promise.resolve()
-  }
-
+export const rejectBookingRequest = (id: number, rejectionReason: string): Promise<void> => {
   return request.post(`/api/v1/specialist/booking-requests/${id}/reject`, {
     rejectionReason
   })

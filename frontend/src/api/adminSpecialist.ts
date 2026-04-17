@@ -5,6 +5,7 @@ export type SpecialistStatus = 'Active' | 'Inactive'
 export interface SpecialistItem {
   id: number
   name: string
+  email?: string
   categoryId: number
   categoryName?: string
   level: string
@@ -29,8 +30,20 @@ export interface SpecialistListResponse {
   list: SpecialistItem[]
 }
 
-export interface SpecialistPayload {
+export interface CreateSpecialistPayload {
   name: string
+  email: string
+  categoryId: number
+  level: string
+  consultationFee: number
+  status: SpecialistStatus
+  avatarUrl?: string
+}
+
+export interface UpdateSpecialistPayload {
+  name: string
+  email: string
+  password?: string
   categoryId: number
   level: string
   consultationFee: number
@@ -67,7 +80,7 @@ export function getSpecialistDetail(id: number) {
   }) as Promise<SpecialistItem>
 }
 
-export function createSpecialist(data: SpecialistPayload) {
+export function createSpecialist(data: CreateSpecialistPayload) {
   return request({
     url: '/admin/specialists',
     method: 'post',
@@ -75,7 +88,7 @@ export function createSpecialist(data: SpecialistPayload) {
   })
 }
 
-export function updateSpecialist(id: number, data: SpecialistPayload) {
+export function updateSpecialist(id: number, data: UpdateSpecialistPayload) {
   return request({
     url: `/admin/specialists/${id}`,
     method: 'put',

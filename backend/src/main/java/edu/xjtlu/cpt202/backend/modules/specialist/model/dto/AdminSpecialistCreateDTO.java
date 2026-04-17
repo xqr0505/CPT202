@@ -11,7 +11,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 @Data
-public class AdminSpecialistUpdateDTO {
+public class AdminSpecialistCreateDTO {
 
     @NotBlank(message = "name cannot be empty")
     @Size(max = 100, message = "name must be at most 100 characters")
@@ -21,12 +21,6 @@ public class AdminSpecialistUpdateDTO {
     @Email(message = "email format is invalid")
     @Size(max = 255, message = "email must be at most 255 characters")
     private String email;
-
-    @Pattern(
-            regexp = "^$|^.{8,64}$",
-            message = "password length must be between 8 and 64 characters"
-    )
-    private String password;
 
     @NotNull(message = "categoryId is required")
     private Long categoryId;

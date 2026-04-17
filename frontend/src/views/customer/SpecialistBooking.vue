@@ -39,7 +39,7 @@
         <div class="booking-head">
           <div>
             <h2>Booking form</h2>
-            <p>Select a time slot, choose a topic, and optionally leave a note.</p>
+            <p>{{ bookingIntro }}</p>
           </div>
           <el-tag v-if="selectedSlot" type="success" effect="plain">
             {{ selectedDate }} {{ selectedSlot.startTime }} - {{ selectedSlot.endTime }}
@@ -66,6 +66,11 @@
               <div v-if="availabilityLoading" class="availability-loading">
                 <el-skeleton animated :rows="4" />
               </div>
+
+              <EmptyPlaceholder
+                v-else-if="!isSpecialistActive"
+                description="This specialist is inactive and cannot accept new bookings."
+              />
 
               <EmptyPlaceholder
                 v-else-if="!availability.length"
@@ -156,7 +161,7 @@
           </span>
           <CustomButton
             :loading="bookingSubmitting"
-            :disabled="bookingSubmitting || Boolean(notesFormatError)"
+            :disabled="bookingSubmitting || !isSpecialistActive || Boolean(notesFormatError)"
             @click="submitBooking"
           >
             Confirm booking
@@ -215,8 +220,14 @@ const selectedDate = ref(
 )
 
 const specialistId = computed(() => Number(route.params.id))
+const isSpecialistActive = computed(() => specialist.value?.status === 'ACTIVE')
 const selectedSlot = computed(
   () => availability.value.find((slot) => slot.id === bookingForm.value.slotId) ?? null,
+)
+const bookingIntro = computed(() =>
+  isSpecialistActive.value
+    ? 'Select a time slot, choose a topic, and optionally leave a note.'
+    : 'This specialist is inactive. Booking is disabled and no slots can be reserved.'
 )
 const notesFormatError = computed(() => {
   const notes = bookingForm.value.customerNotes
@@ -245,6 +256,11 @@ const loadDetail = async () => {
 const loadAvailability = async () => {
   if (!specialist.value || !selectedDate.value) {
     availability.value = []
+    return
+  }
+  if (!isSpecialistActive.value) {
+    availability.value = []
+    bookingForm.value.slotId = null
     return
   }
 
@@ -291,6 +307,10 @@ const resetBookingForm = () => {
 
 const submitBooking = async () => {
   if (!specialist.value) {
+    return
+  }
+  if (!isSpecialistActive.value) {
+    ElMessage.warning('This specialist is inactive and cannot accept bookings.')
     return
   }
   if (!bookingForm.value.slotId) {

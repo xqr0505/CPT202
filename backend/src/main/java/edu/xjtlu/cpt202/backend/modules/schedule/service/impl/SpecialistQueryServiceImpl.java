@@ -58,7 +58,10 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
 
     @Override
     public List<SpecialistAvailabilityVO> listAvailability(Long specialistId, LocalDate date) {
-        getSpecialistDetail(specialistId);
+        SpecialistDetailVO detail = getSpecialistDetail(specialistId);
+        if (!"ACTIVE".equals(detail.getStatus())) {
+            return List.of();
+        }
         return specialistQueryMapper.listAvailabilityByDate(specialistId, date);
     }
 

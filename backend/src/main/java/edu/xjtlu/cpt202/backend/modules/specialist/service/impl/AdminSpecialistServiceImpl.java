@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.specialist.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
@@ -17,6 +18,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.SpecialistFeeChangeRecordMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.entity.SpecialistFeeChangeRecord;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
@@ -27,6 +29,7 @@ import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -34,12 +37,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -48,17 +53,17 @@ import java.util.concurrent.CompletableFuture;
 public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminSpecialistServiceImpl.class);
+    private static final String DEFAULT_SPECIALIST_INITIAL_PASSWORD = "12345Expertlink";
 
     private final AdminSpecialistMapper adminSpecialistMapper;
     private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
     private final BookingMapper bookingMapper;
     private final UserMapper userMapper;
+    private final UserAccountService userAccountService;
     private final SpecialistProfileMapper specialistProfileMapper;
     private final JavaMailSender mailSender;
     private final Environment env;
-
-    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
-    private static final String DEFAULT_SPECIALIST_PASSWORD = "ChangeMe123!";
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public PageResult<AdminSpecialistListVO> listSpecialists(AdminSpecialistListQueryDTO query) {
@@ -73,29 +78,26 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void createSpecialist(AdminSpecialistUpdateDTO request) {
+    public void createSpecialist(AdminSpecialistCreateDTO request) {
         Long categoryCount = adminSpecialistMapper.selectCategoryCountById(request.getCategoryId());
         if (categoryCount == null || categoryCount == 0) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Category not found");
         }
 
         String normalizedName = request.getName().trim();
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
         validateSpecialistLevel(normalizedLevel);
         validateFeeWithinRange(normalizedLevel, request.getConsultationFee());
 
-        User user = User.builder()
-                .email(buildGeneratedSpecialistEmail(normalizedName))
-                .passwordHash(PASSWORD_ENCODER.encode(DEFAULT_SPECIALIST_PASSWORD))
-                .role(UserRoleEnum.SPECIALIST.name())
-                .status(AccountStatusEnum.ACTIVE.name())
-                .fullName(normalizedName)
-                .loginFailCount(0)
-                .lockTime(LocalDateTime.now())
-                .build();
-        userMapper.insert(user);
+        User user = userAccountService.createUser(
+                normalizedEmail,
+                DEFAULT_SPECIALIST_INITIAL_PASSWORD,
+                UserRoleEnum.SPECIALIST.name(),
+                normalizedName
+        );
 
         SpecialistProfile specialistProfile = SpecialistProfile.builder()
                 .userId(user.getId())
@@ -145,10 +147,13 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         }
 
         String normalizedName = request.getName().trim();
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String normalizedPassword = normalizeOptionalPassword(request.getPassword());
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
         validateSpecialistLevel(normalizedLevel);
+        ensureSpecialistEmailUnique(normalizedEmail, userId);
 
         int updatedProfileRows = adminSpecialistMapper.updateSpecialistProfileById(
                 id,
@@ -163,7 +168,8 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         }
 
         saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
-        adminSpecialistMapper.updateUserFullNameById(userId, normalizedName);
+        String passwordHash = normalizedPassword == null ? null : passwordEncoder.encode(normalizedPassword);
+        adminSpecialistMapper.updateUserAccountById(userId, normalizedName, normalizedEmail, passwordHash);
     }
 
     @Override
@@ -281,14 +287,22 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         return impactedBookings;
     }
 
-    private String buildGeneratedSpecialistEmail(String fullName) {
-        String normalized = fullName.toLowerCase()
-                .replaceAll("[^a-z0-9]+", ".")
-                .replaceAll("^\\.+|\\.+$", "");
-        if (normalized.isBlank()) {
-            normalized = "specialist";
+    private String normalizeOptionalPassword(String password) {
+        if (!StringUtils.hasText(password)) {
+            return null;
         }
-        return normalized + "." + System.currentTimeMillis() + "@admin-created.local";
+        return password.trim();
+    }
+
+    private void ensureSpecialistEmailUnique(String normalizedEmail, Long currentUserId) {
+        Long existingCount = userMapper.selectCount(
+                new QueryWrapper<User>()
+                        .eq("email", normalizedEmail)
+                        .ne("id", currentUserId)
+        );
+        if (existingCount != null && existingCount > 0) {
+            throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
+        }
     }
 
     private String mapToDbStatus(String status) {
@@ -368,12 +382,44 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 log.warn("Skip booking change notification: bookingId={} customer not found", booking.getId());
                 continue;
             }
+            if (customer.getEmail() == null || customer.getEmail().isBlank()) {
+                log.warn(
+                        "Skip booking change notification: bookingId={} customerId={} has no email",
+                        booking.getId(),
+                        customer.getId()
+                );
+                continue;
+            }
+
+            String displayName = customer.getFullName() == null || customer.getFullName().isBlank()
+                    ? customer.getEmail()
+                    : customer.getFullName();
+            String specialistDisplayName = specialistName == null || specialistName.isBlank()
+                    ? "your specialist"
+                    : specialistName;
+
+            String subject = "Your booking was cancelled due to specialist deactivation";
+            String content = String.format(
+                    "Hello %s,%n%nYour booking (ID: %d) has been cancelled because specialist %s was deactivated by an administrator.%n%nPlease log in to ExpertLink and create a new booking with another available specialist.%n%nThank you for your understanding.",
+                    displayName,
+                    booking.getId(),
+                    specialistDisplayName
+            );
+
+            sendEmail(
+                    customer.getEmail(),
+                    subject,
+                    content,
+                    "booking change notification",
+                    booking.getId()
+            );
+
             log.info(
-                    "Affected customer notified for cancelled booking: bookingId={}, customerId={}, customerName={}, specialistName={}",
+                    "Booking change notification sent: bookingId={}, customerId={}, customerEmail={}, specialistName={}",
                     booking.getId(),
                     customer.getId(),
-                    customer.getFullName(),
-                    specialistName
+                    customer.getEmail(),
+                    specialistDisplayName
             );
         }
     }

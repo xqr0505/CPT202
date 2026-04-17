@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
@@ -125,6 +126,45 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to deactivate account");
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User createUser(String email, String rawPassword, String role, String fullName) {
+        String normalizedEmail = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+        String normalizedRole = role == null ? null : role.trim().toUpperCase(Locale.ROOT);
+
+        if (!StringUtils.hasText(normalizedEmail)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Email is required");
+        }
+        if (!StringUtils.hasText(rawPassword)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Password is required");
+        }
+        if (!StringUtils.hasText(normalizedRole)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "User role is required");
+        }
+        if (!UserRoleEnum.ADMIN.name().equals(normalizedRole)
+                && !UserRoleEnum.SPECIALIST.name().equals(normalizedRole)
+                && !UserRoleEnum.CUSTOMER.name().equals(normalizedRole)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid user role");
+        }
+
+        Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", normalizedEmail));
+        if (existingCount != null && existingCount > 0) {
+            throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
+        }
+
+        User newUser = User.builder()
+                .email(normalizedEmail)
+                .passwordHash(PASSWORD_ENCODER.encode(rawPassword))
+                .role(normalizedRole)
+                .status(AccountStatusEnum.ACTIVE.name())
+                .fullName(StringUtils.hasText(fullName) ? fullName.trim() : null)
+                .loginFailCount(0)
+                .lockTime(null)
+                .build();
+        userMapper.insert(newUser);
+        return newUser;
     }
 
     private User getCurrentUserOrThrow() {

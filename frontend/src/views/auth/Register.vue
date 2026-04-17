@@ -4,18 +4,8 @@
       <h1 class="register-title">Create your account</h1>
 
       <div class="form-group">
-        <label>Select role</label>
-        <div class="role-selector">
-          <button
-            v-for="option in roles"
-            :key="option.value"
-            :class="['role-btn', { active: form.role === option.value }]"
-            @click="form.role = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-        <span v-if="errors.role" class="error-text">{{ errors.role }}</span>
+        <label>Customer account</label>
+        <p class="hint-text">Register a customer account to book expert consultations.</p>
       </div>
 
       <div class="form-group">
@@ -97,13 +87,7 @@ const isCodeSending = ref(false);
 const countdown = ref(0);
 const sendCodeMessage = ref('');
 
-const roles = [
-  { label: 'Customer', value: 'CUSTOMER' },
-  { label: 'Specialist', value: 'SPECIALIST' }
-];
-
 const form = reactive({
-  role: '',
   email: '',
   verificationCode: '',
   password: '',
@@ -111,7 +95,6 @@ const form = reactive({
 });
 
 const errors = reactive({
-  role: '',
   email: '',
   verificationCode: '',
   password: '',
@@ -147,11 +130,6 @@ function validatePassword() {
 }
 
 async function getVerificationCode() {
-  errors.role = form.role ? '' : 'Please select a role first.';
-  if (!form.role) {
-    return;
-  }
-
   if (!validateEmail()) {
     return;
   }
@@ -162,7 +140,6 @@ async function getVerificationCode() {
   try {
     await sendVerificationCode({
       email: form.email,
-      role: form.role as 'CUSTOMER' | 'SPECIALIST',
       type: 'REGISTER'
     });
 
@@ -185,8 +162,7 @@ async function getVerificationCode() {
 }
 
 async function handleRegister() {
-  if (!form.role || !form.email || !form.verificationCode || !form.password || !form.confirmPassword) {
-    errors.role = form.role ? '' : 'Please select a role first.';
+  if (!form.email || !form.verificationCode || !form.password || !form.confirmPassword) {
     errors.email = form.email ? '' : 'Please enter every field';
     errors.verificationCode = form.verificationCode ? '' : 'Please enter every field';
     errors.password = form.password ? '' : 'Please enter every field';
@@ -210,7 +186,6 @@ async function handleRegister() {
   try {
     const payload: RegisterPayload = {
       email: form.email,
-      role: form.role as 'CUSTOMER' | 'SPECIALIST',
       verificationCode: form.verificationCode,
       password: form.password,
       confirmPassword: form.confirmPassword

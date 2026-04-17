@@ -24,6 +24,7 @@ import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.mail.internet.MimeMessage;
 
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$");
 
     private final UserMapper userMapper;
+    private final UserAccountService userAccountService;
     private final VerificationCodeMapper verificationCodeMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final PasswordEncoder passwordEncoder;
@@ -57,12 +59,14 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
+                           UserAccountService userAccountService,
                            VerificationCodeMapper verificationCodeMapper,
                            RefreshTokenMapper refreshTokenMapper,
                            PasswordEncoder passwordEncoder,
                            JavaMailSender mailSender,
                            Environment env) {
         this.userMapper = userMapper;
+        this.userAccountService = userAccountService;
         this.verificationCodeMapper = verificationCodeMapper;
         this.refreshTokenMapper = refreshTokenMapper;
         this.passwordEncoder = passwordEncoder;
@@ -77,15 +81,7 @@ public class AuthServiceImpl implements AuthService {
         
         // 1. 根据类型执行不同校验
         if ("REGISTER".equals(type)) {
-            // 注册模式：必须有角色，且角色合法
-            if (StrUtil.isBlank(request.getRole())) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first.");
-            }
-            String role = request.getRole().toUpperCase(Locale.ROOT);
-            if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first.");
-            }
-            // 邮箱必须未被注册
+            // 注册模式：只允许创建 CUSTOMER 账号，邮箱必须未被注册
             Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
             if (existingCount != null && existingCount > 0) {
                 throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
@@ -171,7 +167,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest request) {
         // 8/9/10 校验
-        if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword(), request.getRole())) {
+        if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please enter every field");
         }
 
@@ -203,21 +199,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), "Verification code incorrect or expired. Please request a new one.");
         }
 
-        String role = request.getRole().trim().toUpperCase(Locale.ROOT);
-        if (!"CUSTOMER".equals(role) && !"SPECIALIST".equals(role)) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER or SPECIALIST can register.");
-        }
-
-        User newUser = User.builder()
-                .email(email)
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(role)
-                .status(AccountStatusEnum.ACTIVE.name())
-                .loginFailCount(0)
-                .lockTime(null)
-                .build();
-
-        userMapper.insert(newUser);
+        User newUser = userAccountService.createUser(email, request.getPassword(), "CUSTOMER", null);
 
         codeRecord.setIsUsed(true);
         verificationCodeMapper.updateById(codeRecord);

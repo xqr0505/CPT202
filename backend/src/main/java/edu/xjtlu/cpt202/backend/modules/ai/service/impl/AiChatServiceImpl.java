@@ -9,6 +9,8 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.springframework.stereotype.Service;
 
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -20,6 +22,9 @@ import java.util.function.Consumer;
  */
 @Service
 public class AiChatServiceImpl implements AiChatService {
+
+    private static final DateTimeFormatter SYSTEM_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z");
 
     private final Assistant assistant;
     private final ChatMemoryStore chatMemoryStore;
@@ -51,7 +56,15 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private String normalizeUserMessage(String userMessage) {
-        return Optional.ofNullable(userMessage).orElse("");
+        String normalizedMessage = Optional.ofNullable(userMessage).orElse("");
+        String currentSystemTime = ZonedDateTime.now().format(SYSTEM_TIME_FORMATTER);
+        return """
+                Current system time: %s
+                Use this as the authoritative current time when interpreting relative dates such as today, tomorrow, upcoming, this week, and history.
+
+                User message:
+                %s
+                """.formatted(currentSystemTime, normalizedMessage);
     }
 
     private static final class AssistantBackedTokenStream implements TokenStream {

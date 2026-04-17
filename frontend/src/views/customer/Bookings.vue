@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="bookings-page">
     <h1 class="page-title">My Bookings</h1>
 
@@ -140,11 +140,11 @@
 
       <div v-if="cancelQuote" class="cancel-finance-card">
         <div class="finance-row">
-          <span>Refund Amount：</span>
+          <span>Refund Amount:</span>
           <strong class="refund-amount">{{ formatMoney(cancelQuote.refundAmount) }}</strong>
         </div>
         <div class="finance-row">
-          <span>Penalty Amount：</span>
+          <span>Penalty Amount:</span>
           <strong class="penalty-amount">{{ formatMoney(cancelQuote.penaltyAmount) }}</strong>
         </div>
       </div>
@@ -215,19 +215,19 @@
 
       <div v-if="rescheduleQuote" v-loading="rescheduleQuoteLoading" class="cancel-finance-card">
         <div class="finance-row">
-          <span>Price Difference：</span>
+          <span>Price Difference:</span>
           <strong>{{ formatMoney(rescheduleQuote.priceDifference) }}</strong>
         </div>
         <div class="finance-row">
-          <span>Penalty Amount：</span>
+          <span>Penalty Amount:</span>
           <strong class="penalty-amount">{{ formatMoney(rescheduleQuote.penaltyAmount) }}</strong>
         </div>
         <div class="finance-row">
-          <span>Refund Amount：</span>
+          <span>Refund Amount:</span>
           <strong class="refund-amount">{{ formatMoney(rescheduleQuote.refundAmount) }}</strong>
         </div>
         <div class="finance-row">
-          <span>Payable Amount：</span>
+          <span>Payable Amount:</span>
           <strong>{{ formatMoney(rescheduleQuote.payableAmount) }}</strong>
         </div>
       </div>
@@ -332,11 +332,25 @@ const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<Booki
       pageSize: params.limit
     })
 
+    const payload = res as unknown as { list?: BookingListItem[]; total?: number | string }
+    const rawList: BookingListItem[] = payload.list ?? []
+    const sortedList =
+      activeTab.value === 'UPCOMING'
+        ? [...rawList].sort((a, b) => {
+            const aTime = Date.parse(String(a.appointmentDateTime || '').replace(' ', 'T'))
+            const bTime = Date.parse(String(b.appointmentDateTime || '').replace(' ', 'T'))
+            if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0
+            if (Number.isNaN(aTime)) return 1
+            if (Number.isNaN(bTime)) return -1
+            return aTime - bTime
+          })
+        : rawList
+
     return {
-      list: (res as any).list || [],
-      total: Number((res as any).total) || 0
+      list: sortedList,
+      total: Number(payload.total) || 0
     }
-  } catch (error) {
+  } catch (_error) {
     ElMessage.error('Failed to load bookings')
     return { list: [], total: 0 }
   }
@@ -394,7 +408,7 @@ const canRescheduleBooking = (row: BookingListItem) => canCancelBooking(row);
 
 const formatMoney = (value?: number) => {
   const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '¥0.00';
+  return Number.isFinite(amount) ? `楼${amount.toFixed(2)}` : '楼0.00';
 };
 
 const formatSlotTime = (time?: string) => {
@@ -863,3 +877,5 @@ const handleAction = (action: string, row: BookingListItem) => {
   }
 }
 </style>
+
+

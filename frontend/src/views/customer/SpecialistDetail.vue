@@ -31,8 +31,13 @@
         <aside class="price-panel">
           <span class="panel-label">Consultation fee</span>
           <strong class="panel-price">&#165;{{ Number(specialist.consultationFee || 0).toFixed(2) }}</strong>
-          <p class="panel-copy">Review the profile here, then continue to the separate booking page when you're ready.</p>
-          <CustomButton type="primary" class="panel-action" @click="goToBooking">
+          <p class="panel-copy">{{ bookingPanelCopy }}</p>
+          <CustomButton
+            type="primary"
+            class="panel-action"
+            :disabled="!isSpecialistActive"
+            @click="goToBooking"
+          >
             Book now
           </CustomButton>
         </aside>
@@ -81,6 +86,12 @@ const specialist = ref<SpecialistDetail | null>(null)
 const loading = ref(false)
 
 const specialistId = computed(() => Number(route.params.id))
+const isSpecialistActive = computed(() => specialist.value?.status === 'ACTIVE')
+const bookingPanelCopy = computed(() =>
+  isSpecialistActive.value
+    ? "Review the profile here, then continue to the separate booking page when you're ready."
+    : 'This specialist is inactive and cannot accept new bookings.'
+)
 
 const loadDetail = async () => {
   if (!Number.isInteger(specialistId.value) || specialistId.value <= 0) {
@@ -102,7 +113,7 @@ const goBack = () => {
 }
 
 const goToBooking = () => {
-  if (!specialist.value) {
+  if (!specialist.value || !isSpecialistActive.value) {
     return
   }
 
@@ -188,7 +199,11 @@ watch(
   min-width: 260px;
   padding: var(--space-5);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(51, 144, 251, 0.12), rgba(51, 144, 251, 0.02));
+  background: linear-gradient(
+    145deg,
+    rgba(var(--color-primary-rgb), 0.12),
+    rgba(var(--color-primary-rgb), 0.02)
+  );
   border: 1px solid var(--color-border);
   display: grid;
   gap: var(--space-3);

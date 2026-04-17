@@ -19,6 +19,7 @@ public interface AdminSpecialistMapper {
             SELECT
                 sp.id AS id,
                 COALESCE(NULLIF(u.full_name, ''), u.email) AS name,
+                u.email AS email,
                 COALESCE(sp.avatar_url, '') AS avatarUrl,
                 sp.category_id AS categoryId,
                 COALESCE(c.category_name, '') AS categoryName,
@@ -77,6 +78,7 @@ public interface AdminSpecialistMapper {
             SELECT
                 sp.id AS id,
                 COALESCE(NULLIF(u.full_name, ''), u.email) AS name,
+                u.email AS email,
                 COALESCE(sp.avatar_url, '') AS avatarUrl,
                 sp.category_id AS categoryId,
                 COALESCE(c.category_name, '') AS categoryName,
@@ -152,15 +154,25 @@ public interface AdminSpecialistMapper {
     );
 
     @Update("""
+            <script>
             UPDATE users
-            SET
+            <set>
                 full_name = #{fullName},
+                email = #{email},
+                <if test="passwordHash != null and passwordHash != ''">
+                    password_hash = #{passwordHash},
+                    password_changed_at = NOW(),
+                </if>
                 updated_at = NOW()
+            </set>
             WHERE id = #{userId}
+            </script>
             """)
-    int updateUserFullNameById(
+    int updateUserAccountById(
             @Param("userId") Long userId,
-            @Param("fullName") String fullName
+            @Param("fullName") String fullName,
+            @Param("email") String email,
+            @Param("passwordHash") String passwordHash
     );
 
     @Update("""

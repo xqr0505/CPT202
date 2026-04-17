@@ -95,7 +95,7 @@ const pageSize = ref(DEFAULT_PAGE_SIZE)
 
 const resultSummary = computed(() => {
   if (!total.value) {
-    return 'Adjust the filters and run a search to discover active specialists.'
+    return 'Adjust the filters and run a search to discover specialists.'
   }
 
   const dateNote = filters.value.date ? ` available on ${filters.value.date}` : ''
@@ -229,8 +229,8 @@ onMounted(async () => {
 .hero {
   padding: var(--space-8);
   background:
-    radial-gradient(circle at top right, rgba(51, 144, 251, 0.18), transparent 30%),
-    linear-gradient(135deg, var(--color-bg-surface), rgba(51, 144, 251, 0.08));
+    radial-gradient(circle at top right, rgba(var(--color-primary-rgb), 0.18), transparent 30%),
+    linear-gradient(135deg, var(--color-bg-surface), rgba(var(--color-primary-rgb), 0.08));
 }
 
 .eyebrow {

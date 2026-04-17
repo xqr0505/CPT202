@@ -10,6 +10,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.AdminSpecialistMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.mapper.SpecialistFeeChangeRecordMapper;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.entity.SpecialistFeeChangeRecord;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
@@ -17,6 +18,8 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListV
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -49,6 +53,9 @@ class AdminSpecialistServiceImplTest {
     private UserMapper userMapper;
 
     @Mock
+    private UserAccountService userAccountService;
+
+    @Mock
     private SpecialistProfileMapper specialistProfileMapper;
 
     @Mock
@@ -62,6 +69,9 @@ class AdminSpecialistServiceImplTest {
 
     @Mock
     private Environment env;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AdminSpecialistServiceImpl adminSpecialistService;
@@ -146,6 +156,7 @@ class AdminSpecialistServiceImplTest {
 
         AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
         request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
         request.setCategoryId(1L);
         request.setLevel("CHIEF");
         request.setConsultationFee(new BigDecimal("300.00"));
@@ -164,7 +175,7 @@ class AdminSpecialistServiceImplTest {
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("300.00"), null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserFullNameById(101L, "Dr. Emily Chen");
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
         ArgumentCaptor<SpecialistFeeChangeRecord> recordCaptor = ArgumentCaptor.forClass(SpecialistFeeChangeRecord.class);
         verify(specialistFeeChangeRecordMapper).insert(recordCaptor.capture());
         assertEquals(new BigDecimal("260.00"), recordCaptor.getValue().getOldFee());
@@ -179,6 +190,7 @@ class AdminSpecialistServiceImplTest {
 
         AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
         request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
         request.setCategoryId(1L);
         request.setLevel("CHIEF");
         request.setConsultationFee(new BigDecimal("260.00"));
@@ -197,30 +209,35 @@ class AdminSpecialistServiceImplTest {
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserFullNameById(101L, "Dr. Emily Chen");
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
     }
 
     @Test
     void createSpecialist_success_whenFeeWithinRange() {
-        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        AdminSpecialistCreateDTO request = new AdminSpecialistCreateDTO();
         request.setName("Dr. New Specialist");
+        request.setEmail("new.specialist@example.com");
         request.setCategoryId(1L);
         request.setLevel("SENIOR");
         request.setConsultationFee(new BigDecimal("220.00"));
         request.setStatus("Active");
 
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
+        User createdUser = User.builder().id(99L).email("new.specialist@example.com").build();
+        when(userAccountService.createUser("new.specialist@example.com", "12345Expertlink", "SPECIALIST", "Dr. New Specialist"))
+                .thenReturn(createdUser);
 
         adminSpecialistService.createSpecialist(request);
 
-        verify(userMapper).insert(any());
+        verify(userAccountService).createUser("new.specialist@example.com", "12345Expertlink", "SPECIALIST", "Dr. New Specialist");
         verify(specialistProfileMapper).insert(any());
     }
 
     @Test
     void createSpecialist_throwsBusinessException_whenFeeOutOfRange() {
-        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        AdminSpecialistCreateDTO request = new AdminSpecialistCreateDTO();
         request.setName("Dr. New Specialist");
+        request.setEmail("new.specialist@example.com");
         request.setCategoryId(1L);
         request.setLevel("CHIEF");
         request.setConsultationFee(new BigDecimal("300.00"));
@@ -233,7 +250,7 @@ class AdminSpecialistServiceImplTest {
 
         assertEquals(400, exception.getCode());
         assertEquals("Consultation fee for CHIEF must be between 255.00 and 290.00", exception.getMessage());
-        verify(userMapper, never()).insert(any());
+        verify(userAccountService, never()).createUser(any(), any(), any(), any());
         verify(specialistProfileMapper, never()).insert(any());
     }
 
@@ -298,6 +315,7 @@ class AdminSpecialistServiceImplTest {
 
         AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
         request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
         request.setCategoryId(1L);
         request.setLevel("CHIEF");
         request.setConsultationFee(new BigDecimal("260.00"));
@@ -313,7 +331,7 @@ class AdminSpecialistServiceImplTest {
 
         adminSpecialistService.updateSpecialist(1L, request);
 
-        verify(adminSpecialistMapper).updateUserFullNameById(101L, "Dr. Emily Chen");
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
         verify(specialistFeeChangeRecordMapper, never()).insert(any());
     }
 

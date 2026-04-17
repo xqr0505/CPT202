@@ -26,6 +26,30 @@
             <el-input v-model="form.name" placeholder="Please enter specialist name" />
           </el-form-item>
 
+          <el-form-item label="Email" prop="email">
+            <el-input
+              v-model="form.email"
+              placeholder="Please enter specialist email"
+              type="email"
+            />
+          </el-form-item>
+
+          <el-form-item v-if="isEditMode" label="New Password" prop="password">
+            <el-input
+              v-model="form.password"
+              placeholder="Leave empty to keep current password"
+              type="password"
+              show-password
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item v-else label="Initial Password">
+            <div class="default-password-tip">
+              New specialist accounts are created with default password: <strong>12345Expertlink</strong>
+            </div>
+          </el-form-item>
+
           <el-form-item label="Category" prop="categoryId">
             <el-select
               v-model="form.categoryId"
@@ -217,12 +241,15 @@ import {
   getSpecialistLevels,
   updateSpecialist,
   type SpecialistLevelOption,
-  type SpecialistPayload,
+  type CreateSpecialistPayload,
+  type UpdateSpecialistPayload,
   type SpecialistStatus
 } from '@/api/adminSpecialist'
 
 interface SpecialistFormModel {
   name: string
+  email: string
+  password: string
   categoryId?: number
   level: string
   consultationFee: number
@@ -262,6 +289,8 @@ const avatarFallback = computed(() => (form.name.trim().slice(0, 1).toUpperCase(
 
 const form = reactive<SpecialistFormModel>({
   name: '',
+  email: '',
+  password: '',
   categoryId: undefined,
   level: '',
   consultationFee: 0,
@@ -311,6 +340,26 @@ function showFeeAdjustedMessage(originalValue: number, adjustedValue: number) {
 
 const rules: FormRules<SpecialistFormModel> = {
   name: [{ required: true, message: 'Please enter name', trigger: 'blur' }],
+  email: [
+    { required: true, message: 'Please enter email', trigger: 'blur' },
+    { type: 'email', message: 'Please enter a valid email', trigger: ['blur', 'change'] }
+  ],
+  password: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!isEditMode.value) {
+          callback()
+          return
+        }
+        if (value && value.length < 8) {
+          callback(new Error('Password must be at least 8 characters'))
+          return
+        }
+        callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
   categoryId: [{ required: true, message: 'Please select category', trigger: 'change' }],
   level: [{ required: true, message: 'Please select level', trigger: 'change' }],
   consultationFee: [
@@ -356,6 +405,8 @@ async function fetchSpecialistDetail() {
   try {
     const detail = await getSpecialistDetail(specialistId.value)
     form.name = detail.name ?? ''
+    form.email = detail.email ?? ''
+    form.password = ''
     form.categoryId = detail.categoryId
     form.level = detail.level ?? ''
     form.consultationFee = detail.consultationFee ?? 0
@@ -469,15 +520,32 @@ async function confirmOutOfRangeFeeIfNeeded() {
   }
 }
 
-function buildPayload(): SpecialistPayload {
+function buildCreatePayload(): CreateSpecialistPayload {
   return {
     name: form.name.trim(),
+    email: form.email.trim().toLowerCase(),
     categoryId: Number(form.categoryId),
     level: form.level.trim(),
     consultationFee: Number(form.consultationFee),
     status: form.status,
     avatarUrl: form.avatarUrl.trim() || undefined
   }
+}
+
+function buildUpdatePayload(): UpdateSpecialistPayload {
+  const payload: UpdateSpecialistPayload = {
+    name: form.name.trim(),
+    email: form.email.trim().toLowerCase(),
+    categoryId: Number(form.categoryId),
+    level: form.level.trim(),
+    consultationFee: Number(form.consultationFee),
+    status: form.status,
+    avatarUrl: form.avatarUrl.trim() || undefined
+  }
+  if (form.password.trim()) {
+    payload.password = form.password.trim()
+  }
+  return payload
 }
 
 async function handleSubmit() {
@@ -496,14 +564,13 @@ async function handleSubmit() {
 
     submitLoading.value = true
     try {
-      const payload = buildPayload()
       if (isEditMode.value && specialistId.value !== null) {
-        await updateSpecialist(specialistId.value, payload)
+        await updateSpecialist(specialistId.value, buildUpdatePayload())
         await fetchFeeChangeRecords()
         ElMessage.success('Specialist updated successfully')
       } else {
-        await createSpecialist(payload)
-        ElMessage.success('Specialist created successfully')
+        await createSpecialist(buildCreatePayload())
+        ElMessage.success('Specialist created successfully (default password: 12345Expertlink)')
       }
       goBack()
     } catch (error) {
@@ -554,14 +621,14 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #5b9bff;
+  color: var(--color-primary);
 }
 
 .page-header h2 {
   margin: 0;
   font-size: 42px;
   line-height: 1.05;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .page-note {
@@ -569,7 +636,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 15px;
   line-height: 1.7;
-  color: #6c7687;
+  color: var(--color-text-secondary);
 }
 
 .page-grid {
@@ -583,8 +650,8 @@ onMounted(async () => {
 .summary-card,
 .history-card {
   border-radius: 20px;
-  border: 1px solid #d8e4f2;
-  box-shadow: 0 18px 40px rgba(102, 128, 170, 0.08);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 40px rgba(var(--color-shadow-rgb), 0.08);
 }
 
 .card-header {
@@ -597,14 +664,14 @@ onMounted(async () => {
 .card-header h3 {
   margin: 0;
   font-size: 20px;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .card-header p {
   margin: 6px 0 0;
   font-size: 13px;
   line-height: 1.6;
-  color: #7b8698;
+  color: var(--color-text-secondary);
 }
 
 .card-header.compact h3 {
@@ -622,7 +689,7 @@ onMounted(async () => {
   align-items: center;
   text-align: center;
   padding: 6px 0 20px;
-  border-bottom: 1px solid #e7eef8;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .summary-avatar {
@@ -632,12 +699,12 @@ onMounted(async () => {
 .summary-name {
   font-size: 24px;
   font-weight: 700;
-  color: #2f3a4c;
+  color: var(--color-text-primary);
 }
 
 .summary-meta {
   margin-top: 6px;
-  color: #6f7b8f;
+  color: var(--color-text-secondary);
 }
 
 .summary-grid {
@@ -652,8 +719,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
-  border: 1px solid #e4edf8;
+  background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-muted) 100%);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
 }
 
@@ -666,17 +733,21 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #7e8aa0;
+  color: var(--color-text-tertiary);
 }
 
 .accent-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+  background: linear-gradient(180deg, var(--color-bg-surface) 0%, var(--color-bg-muted) 100%);
 }
 
 .range-panel {
   padding: 18px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #5da5ff 0%, #87b8ff 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.9) 0%,
+    rgba(var(--color-primary-rgb), 0.65) 100%
+  );
   color: #fff;
 }
 
@@ -695,14 +766,14 @@ onMounted(async () => {
 .empty-tip {
   padding: 16px;
   border-radius: 14px;
-  background: #f5f8fc;
-  color: #7a8598;
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
 }
 
 .tips-list {
   margin: 18px 0 0;
   padding-left: 18px;
-  color: #5c6778;
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
@@ -730,7 +801,16 @@ onMounted(async () => {
 .field-hint {
   margin-top: 8px;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
+}
+
+.default-password-tip {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f4f8ff;
+  color: #4b5a73;
+  line-height: 1.6;
 }
 
 @media (max-width: 980px) {

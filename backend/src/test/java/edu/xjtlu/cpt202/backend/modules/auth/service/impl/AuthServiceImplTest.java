@@ -8,9 +8,15 @@ import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
@@ -44,6 +50,7 @@ class AuthServiceImplTest {
 
     @Mock private UserMapper userMapper;
     @Mock private VerificationCodeMapper verificationCodeMapper;
+    @Mock private RefreshTokenMapper refreshTokenMapper;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JavaMailSender mailSender;
     @Mock private Environment env;
@@ -352,16 +359,53 @@ class AuthServiceImplTest {
 
         try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
             jwtUtils.when(() -> JwtUtils.generateToken(1L, testRole)).thenReturn("jwt-token");
+            when(refreshTokenMapper.insert(any(RefreshToken.class))).thenReturn(1);
+
             LoginResponse response = authService.login(request);
 
             assertEquals("jwt-token", response.getToken());
+            assertNotNull(response.getRefreshToken());
             assertEquals(1L, response.getUserId());
             assertEquals(testRole, response.getRole());
             assertEquals(testEmail, response.getEmail());
 
             verify(userMapper).updateById(user);
+            verify(refreshTokenMapper).insert(any(RefreshToken.class));
             assertEquals(0, user.getLoginFailCount());
             assertNull(user.getLockTime());
+        }
+    }
+
+    @Test
+    void refreshToken_Success() {
+        String refreshValue = "refresh-token-value";
+        RefreshToken refreshToken = RefreshToken.builder()
+                .id(1L)
+                .userId(1L)
+                .token(refreshValue)
+                .createdAt(LocalDateTime.now().minusMinutes(5))
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .build();
+
+        User user = User.builder()
+                .id(1L)
+                .email(testEmail)
+                .role(testRole)
+                .status("ACTIVE")
+                .build();
+
+        when(refreshTokenMapper.selectOne(any(QueryWrapper.class))).thenReturn(refreshToken);
+        when(userMapper.selectById(1L)).thenReturn(user);
+
+        try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
+            jwtUtils.when(() -> JwtUtils.generateToken(1L, testRole)).thenReturn("new-access-token");
+
+            RefreshTokenRequest request = new RefreshTokenRequest();
+            request.setRefreshToken(refreshValue);
+            RefreshTokenResponse response = authService.refreshToken(request);
+
+            assertEquals("new-access-token", response.getToken());
+            assertNotNull(response.getExpiresIn());
         }
     }
 

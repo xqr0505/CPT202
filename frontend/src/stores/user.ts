@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { getUser } from '@/api/request'
+import { clearAuthData, getAuthToken, getUser, saveToken } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -43,7 +43,7 @@ const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; 
   const storedUser = getUser() as StoredUser | null
 
   return {
-    token: localStorage.getItem('token') || sessionStorage.getItem('token'),
+    token: getAuthToken(),
     userInfo: storedUser
       ? {
           id: storedUser.userId || 0,
@@ -69,7 +69,7 @@ const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
 export const useUserStore = defineStore('user', () => {
   const storedSession = getStoredSession()
 
-  const token = ref<string | null>(storedSession.token)
+  const token = ref<string | null>(storedSession.token ?? null)
   const userInfo = ref<UserInfo | null>(storedSession.userInfo)
   const userRole = ref<UserRole>(storedSession.role)
 
@@ -78,9 +78,9 @@ export const useUserStore = defineStore('user', () => {
   const isSpecialist = computed(() => userRole.value === USER_ROLES.SPECIALIST)
   const isAdmin = computed(() => userRole.value === USER_ROLES.ADMIN)
 
-  const setToken = (newToken: string) => {
+  const setToken = (newToken: string, rememberMe: boolean = false) => {
     token.value = newToken
-    localStorage.setItem('token', newToken)
+    saveToken(newToken, rememberMe)
   }
 
   const setUserInfo = (info: UserInfo, role: UserRole) => {
@@ -103,11 +103,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = null
       userInfo.value = null
       userRole.value = null
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('rememberMe')
-      sessionStorage.removeItem('token')
-      sessionStorage.removeItem('user')
+      clearAuthData()
     }
   }
 

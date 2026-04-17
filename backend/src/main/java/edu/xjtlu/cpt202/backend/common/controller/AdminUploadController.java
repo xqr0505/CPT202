@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.common.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.service.FileUploadService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/uploads")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminUploadController {
 
     private final FileUploadService fileUploadService;

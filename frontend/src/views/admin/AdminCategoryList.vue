@@ -206,13 +206,13 @@ watch(
   gap: 16px;
   margin: 0 0 16px;
   padding: 12px 16px;
-  background: #f8fbff;
-  border: 1px solid #dbe7f3;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
 }
 
 .pagination-summary {
-  color: #475467;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 

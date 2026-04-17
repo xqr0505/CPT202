@@ -97,8 +97,12 @@ const routes = [
     component: () => import('../views/dev/DevDemo.vue')
   },
   {
+    path: '/login',
+    redirect: '/auth/login'
+  },
+  {
     path: '/',
-    redirect: '/auth/login' 
+    redirect: '/customer/search'
   },
   {
     path: '/:pathMatch(.*)*',

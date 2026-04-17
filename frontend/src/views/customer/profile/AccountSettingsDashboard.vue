@@ -2256,10 +2256,10 @@ onBeforeUnmount(() => {
 .page-card {
   padding: var(--space-6);
   background:
-    radial-gradient(circle at top right, rgba(51, 144, 251, 0.12), transparent 32%),
+    radial-gradient(circle at top right, rgba(var(--color-primary-rgb), 0.12), transparent 32%),
     var(--color-bg-surface);
   border-radius: var(--radius-lg);
-  box-shadow: 0 12px 40px rgba(74, 80, 77, 0.08);
+  box-shadow: 0 12px 40px rgba(var(--color-shadow-rgb), 0.08);
 }
 
 .settings-page {
@@ -2324,12 +2324,12 @@ onBeforeUnmount(() => {
 }
 
 .loading-card {
-  border: 1px solid rgba(51, 144, 251, 0.18);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(135deg, rgba(51, 144, 251, 0.12), rgba(255, 255, 255, 0.95)),
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.12), rgba(var(--color-bg-surface-rgb), 0.95)),
     var(--color-bg-surface);
-  box-shadow: 0 12px 30px rgba(74, 80, 77, 0.07);
+  box-shadow: 0 12px 30px rgba(var(--color-shadow-rgb), 0.07);
 }
 
 .settings-card__eyebrow {
@@ -2351,7 +2351,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  box-shadow: 0 8px 24px rgba(74, 80, 77, 0.05);
+  box-shadow: 0 8px 24px rgba(var(--color-shadow-rgb), 0.05);
   transition:
     border-color var(--transition-base),
     box-shadow var(--transition-base),
@@ -2359,27 +2359,27 @@ onBeforeUnmount(() => {
 }
 
 .settings-card--highlighted {
-  border-color: rgba(51, 144, 251, 0.45);
-  box-shadow: 0 14px 32px rgba(51, 144, 251, 0.18);
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  box-shadow: 0 14px 32px rgba(var(--color-primary-rgb), 0.18);
   transform: translateY(-2px);
 }
 
 .settings-card--danger {
-  border-color: rgba(212, 92, 115, 0.24);
+  border-color: rgba(var(--color-danger-rgb), 0.24);
   background:
-    linear-gradient(180deg, rgba(212, 92, 115, 0.06), transparent 46%),
+    linear-gradient(180deg, rgba(var(--color-danger-rgb), 0.06), transparent 46%),
     var(--color-bg-surface);
 }
 
 .settings-card--avatar {
   background:
-    linear-gradient(180deg, rgba(51, 144, 251, 0.08), transparent 54%),
+    linear-gradient(180deg, rgba(var(--color-primary-rgb), 0.08), transparent 54%),
     var(--color-bg-surface);
 }
 
 .settings-card--actions {
   background:
-    linear-gradient(180deg, rgba(211, 155, 46, 0.06), transparent 48%),
+    linear-gradient(180deg, rgba(var(--color-warning-rgb), 0.06), transparent 48%),
     var(--color-bg-surface);
 }
 
@@ -2389,7 +2389,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-5) var(--space-5) var(--space-4);
-  border-bottom: 1px solid rgba(216, 218, 215, 0.85);
+  border-bottom: 1px solid rgba(var(--color-border-rgb), 0.85);
 }
 
 .settings-card__title {
@@ -2427,7 +2427,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-5);
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
@@ -2441,7 +2441,7 @@ onBeforeUnmount(() => {
 
 .avatar-panel__image {
   flex-shrink: 0;
-  background: linear-gradient(135deg, rgba(51, 144, 251, 0.18), rgba(51, 144, 251, 0.34));
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.18), rgba(var(--color-primary-rgb), 0.34));
   color: var(--color-primary);
   font-size: 1.85rem;
   font-weight: 800;
@@ -2579,7 +2579,7 @@ onBeforeUnmount(() => {
 .contact-summary__item,
 .status-overview__item {
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
@@ -2603,7 +2603,7 @@ onBeforeUnmount(() => {
 
 .appearance-panel {
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
@@ -2734,7 +2734,7 @@ onBeforeUnmount(() => {
 
 .strength-panel {
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
@@ -2779,7 +2779,7 @@ onBeforeUnmount(() => {
 .strength-meter__segment {
   height: 10px;
   border-radius: 999px;
-  background: rgba(216, 218, 215, 0.9);
+  background: rgba(var(--color-border-rgb), 0.9);
 }
 
 .strength-meter__segment--active.strength-meter__segment--weak {
@@ -2826,7 +2826,7 @@ onBeforeUnmount(() => {
 .rule-list__item--met .rule-list__indicator {
   border-color: var(--color-success);
   background: var(--color-success);
-  box-shadow: 0 0 0 4px rgba(58, 167, 109, 0.14);
+  box-shadow: 0 0 0 4px rgba(var(--color-success-rgb), 0.14);
 }
 
 .form-footer {
@@ -2835,7 +2835,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
@@ -2875,9 +2875,9 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-4);
-  border: 1px solid rgba(212, 92, 115, 0.18);
+  border: 1px solid rgba(var(--color-danger-rgb), 0.18);
   border-radius: var(--radius-md);
-  background: rgba(212, 92, 115, 0.05);
+  background: rgba(var(--color-danger-rgb), 0.05);
 }
 
 .danger-item__copy {
@@ -2901,7 +2901,7 @@ onBeforeUnmount(() => {
 .danger-item__tag {
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(212, 92, 115, 0.12);
+  background: rgba(var(--color-danger-rgb), 0.12);
   color: var(--color-danger);
   font-size: 0.82rem;
   font-weight: 700;
@@ -2917,34 +2917,34 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-left-width: 4px;
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
 }
 
 .status-banner--success {
-  border-color: rgba(58, 167, 109, 0.22);
+  border-color: rgba(var(--color-success-rgb), 0.22);
   border-left-color: var(--color-success);
-  background: rgba(58, 167, 109, 0.07);
+  background: rgba(var(--color-success-rgb), 0.07);
 }
 
 .status-banner--error {
-  border-color: rgba(212, 92, 115, 0.2);
+  border-color: rgba(var(--color-danger-rgb), 0.2);
   border-left-color: var(--color-danger);
-  background: rgba(212, 92, 115, 0.08);
+  background: rgba(var(--color-danger-rgb), 0.08);
 }
 
 .status-banner--info {
-  border-color: rgba(91, 124, 240, 0.18);
+  border-color: rgba(var(--color-info-rgb), 0.18);
   border-left-color: var(--color-info);
-  background: rgba(91, 124, 240, 0.08);
+  background: rgba(var(--color-info-rgb), 0.08);
 }
 
 .status-banner--warning {
-  border-color: rgba(211, 155, 46, 0.2);
+  border-color: rgba(var(--color-warning-rgb), 0.2);
   border-left-color: var(--color-warning);
-  background: rgba(211, 155, 46, 0.1);
+  background: rgba(var(--color-warning-rgb), 0.1);
 }
 
 .status-banner__body {
@@ -2968,7 +2968,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  box-shadow: 0 8px 30px rgba(74, 80, 77, 0.08);
+  box-shadow: 0 8px 30px rgba(var(--color-shadow-rgb), 0.08);
   text-align: center;
 }
 
@@ -3030,7 +3030,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.el-progress-bar__outer) {
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(var(--color-bg-surface-rgb), 0.58);
 }
 
 :deep(.el-progress-bar__inner) {
@@ -3041,7 +3041,7 @@ onBeforeUnmount(() => {
 :deep(.el-select__wrapper) {
   border-radius: 12px;
   min-height: 44px;
-  box-shadow: 0 0 0 1px rgba(216, 218, 215, 0.95) inset;
+  box-shadow: 0 0 0 1px rgba(var(--color-border-rgb), 0.95) inset;
 }
 
 :deep(.el-form-item__label) {
@@ -3106,3 +3106,4 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+

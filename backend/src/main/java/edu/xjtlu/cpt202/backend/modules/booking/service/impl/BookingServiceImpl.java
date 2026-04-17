@@ -105,6 +105,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         String normalizedNotes = normalizeNotes(createDTO.getCustomerNotes());
 
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(createDTO.getSpecialistId());
+        validateSpecialistCanBeBooked(specialist);
 
         Booking booking = Booking.builder()
                 .customerId(customerId)
@@ -318,6 +319,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
+        validateSpecialistCanBeBooked(specialist);
         BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
 
         LocalDateTime slotStart = resolveSlotStart(currentSlot);
@@ -384,6 +386,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
         }
 
+        invalidateCustomerBookingCache(currentCustomerId);
         return BookingCancelConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(BookingStatusEnum.CANCELLED.name())
@@ -430,6 +433,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
+        validateSpecialistCanBeBooked(specialist);
         BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
         LocalDateTime now = LocalDateTime.now();
         BookingRescheduleQuoteVO quote = customerBookingChangePolicyService.customerRescheduleQuote(
@@ -473,6 +477,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setDecisionTime(now);
         bookingMapper.updateById(booking);
 
+        invalidateCustomerBookingCache(currentCustomerId);
         return BookingRescheduleConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(booking.getStatus())
@@ -530,6 +535,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {
         return consultationFee == null ? BigDecimal.ZERO : consultationFee;
+    }
+
+    private void validateSpecialistCanBeBooked(SpecialistDetailVO specialist) {
+        if (specialist == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!"ACTIVE".equals(specialist.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "This specialist is inactive and cannot accept bookings");
+        }
     }
 
     private String normalizeTopic(String topic) {

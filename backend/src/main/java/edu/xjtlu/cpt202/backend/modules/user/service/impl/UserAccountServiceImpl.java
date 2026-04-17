@@ -1,10 +1,14 @@
 package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
+import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
@@ -58,6 +62,7 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     private final UserMapper userMapper;
     private final UserSecurityActivityMapper userSecurityActivityMapper;
+    private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
 
     @Override
@@ -117,7 +122,6 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         recordSecurityActivitySafely(user.getId(), EVENT_TYPE_AVATAR_UPDATED, "Updated profile photo.");
-
         return new UserAvatarUploadVO(avatarUrl);
     }
 
@@ -139,6 +143,7 @@ public class UserAccountServiceImpl implements UserAccountService {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update password");
         }
 
+        revokeRefreshTokens(user.getId());
         recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PASSWORD_CHANGED, "Changed account password.");
     }
 
@@ -160,7 +165,47 @@ public class UserAccountServiceImpl implements UserAccountService {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to deactivate account");
         }
 
+        revokeRefreshTokens(user.getId());
         recordSecurityActivitySafely(user.getId(), EVENT_TYPE_ACCOUNT_DEACTIVATED, "Deactivated this account.");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User createUser(String email, String rawPassword, String role, String fullName) {
+        String normalizedEmail = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+        String normalizedRole = role == null ? null : role.trim().toUpperCase(Locale.ROOT);
+
+        if (!StringUtils.hasText(normalizedEmail)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Email is required");
+        }
+        if (!StringUtils.hasText(rawPassword)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Password is required");
+        }
+        if (!StringUtils.hasText(normalizedRole)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "User role is required");
+        }
+        if (!UserRoleEnum.ADMIN.name().equals(normalizedRole)
+                && !UserRoleEnum.SPECIALIST.name().equals(normalizedRole)
+                && !UserRoleEnum.CUSTOMER.name().equals(normalizedRole)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid user role");
+        }
+
+        Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", normalizedEmail));
+        if (existingCount != null && existingCount > 0) {
+            throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
+        }
+
+        User newUser = User.builder()
+                .email(normalizedEmail)
+                .passwordHash(PASSWORD_ENCODER.encode(rawPassword))
+                .role(normalizedRole)
+                .status(AccountStatusEnum.ACTIVE.name())
+                .fullName(StringUtils.hasText(fullName) ? fullName.trim() : null)
+                .loginFailCount(0)
+                .lockTime(null)
+                .build();
+        userMapper.insert(newUser);
+        return newUser;
     }
 
     private User getCurrentUserOrThrow() {
@@ -228,6 +273,10 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (!PASSWORD_ENCODER.matches(currentPassword, user.getPasswordHash())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), CURRENT_PASSWORD_INCORRECT_MESSAGE);
         }
+    }
+
+    private void revokeRefreshTokens(Long userId) {
+        refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", userId));
     }
 
     private void recordSecurityActivitySafely(Long userId, String eventType, String summary) {

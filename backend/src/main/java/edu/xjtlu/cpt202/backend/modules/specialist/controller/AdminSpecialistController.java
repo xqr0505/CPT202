@@ -4,6 +4,7 @@ import edu.xjtlu.cpt202.backend.common.enums.SpecialistLevelEnum;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistListQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistStatusUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpdateDTO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
@@ -13,6 +14,7 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistLevelOptio
 import edu.xjtlu.cpt202.backend.modules.specialist.service.AdminSpecialistService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +31,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/admin/specialists")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminSpecialistController {
 
     private final AdminSpecialistService adminSpecialistService;
@@ -53,7 +56,7 @@ public class AdminSpecialistController {
     }
 
     @PostMapping
-    public Result<Void> createSpecialist(@Valid @RequestBody AdminSpecialistUpdateDTO request) {
+    public Result<Void> createSpecialist(@Valid @RequestBody AdminSpecialistCreateDTO request) {
         adminSpecialistService.createSpecialist(request);
         return Result.success();
     }

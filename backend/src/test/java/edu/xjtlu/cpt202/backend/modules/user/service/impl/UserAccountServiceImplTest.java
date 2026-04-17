@@ -4,6 +4,7 @@ import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
@@ -20,12 +21,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,6 +57,9 @@ class UserAccountServiceImplTest {
     private UserSecurityActivityMapper userSecurityActivityMapper;
 
     @Mock
+    private RefreshTokenMapper refreshTokenMapper;
+
+    @Mock
     private AvatarStorageService avatarStorageService;
 
     @InjectMocks
@@ -83,6 +87,7 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -97,6 +102,7 @@ class UserAccountServiceImplTest {
         assertNull(profile.getAvatarUrl());
         verify(userMapper).selectById(7L);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -114,6 +120,7 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -124,7 +131,7 @@ class UserAccountServiceImplTest {
         );
 
         assertEquals(ResultCodeEnum.UNAUTHORIZED.getCode(), exception.getCode());
-        verifyNoInteractions(userMapper);
+        verifyNoInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -154,6 +161,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).selectById(7L);
         verify(userSecurityActivityMapper).selectList(any());
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -178,6 +186,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(userCaptor.capture());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
 
         User savedUser = userCaptor.getValue();
         assertEquals(7L, savedUser.getId());
@@ -207,6 +216,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(userCaptor.capture());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
 
         User savedUser = userCaptor.getValue();
         assertEquals("Alice Johnson Updated", savedUser.getFullName());
@@ -236,8 +246,8 @@ class UserAccountServiceImplTest {
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).selectOne(any());
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -263,8 +273,8 @@ class UserAccountServiceImplTest {
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).selectOne(any());
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -291,8 +301,8 @@ class UserAccountServiceImplTest {
         verify(userMapper).selectById(7L);
         verify(userMapper).selectOne(any());
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -314,6 +324,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(any(User.class));
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -342,6 +353,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(userCaptor.capture());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper, avatarStorageService);
+        verifyNoInteractions(refreshTokenMapper);
 
         assertEquals("https://cdn.example.com/avatars/new-avatar.png", userCaptor.getValue().getAvatarUrl());
     }
@@ -363,7 +375,7 @@ class UserAccountServiceImplTest {
 
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
         assertEquals("Only JPG, JPEG, PNG, and WEBP images are allowed", exception.getMessage());
-        verifyNoInteractions(userMapper, userSecurityActivityMapper, avatarStorageService);
+        verifyNoInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -383,7 +395,7 @@ class UserAccountServiceImplTest {
 
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
         assertEquals("Avatar image must be 2 MB or smaller", exception.getMessage());
-        verifyNoInteractions(userMapper, userSecurityActivityMapper, avatarStorageService);
+        verifyNoInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -401,7 +413,7 @@ class UserAccountServiceImplTest {
         );
 
         assertEquals(ResultCodeEnum.UNAUTHORIZED.getCode(), exception.getCode());
-        verifyNoInteractions(userMapper, userSecurityActivityMapper, avatarStorageService);
+        verifyNoInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -424,8 +436,10 @@ class UserAccountServiceImplTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).selectById(7L);
         verify(userMapper).updateById(userCaptor.capture());
+        verify(refreshTokenMapper).delete(any());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
-        verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoMoreInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper);
+        verifyNoInteractions(avatarStorageService);
 
         User savedUser = userCaptor.getValue();
         assertNotEquals("NewPass456", savedUser.getPasswordHash());
@@ -457,8 +471,8 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -484,8 +498,8 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -503,8 +517,10 @@ class UserAccountServiceImplTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).selectById(7L);
         verify(userMapper).updateById(userCaptor.capture());
+        verify(refreshTokenMapper).delete(any());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
-        verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoMoreInteractions(userMapper, userSecurityActivityMapper, refreshTokenMapper);
+        verifyNoInteractions(avatarStorageService);
 
         User savedUser = userCaptor.getValue();
         assertEquals(AccountStatusEnum.DEACTIVATED.name(), savedUser.getStatus());
@@ -531,8 +547,8 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test
@@ -552,8 +568,8 @@ class UserAccountServiceImplTest {
 
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).updateById(any(User.class));
-        verifyNoInteractions(userSecurityActivityMapper);
         verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     private void authenticateAs(Object principal) {

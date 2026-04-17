@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { setupRouterGuard } from './permission';
+import { setupRouterGuard } from './permission'
 
 const routes = [
   {
@@ -20,23 +20,24 @@ const routes = [
     component: () => import('../views/auth/ForgotPassword.vue')
   },
   {
-  path: '/admin',
-  component: () => import('../layout/AdminLayout.vue'),
-  meta: { requiresAuth: true, role: 'ADMIN' },
-  children: [
-    { path: 'categories', component: () => import('../views/admin/AdminCategoryList.vue') },
-    { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') },
-    { path: 'specialists/create', component: () => import('../views/admin/AdminSpecialistForm.vue') },
-    { path: 'specialists/:id/edit', component: () => import('../views/admin/AdminSpecialistForm.vue') }
-  ]
-},
+    path: '/admin',
+    component: () => import('../layout/AdminLayout.vue'),
+    meta: { requiresAuth: true, role: 'ADMIN' },
+    children: [
+      { path: 'categories', component: () => import('../views/admin/AdminCategoryList.vue') },
+      { path: 'specialists', component: () => import('../views/admin/AdminSpecialistList.vue') },
+      { path: 'specialists/create', component: () => import('../views/admin/AdminSpecialistForm.vue') },
+      { path: 'specialists/:id/edit', component: () => import('../views/admin/AdminSpecialistForm.vue') }
+    ]
+  },
   {
     path: '/specialist',
     component: () => import('../layout/SpecialistLayout.vue'),
     meta: { requiresAuth: true, role: 'SPECIALIST' },
     children: [
       { path: 'schedule', component: () => import('../views/specialist/ScheduleDashboard.vue') },
-      { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') }
+      { path: 'rules', component: () => import('../views/specialist/RecurringRules.vue') },
+      { path: 'booking-requests', component: () => import('../views/specialist/BookingRequests.vue') }
     ]
   },
   {
@@ -112,9 +113,9 @@ const routes = [
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
+  routes
 })
 
-setupRouterGuard(router);
+setupRouterGuard(router)
 
-export default router;
+export default router

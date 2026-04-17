@@ -275,4 +275,85 @@
         LIMIT 1
     </select>
 
+    <select id="selectPendingRequestsForSpecialist"
+            resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO">
+        SELECT
+            b.id AS id,
+            u.full_name AS customerName,
+            TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
+            TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
+            b.topic AS topic,
+            b.created_at AS submissionTime
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        JOIN users u ON b.customer_id = u.id
+        JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        WHERE sp.user_id = #{currentUserId}
+          AND b.status = #{status}
+        ORDER BY b.created_at DESC
+    </select>
+
+    <select id="selectHandledRequestsForSpecialist"
+            resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO">
+        SELECT
+            b.id AS id,
+            u.full_name AS customerName,
+            TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
+            TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
+            b.topic AS topic,
+            b.created_at AS submissionTime,
+            b.customer_notes AS customerNotes,
+            CASE
+                WHEN b.status = 'CONFIRMED' THEN 'APPROVED'
+                WHEN b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL THEN 'REJECTED'
+                ELSE b.status
+            END AS status,
+            b.decision_time AS decisionTime,
+            b.rejection_reason AS rejectionReason
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        JOIN users u ON b.customer_id = u.id
+        JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        WHERE sp.user_id = #{currentUserId}
+          AND b.decision_time IS NOT NULL
+          AND (
+            b.status = 'CONFIRMED'
+            OR (b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL)
+          )
+        ORDER BY b.decision_time DESC, b.created_at DESC
+    </select>
+
+    <select id="selectBookingRequestDetailForSpecialist"
+            resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO">
+        SELECT
+            b.id AS id,
+            u.full_name AS customerName,
+            TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
+            TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
+            b.topic AS topic,
+            b.created_at AS submissionTime,
+            b.customer_notes AS customerNotes,
+            CASE
+                WHEN b.status = 'CONFIRMED' THEN 'APPROVED'
+                WHEN b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL THEN 'REJECTED'
+                ELSE b.status
+            END AS status,
+            b.decision_time AS decisionTime,
+            b.rejection_reason AS rejectionReason
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        JOIN users u ON b.customer_id = u.id
+        JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        WHERE b.id = #{bookingId}
+          AND sp.user_id = #{currentUserId}
+        LIMIT 1
+    </select>
+
+    <select id="countBookingOwnedBySpecialist" resultType="long">
+        SELECT COUNT(1)
+        FROM bookings b
+        JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        WHERE b.id = #{bookingId}
+          AND sp.user_id = #{currentUserId}
+    </select>
 </mapper>

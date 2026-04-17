@@ -107,12 +107,17 @@ const parsePositiveInteger = (value: unknown, fallback: number) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+const normalizeCategoryId = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 const parseRouteState = () => {
   const query = route.query
-  const parsedCategoryId =
-    typeof query.categoryId === 'string' && query.categoryId.trim()
-      ? Number(query.categoryId)
-      : null
   const parsedSortBy =
     typeof query.sortBy === 'string' &&
     Object.values(SPECIALIST_SORT_OPTIONS).includes(query.sortBy as SpecialistSearchForm['sortBy'])
@@ -121,7 +126,7 @@ const parseRouteState = () => {
 
   filters.value = {
     keyword: typeof query.keyword === 'string' ? query.keyword : '',
-    categoryId: Number.isFinite(parsedCategoryId) ? parsedCategoryId : null,
+    categoryId: normalizeCategoryId(query.categoryId),
     date: typeof query.date === 'string' ? query.date : '',
     sortBy: parsedSortBy,
   }
@@ -134,12 +139,13 @@ const buildSearchQuery = (pageNo: number) => {
     pageNo: String(pageNo),
     pageSize: String(pageSize.value),
   }
+  const categoryId = normalizeCategoryId(filters.value.categoryId)
 
   if (filters.value.keyword.trim()) {
     query.keyword = filters.value.keyword.trim()
   }
-  if (typeof filters.value.categoryId === 'number') {
-    query.categoryId = String(filters.value.categoryId)
+  if (categoryId !== null) {
+    query.categoryId = String(categoryId)
   }
   if (filters.value.date) {
     query.date = filters.value.date
@@ -159,9 +165,10 @@ const loadSpecialists = async () => {
   loading.value = true
 
   try {
+    const categoryId = normalizeCategoryId(filters.value.categoryId)
     const params: SpecialistSearchParams = {
       keyword: filters.value.keyword || undefined,
-      categoryId: filters.value.categoryId ?? undefined,
+      categoryId: categoryId ?? undefined,
       date: filters.value.date || undefined,
       sortBy: filters.value.sortBy,
       pageNo: currentPage.value,

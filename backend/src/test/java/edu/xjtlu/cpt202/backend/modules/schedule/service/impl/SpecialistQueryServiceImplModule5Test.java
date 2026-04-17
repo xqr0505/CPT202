@@ -174,6 +174,7 @@ class SpecialistQueryServiceImplModule5Test {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(18L);
         detail.setName("Dr. Empty");
+        detail.setStatus("ACTIVE");
 
         when(specialistQueryMapper.getSpecialistDetail(18L)).thenReturn(detail);
         when(specialistQueryMapper.listAvailabilityByDate(18L, LocalDate.of(2026, 4, 21)))
@@ -191,6 +192,7 @@ class SpecialistQueryServiceImplModule5Test {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(22L);
         detail.setName("Dr. Ava");
+        detail.setStatus("ACTIVE");
 
         SpecialistAvailabilityVO availability = new SpecialistAvailabilityVO();
         availability.setId(7L);

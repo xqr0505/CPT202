@@ -19,7 +19,7 @@
           placeholder="All categories"
           clearable
           filterable
-          @update:model-value="updateField('categoryId', $event ?? null)"
+          @update:model-value="updateField('categoryId', normalizeCategoryId($event))"
         >
           <el-option
             v-for="category in categories"
@@ -90,6 +90,15 @@ const sortOptions: Array<{ label: string; value: SpecialistSortOption }> = [
   { label: 'Fee: Low to High', value: SPECIALIST_SORT_OPTIONS.FEE_ASC },
   { label: 'Fee: High to Low', value: SPECIALIST_SORT_OPTIONS.FEE_DESC },
 ]
+
+const normalizeCategoryId = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
 
 const updateField = <K extends keyof SpecialistSearchForm>(
   field: K,

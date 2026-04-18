@@ -20,6 +20,7 @@ import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
+import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.Session;
 
@@ -49,6 +50,7 @@ import org.mockito.quality.Strictness;
 class AuthServiceImplTest {
 
     @Mock private UserMapper userMapper;
+    @Mock private UserAccountService userAccountService;
     @Mock private VerificationCodeMapper verificationCodeMapper;
     @Mock private RefreshTokenMapper refreshTokenMapper;
     @Mock private PasswordEncoder passwordEncoder;
@@ -152,7 +154,7 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Only CUSTOMER or SPECIALIST"));
+        assertTrue(ex.getMessage().contains("Only CUSTOMER role is allowed"));
     }
 
     @Test
@@ -207,15 +209,18 @@ class AuthServiceImplTest {
                 .expiresAt(LocalDateTime.now().plusMinutes(5))
                 .build();
         when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
-        when(passwordEncoder.encode(testPassword)).thenReturn("encodedPwd");
-        
-        when(userMapper.insert(any(User.class))).thenAnswer(invocation -> {
-            User u = invocation.getArgument(0);
-            u.setId(1L);   // 模拟数据库生成的ID
-            return 1;
+
+        when(userAccountService.createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull())).thenAnswer(invocation -> {
+            User u = User.builder()
+                    .id(1L)
+                    .email(testEmail)
+                    .passwordHash("encodedPwd")
+                    .role("CUSTOMER")
+                    .status("ACTIVE")
+                    .build();
+            return u;
         });
 
-        // mock JWT 静态方法
         try (MockedStatic<JwtUtils> jwtUtils = mockStatic(JwtUtils.class)) {
             jwtUtils.when(() -> JwtUtils.generateToken(anyLong(), anyString())).thenReturn("mock-jwt-token");
 
@@ -223,17 +228,10 @@ class AuthServiceImplTest {
 
             assertNotNull(response);
             assertEquals("mock-jwt-token", response.getToken());
-            assertEquals(testRole, response.getRole());
+            assertEquals("CUSTOMER", response.getRole());
             assertEquals(testEmail, response.getEmail());
 
-            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-            verify(userMapper).insert(userCaptor.capture());
-            User savedUser = userCaptor.getValue();
-            assertEquals(testEmail, savedUser.getEmail());
-            assertEquals("encodedPwd", savedUser.getPasswordHash());
-            assertEquals(testRole, savedUser.getRole());
-            assertEquals("ACTIVE", savedUser.getStatus());
-
+            verify(userAccountService).createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull());
             verify(verificationCodeMapper).updateById(codeRecord);
             assertTrue(codeRecord.getIsUsed());
         }
@@ -329,8 +327,8 @@ class AuthServiceImplTest {
                 .expiresAt(LocalDateTime.now().plusMinutes(5))
                 .build();
         when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
-        when(passwordEncoder.encode(testPassword)).thenReturn("encodedPwd");
-        when(userMapper.insert(any(User.class))).thenThrow(new RuntimeException("insert failed"));
+        when(userAccountService.createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull()))
+                .thenThrow(new RuntimeException("insert failed"));
 
         assertThrows(RuntimeException.class, () -> authService.register(request));
         verify(verificationCodeMapper, never()).updateById(any(VerificationCode.class));

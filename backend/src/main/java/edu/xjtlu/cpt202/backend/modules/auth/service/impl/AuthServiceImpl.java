@@ -81,7 +81,16 @@ public class AuthServiceImpl implements AuthService {
         
         // 1. 根据类型执行不同校验
         if ("REGISTER".equals(type)) {
-            // 注册模式：只允许创建 CUSTOMER 账号，邮箱必须未被注册
+            String role = request.getRole();
+            if (StrUtil.isBlank(role)) {
+                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role");
+            }
+            role = role.trim().toUpperCase(Locale.ROOT);
+            if (!"CUSTOMER".equals(role)) {
+                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first");
+            }
+
+            // 注册模式：邮箱必须未被注册
             Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
             if (existingCount != null && existingCount > 0) {
                 throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
@@ -180,6 +189,15 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String role = request.getRole();
+        if (StrUtil.isBlank(role)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role");
+        }
+        role = role.trim().toUpperCase(Locale.ROOT);
+        if (!"CUSTOMER".equals(role)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER role is allowed");
+        }
+
         Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
         if (existingCount != null && existingCount > 0) {
             throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");

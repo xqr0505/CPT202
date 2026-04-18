@@ -29,8 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -129,6 +131,26 @@ class SpecialistQueryServiceImplModule5Test {
     }
 
     @Test
+    void searchSpecialists_generatesSlotsWhenDateFilterIsProvided() {
+        SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
+        query.setDate(LocalDate.of(2026, 4, 25));
+        query.setSortBy("recommended");
+
+        IPage<SpecialistSummaryVO> searchPage = new Page<>(1, 12);
+        searchPage.setTotal(0);
+        searchPage.setRecords(List.of());
+
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+                .thenReturn(searchPage);
+
+        PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
+
+        assertNotNull(result);
+        verify(recurringRuleServiceImpl)
+                .ensureSlotsGeneratedForDateRange(LocalDate.of(2026, 4, 25), LocalDate.of(2026, 4, 25));
+    }
+
+    @Test
     void searchSpecialists_acceptsLevelDescendingSort() {
         SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
         query.setSortBy("levelDesc");
@@ -148,6 +170,24 @@ class SpecialistQueryServiceImplModule5Test {
                 any(),
                 eq(query)
         );
+    }
+
+    @Test
+    void searchSpecialists_doesNotGenerateSlotsWhenDateFilterIsMissing() {
+        SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
+        query.setSortBy("recommended");
+
+        IPage<SpecialistSummaryVO> searchPage = new Page<>(1, 12);
+        searchPage.setTotal(0);
+        searchPage.setRecords(List.of());
+
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+                .thenReturn(searchPage);
+
+        PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
+
+        assertNotNull(result);
+        verify(recurringRuleServiceImpl, never()).ensureSlotsGeneratedForDateRange(any(), any());
     }
 
     @Test
@@ -173,6 +213,19 @@ class SpecialistQueryServiceImplModule5Test {
     }
 
     @Test
+    void listAvailability_returnsNotFoundWhenSpecialistMissing() {
+        when(specialistQueryMapper.getSpecialistDetail(77L)).thenReturn(null);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> specialistQueryService.listAvailability(77L, LocalDate.of(2026, 4, 21)));
+
+        assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), exception.getCode());
+        verify(recurringRuleServiceImpl, never())
+                .ensureSlotsGeneratedForSpecialist(anyLong(), any(), any());
+        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any());
+    }
+
+    @Test
     void listAvailability_returnsEmptyListWhenNoSlotsAvailable() {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(18L);
@@ -188,6 +241,25 @@ class SpecialistQueryServiceImplModule5Test {
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void listAvailability_returnsEmptyListForInactiveSpecialist() {
+        SpecialistDetailVO detail = new SpecialistDetailVO();
+        detail.setId(21L);
+        detail.setName("Dr. Offline");
+        detail.setStatus("INACTIVE");
+
+        when(specialistQueryMapper.getSpecialistDetail(21L)).thenReturn(detail);
+
+        List<SpecialistAvailabilityVO> result =
+                specialistQueryService.listAvailability(21L, LocalDate.of(2026, 4, 21));
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+        verify(recurringRuleServiceImpl, never())
+                .ensureSlotsGeneratedForSpecialist(anyLong(), any(), any());
+        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any());
     }
 
     @Test
@@ -214,5 +286,7 @@ class SpecialistQueryServiceImplModule5Test {
         assertEquals(1, result.size());
         assertEquals(LocalTime.of(9, 30), result.get(0).getStartTime());
         assertEquals("Open for booking", result.get(0).getStatus());
+        verify(recurringRuleServiceImpl)
+                .ensureSlotsGeneratedForSpecialist(22L, LocalDate.of(2026, 4, 22), LocalDate.of(2026, 4, 22));
     }
 }

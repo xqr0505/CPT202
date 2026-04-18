@@ -101,6 +101,19 @@ class SpecialistQueryControllerModule5Test {
     }
 
     @Test
+    void searchSpecialists_rejectsPageNoBelowMinimum() throws Exception {
+        mockMvc.perform(get("/api/v1/specialists")
+                        .param("sortBy", "recommended")
+                        .param("pageNo", "0")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("pageNo must be at least 1"));
+
+        verifyNoInteractions(specialistQueryService);
+    }
+
+    @Test
     void getSpecialistDetail_returnsSpecialistProfile() throws Exception {
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(9L);
@@ -117,6 +130,41 @@ class SpecialistQueryControllerModule5Test {
                 .andExpect(jsonPath("$.data.id").value(9))
                 .andExpect(jsonPath("$.data.name").value("Dr. Helen"))
                 .andExpect(jsonPath("$.data.categoryName").value("Psychiatry"));
+    }
+
+    @Test
+    void getSpecialistDetail_returnsNotFoundResponseWhenServiceThrows() throws Exception {
+        when(specialistQueryService.getSpecialistDetail(99L))
+                .thenThrow(new BusinessException(ResultCodeEnum.NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/specialists/99")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
+
+    @Test
+    void listAvailability_requiresDateParameter() throws Exception {
+        mockMvc.perform(get("/api/v1/specialists/9/availability")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("date is required"));
+
+        verifyNoInteractions(specialistQueryService);
+    }
+
+    @Test
+    void listAvailability_rejectsInvalidDateFormat() throws Exception {
+        mockMvc.perform(get("/api/v1/specialists/9/availability")
+                        .param("date", "2026/04/20")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("Invalid parameters"));
+
+        verifyNoInteractions(specialistQueryService);
     }
 
     @Test
@@ -139,6 +187,19 @@ class SpecialistQueryControllerModule5Test {
                 .andExpect(jsonPath("$.data[0].id").value(3))
                 .andExpect(jsonPath("$.data[0].startTime").value("10:00:00"))
                 .andExpect(jsonPath("$.data[0].status").value("Open for booking"));
+    }
+
+    @Test
+    void listAvailability_returnsNotFoundResponseWhenServiceThrows() throws Exception {
+        when(specialistQueryService.listAvailability(9L, LocalDate.of(2026, 4, 20)))
+                .thenThrow(new BusinessException(ResultCodeEnum.NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/specialists/9/availability")
+                        .param("date", "2026-04-20")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("Resource not found"));
     }
 
     @Test
@@ -175,6 +236,43 @@ class SpecialistQueryControllerModule5Test {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.list[0].name").value("Dr. Iris"))
                 .andExpect(jsonPath("$.data.list[0].categoryName").value("Psychiatry"));
+    }
+
+    @Test
+    void searchSpecialists_rejectsPageSizeBelowMinimum() throws Exception {
+        mockMvc.perform(get("/api/v1/specialists")
+                        .param("sortBy", "recommended")
+                        .param("pageSize", "0")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("pageSize must be at least 1"));
+
+        verifyNoInteractions(specialistQueryService);
+    }
+
+    @Test
+    void searchSpecialists_usesDefaultQueryValuesWhenOptionalParamsAreOmitted() throws Exception {
+        when(specialistQueryService.searchSpecialists(any()))
+                .thenReturn(new PageResult<>(0, List.of()));
+
+        mockMvc.perform(get("/api/v1/specialists")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.total").value(0));
+
+        ArgumentCaptor<SpecialistSearchQueryDTO> queryCaptor =
+                ArgumentCaptor.forClass(SpecialistSearchQueryDTO.class);
+        verify(specialistQueryService).searchSpecialists(queryCaptor.capture());
+
+        SpecialistSearchQueryDTO captured = queryCaptor.getValue();
+        assertEquals("recommended", captured.getSortBy());
+        assertEquals(1, captured.getPageNo());
+        assertEquals(12, captured.getPageSize());
+        assertEquals(null, captured.getCategoryId());
+        assertEquals(null, captured.getKeyword());
+        assertEquals(null, captured.getDate());
     }
 
     @Test

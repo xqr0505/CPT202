@@ -132,7 +132,7 @@ const buildOption = (): EChartsOption => {
     DASHBOARD_HABIT_COLOR_TOKEN_SPLIT_LINE,
     DASHBOARD_HABIT_FALLBACK_SPLIT_LINE_COLOR
   )
-  const textColor = getCssVariable('--color-text-primary')
+  const textColor = getCssVariable('--color-text-primary', '#2f3e36')
   const labels = normalizedHabitData.value.map((item) => item.day)
   const values = normalizedHabitData.value.map((item) => item.count)
 
@@ -150,7 +150,7 @@ const buildOption = (): EChartsOption => {
     radar: {
       radius: DASHBOARD_HABIT_RADAR_RADIUS,
       splitNumber: DASHBOARD_HABIT_RADAR_SPLIT_NUMBER,
-      name: { textStyle: { color: textColor } },
+      axisName: { show: true, color: textColor },
       indicator: labels.map((label) => ({ name: label, max: radarMaxValue.value })),
       splitLine: {
         lineStyle: {

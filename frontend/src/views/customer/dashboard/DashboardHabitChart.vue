@@ -86,6 +86,7 @@ const emit = defineEmits<{
 const chartElementRef = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 
 const weekdayLabelSet = new Set<string>(DASHBOARD_WEEKDAY_ORDER)
 
@@ -131,12 +132,15 @@ const buildOption = (): EChartsOption => {
     DASHBOARD_HABIT_COLOR_TOKEN_SPLIT_LINE,
     DASHBOARD_HABIT_FALLBACK_SPLIT_LINE_COLOR
   )
+  const textColor = getCssVariable('--color-text-primary')
   const labels = normalizedHabitData.value.map((item) => item.day)
   const values = normalizedHabitData.value.map((item) => item.count)
 
   return {
+    textStyle: { color: textColor },
     tooltip: {
       trigger: 'item',
+      textStyle: { color: textColor },
       formatter: () => {
         return normalizedHabitData.value
           .map((item) => `${item.day}: ${item.count} ${DASHBOARD_HABIT_TOOLTIP_VISITS_LABEL}`)
@@ -146,6 +150,7 @@ const buildOption = (): EChartsOption => {
     radar: {
       radius: DASHBOARD_HABIT_RADAR_RADIUS,
       splitNumber: DASHBOARD_HABIT_RADAR_SPLIT_NUMBER,
+      name: { textStyle: { color: textColor } },
       indicator: labels.map((label) => ({ name: label, max: radarMaxValue.value })),
       splitLine: {
         lineStyle: {
@@ -222,6 +227,19 @@ onMounted(() => {
     }
   }
   void renderChart()
+
+  // Re-render chart options when theme changes so text colors follow CSS variables
+  if (typeof MutationObserver !== 'undefined') {
+    themeObserver = new MutationObserver(() => {
+      if (chartInstance) {
+        chartInstance.setOption(buildOption(), true)
+        chartInstance.resize()
+      } else {
+        void renderChart()
+      }
+    })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  }
 })
 
 watch(
@@ -241,6 +259,10 @@ onBeforeUnmount(() => {
     resizeObserver.unobserve(chartElementRef.value)
   }
   resizeObserver = null
+  if (themeObserver) {
+    themeObserver.disconnect()
+  }
+  themeObserver = null
   disposeChart()
 })
 </script>
@@ -253,9 +275,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 var(--space-1) var(--space-4) var(--color-shadow);
+  border: none;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: none;
 
   &__header {
     display: flex;

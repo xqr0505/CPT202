@@ -1,3 +1,7 @@
+:root {
+  /* ...existing code... */
+  --color-bg-summary-mobile: rgba(var(--color-primary-rgb), 0.08); /* very light green for mobile summary cards */
+}
 /* Global design tokens */
 :root {
   color-scheme: light;
@@ -133,6 +137,16 @@
   --color-btn-bg-info-hover: var(--color-info);
   --color-btn-text-info-hover: var(--color-text-inverse);
   --color-btn-shadow-info: rgba(var(--color-info-rgb), 0.15);
+
+  /* Responsive Font Overrides (Mobile) */
+  @media (max-width: 900px) {
+    --space-6: 20px; /* Compress max spaces slightly */
+    --space-12: 40px;
+    font-size: 14px;
+    h1, .h1 { font-size: 24px; }
+    h2, .h2 { font-size: 20px; }
+    h3, .h3 { font-size: 18px; }
+  }
 }
 
 :root[data-theme='dark'] {
@@ -152,17 +166,17 @@
   --color-dashboard-habit-split-line: rgba(var(--color-primary-rgb), 0.2);
 
 
-  --color-bg-page: #25322f;
-  --color-bg-surface: #2f3d39;
+  --color-bg-page: #2a2c2d;
+  --color-bg-surface: #37393c;
   --color-bg-surface-rgb: 47, 61, 57;
-  --color-bg-muted: #3a4a45;
+  --color-bg-muted: #444948;
   --color-bg-overlay: rgba(55, 60, 59, 0.92);
 
-  --color-text-primary: #eff5f2;
-  --color-text-secondary: #c2cfca;
-  --color-text-tertiary: #94a39c;
-  --color-text-inverse: #25322f;
-  --color-text-inverse-muted: rgba(37, 50, 47, 0.7);
+  --color-text-primary: #F3F4F3;
+  --color-text-secondary: #C9CCC9;
+  --color-text-tertiary: #9DA39F;
+  --color-text-inverse: #2A2D2C;
+  --color-text-inverse-muted: rgba(42, 45, 44, 0.7);
 
   --color-overlay-inverse: rgba(37, 50, 47, 0.1);
 

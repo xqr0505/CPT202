@@ -87,6 +87,7 @@ const emit = defineEmits<{
 const chartElementRef = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 
 const hasData = computed<boolean>(() => props.categoryData.length > 0)
 
@@ -118,17 +119,25 @@ const getPalette = (): string[] => {
     .filter(Boolean)
 }
 
+const getCssVariable = (token: string, fallbackValue: string): string => {
+  const tokenValue = getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+  return tokenValue || fallbackValue
+}
+
 const buildOption = (): EChartsOption => {
   const pieData = props.categoryData.map((item) => ({
     name: item.categoryName,
     value: Number(item.amount ?? 0),
     count: Number(item.count ?? 0)
   }))
+  const textColor = getCssVariable('--color-text-primary', '#2f3e36')
 
   return {
     color: getPalette(),
+    textStyle: { color: textColor },
     tooltip: {
       trigger: 'item',
+      textStyle: { color: textColor },
       formatter: (params) => {
         const currentParam = Array.isArray(params) ? params[0] : params
         const typedParam = (currentParam ?? {}) as {
@@ -155,7 +164,8 @@ const buildOption = (): EChartsOption => {
       bottom: 0,
       left: 'center',
       itemGap: DASHBOARD_DEPARTMENT_LEGEND_ITEM_GAP,
-      icon: DASHBOARD_DEPARTMENT_LEGEND_ICON
+      icon: DASHBOARD_DEPARTMENT_LEGEND_ICON,
+      textStyle: { color: textColor }
     },
     series: [
       {
@@ -210,6 +220,19 @@ onMounted(() => {
     }
   }
   void renderChart()
+
+  // Re-render chart options when theme changes so text colors follow CSS variables
+  if (typeof MutationObserver !== 'undefined') {
+    themeObserver = new MutationObserver(() => {
+      if (chartInstance) {
+        chartInstance.setOption(buildOption(), true)
+        chartInstance.resize()
+      } else {
+        void renderChart()
+      }
+    })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  }
 })
 
 watch(
@@ -229,6 +252,10 @@ onBeforeUnmount(() => {
     resizeObserver.unobserve(chartElementRef.value)
   }
   resizeObserver = null
+  if (themeObserver) {
+    themeObserver.disconnect()
+  }
+  themeObserver = null
   disposeChart()
 })
 </script>
@@ -241,9 +268,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 var(--space-1) var(--space-4) var(--color-shadow);
+  border: none;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: none;
 
   &__header {
     display: flex;

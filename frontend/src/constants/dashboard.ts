@@ -24,10 +24,10 @@ export const DASHBOARD_DATE_FILTER_HINT = 'Date filter is optional'
 
 
 export const DASHBOARD_STATISTIC_LABELS = {
-  totalCompletedAppointments: 'Completed Appointments',
-  totalAmountSpent: 'Amount Spent',
-  totalConsultationHours: 'Consultation Hours',
-  consultedExperts: 'My Consulted Experts'
+  totalCompletedAppointments: 'Appointments',
+  totalAmountSpent: 'Spent',
+  totalConsultationHours: 'Hours',
+  consultedExperts: 'Experts'
 } as const
 
 export const DASHBOARD_RETRY_LABEL = 'Retry'

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * @author QiranXiao
@@ -53,6 +54,20 @@ class AiChatServiceImplTest {
         assertEquals("history=0", replyAfterClear);
     }
 
+    @Test
+    void shouldIncludeCurrentSystemTimeInPrompt() {
+        EchoAssistant echoAssistant = new EchoAssistant();
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(echoAssistant, new InMemoryChatMemoryStore());
+
+        UserContextHolder.setUserId(1001L);
+        String prompt = aiChatService.chat("Check upcoming bookings");
+
+        assertTrue(prompt.contains("Current system time:"));
+        assertTrue(prompt.contains("Use this as the authoritative current time"));
+        assertTrue(prompt.contains("User message:"));
+        assertTrue(prompt.contains("Check upcoming bookings"));
+    }
+
     private static class MemoryAwareAssistant implements Assistant {
 
         private final ChatMemoryStore chatMemoryStore;
@@ -73,6 +88,19 @@ class AiChatServiceImplTest {
             memory.add(UserMessage.userMessage(userMessage));
             memory.add(AiMessage.aiMessage("ok"));
             return "history=" + historySize;
+        }
+
+        @Override
+        public TokenStream streamChat(Long memoryId, String userMessage) {
+            throw new UnsupportedOperationException("Not needed in this test");
+        }
+    }
+
+    private static class EchoAssistant implements Assistant {
+
+        @Override
+        public String chat(Long memoryId, String userMessage) {
+            return userMessage;
         }
 
         @Override

@@ -399,9 +399,9 @@ const formatMoney = (value?: number) => {
 
 const formatSlotTime = (time?: string) => {
   if (!time) return '';
-  const parts = String(time).split(':');
-  if (parts.length >= 2) {
-    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+  const [hour = '', minute = ''] = String(time).split(':');
+  if (hour && minute) {
+    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
   }
   return String(time);
 };

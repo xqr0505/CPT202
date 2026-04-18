@@ -1,7 +1,9 @@
 package edu.xjtlu.cpt202.backend.modules.booking.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.AiBookingSearchDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
@@ -32,6 +34,24 @@ public interface BookingMapper extends BaseMapper<Booking> {
             @Param("currentTime") LocalDateTime currentTime,
             @Param("limit") int limit
     );
+
+    List<AiBookingSearchItemVO> selectAiBookingSearchList(@Param("customerId") Long customerId,
+                                                          @Param("query") AiBookingSearchDTO query,
+                                                          @Param("startDate") LocalDate startDate,
+                                                          @Param("endDate") LocalDate endDate,
+                                                          @Param("currentTime") LocalDateTime currentTime,
+                                                          @Param("useUpcomingTimeFilter") boolean useUpcomingTimeFilter,
+                                                          @Param("useHistoryTimeFilter") boolean useHistoryTimeFilter,
+                                                          @Param("sortAscending") boolean sortAscending,
+                                                          @Param("limit") int limit);
+
+    Long countAiBookingSearchList(@Param("customerId") Long customerId,
+                                  @Param("query") AiBookingSearchDTO query,
+                                  @Param("startDate") LocalDate startDate,
+                                  @Param("endDate") LocalDate endDate,
+                                  @Param("currentTime") LocalDateTime currentTime,
+                                  @Param("useUpcomingTimeFilter") boolean useUpcomingTimeFilter,
+                                  @Param("useHistoryTimeFilter") boolean useHistoryTimeFilter);
 
     List<BookingItemVO> selectBookingList(
             @Param("customerId") Long customerId,

@@ -21,6 +21,86 @@
         LIMIT #{limit}
     </select>
 
+    <select id="selectAiBookingSearchList" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchItemVO">
+        SELECT
+            CAST(b.id AS CHAR) AS bookingId,
+            CAST(sp.id AS CHAR) AS specialistId,
+            COALESCE(NULLIF(u.full_name, ''), u.email) AS specialistName,
+            COALESCE(sp.avatar_url, '') AS specialistAvatar,
+            COALESCE(ec.category_name, '') AS categoryName,
+            b.topic AS serviceName,
+            TIMESTAMP(ts.slot_date, ts.start_time) AS appointmentDateTime,
+            b.status AS status,
+            b.price AS amount
+        FROM bookings b
+        INNER JOIN time_slots ts ON b.slot_id = ts.id
+        INNER JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        INNER JOIN users u ON sp.user_id = u.id
+        LEFT JOIN expertise_categories ec ON sp.category_id = ec.id
+        WHERE b.customer_id = #{customerId}
+        <if test="query.expertName != null and query.expertName != ''">
+            AND LOWER(COALESCE(NULLIF(u.full_name, ''), u.email)) LIKE CONCAT('%', LOWER(#{query.expertName}), '%')
+        </if>
+        <if test="query.categoryName != null and query.categoryName != ''">
+            AND LOWER(COALESCE(ec.category_name, '')) LIKE CONCAT('%', LOWER(#{query.categoryName}), '%')
+        </if>
+        <if test="query.status != null and query.status != ''">
+            AND b.status = #{query.status}
+        </if>
+        <if test="startDate != null">
+            AND ts.slot_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND ts.slot_date &lt;= #{endDate}
+        </if>
+        <if test="useUpcomingTimeFilter">
+            AND TIMESTAMP(ts.slot_date, ts.start_time) &gt;= #{currentTime}
+        </if>
+        <if test="useHistoryTimeFilter">
+            AND TIMESTAMP(ts.slot_date, ts.start_time) &lt; #{currentTime}
+        </if>
+        <choose>
+            <when test="sortAscending">
+                ORDER BY ts.slot_date ASC, ts.start_time ASC, b.id ASC
+            </when>
+            <otherwise>
+                ORDER BY ts.slot_date DESC, ts.start_time DESC, b.id DESC
+            </otherwise>
+        </choose>
+        LIMIT #{limit}
+    </select>
+
+    <select id="countAiBookingSearchList" resultType="long">
+        SELECT COUNT(*)
+        FROM bookings b
+        INNER JOIN time_slots ts ON b.slot_id = ts.id
+        INNER JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        INNER JOIN users u ON sp.user_id = u.id
+        LEFT JOIN expertise_categories ec ON sp.category_id = ec.id
+        WHERE b.customer_id = #{customerId}
+        <if test="query.expertName != null and query.expertName != ''">
+            AND LOWER(COALESCE(NULLIF(u.full_name, ''), u.email)) LIKE CONCAT('%', LOWER(#{query.expertName}), '%')
+        </if>
+        <if test="query.categoryName != null and query.categoryName != ''">
+            AND LOWER(COALESCE(ec.category_name, '')) LIKE CONCAT('%', LOWER(#{query.categoryName}), '%')
+        </if>
+        <if test="query.status != null and query.status != ''">
+            AND b.status = #{query.status}
+        </if>
+        <if test="startDate != null">
+            AND ts.slot_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND ts.slot_date &lt;= #{endDate}
+        </if>
+        <if test="useUpcomingTimeFilter">
+            AND TIMESTAMP(ts.slot_date, ts.start_time) &gt;= #{currentTime}
+        </if>
+        <if test="useHistoryTimeFilter">
+            AND TIMESTAMP(ts.slot_date, ts.start_time) &lt; #{currentTime}
+        </if>
+    </select>
+
     <select id="selectBookingList" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO">
         SELECT
             CAST(b.id AS CHAR) AS id,

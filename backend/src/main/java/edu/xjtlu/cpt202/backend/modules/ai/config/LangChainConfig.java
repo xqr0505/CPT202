@@ -8,7 +8,10 @@ import dev.langchain4j.service.AiServices;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
+import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -48,7 +51,7 @@ public class LangChainConfig {
             }
         }
 
-        return builder.build();
+        return new SanitizingChatLanguageModel(builder.build());
     }
 
     @Bean
@@ -68,7 +71,7 @@ public class LangChainConfig {
             }
         }
 
-        return builder.build();
+        return new SanitizingStreamingChatLanguageModel(builder.build());
     }
 
     @Bean
@@ -84,11 +87,13 @@ public class LangChainConfig {
             ChatLanguageModel chatLanguageModel,
             StreamingChatLanguageModel streamingChatLanguageModel,
             ChatMemoryStore chatMemoryStore,
-            AiChatMemoryProperties aiChatMemoryProperties
+            AiChatMemoryProperties aiChatMemoryProperties,
+            AiBookingSearchTool aiBookingSearchTool
     ) {
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
+                .tools(aiBookingSearchTool)
                 .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
                         .id(memoryId)
                         .maxMessages(aiChatMemoryProperties.getMaxMessages())

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.service.TokenStream;
+import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.config.SecurityConfig;
 import edu.xjtlu.cpt202.backend.common.exception.GlobalExceptionHandler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
@@ -33,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.function.Consumer;
 
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -92,6 +94,33 @@ class AiChatControllerTest {
     }
 
     @Test
+    void chatShouldStreamErrorPayloadWhenTokenStreamFails() throws Exception {
+        when(aiChatService.streamChat(anyString())).thenReturn(
+                new FailingTokenStream(new BusinessException(400, "No bookings matched"))
+        );
+
+        MvcResult result = mockMvc.perform(post("/api/v1/ai/chat")
+                        .with(authentication(customerAuthentication()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "message": "Show my bookings"
+                                }
+                                """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(result))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString(MediaType.TEXT_EVENT_STREAM_VALUE)))
+                .andExpect(content().string(allOf(
+                        containsString("event:done"),
+                        containsString("\"code\":400"),
+                        containsString("\"message\":\"No bookings matched\"")
+                )));
+    }
+
+    @Test
     void chatSyncShouldReturnValidationErrorWhenMessageBlank() throws Exception {
         mockMvc.perform(post("/api/v1/ai/chat/sync")
                         .with(authentication(customerAuthentication()))
@@ -134,11 +163,39 @@ class AiChatControllerTest {
     }
 
     @Test
-    void clearMemoryShouldReturnSuccessForSpecialist() throws Exception {
+    void clearMemoryShouldReturnForbiddenForSpecialist() throws Exception {
         mockMvc.perform(delete("/api/v1/ai/chat/memory")
                         .with(authentication(specialistAuthentication())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void chatShouldReturnForbiddenForSpecialist() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/chat")
+                        .with(authentication(specialistAuthentication()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "message": "Hello"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void chatShouldReturnForbiddenForAdmin() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/chat")
+                        .with(authentication(adminAuthentication()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "message": "Hello"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
     }
 
     private Authentication customerAuthentication() {
@@ -154,6 +211,14 @@ class AiChatControllerTest {
                 2001L,
                 null,
                 AuthorityUtils.createAuthorityList("ROLE_SPECIALIST")
+        );
+    }
+
+    private Authentication adminAuthentication() {
+        return new UsernamePasswordAuthenticationToken(
+                3001L,
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_ADMIN")
         );
     }
 
@@ -214,6 +279,53 @@ class AiChatControllerTest {
             } catch (RuntimeException exception) {
                 onError.accept(exception);
             }
+        }
+    }
+
+    private static class FailingTokenStream implements TokenStream {
+
+        private final RuntimeException failure;
+        private Consumer<Throwable> onError = ignored -> {
+        };
+
+        private FailingTokenStream(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public TokenStream onNext(Consumer<String> onNext) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onRetrieved(Consumer<List<dev.langchain4j.rag.content.Content>> onRetrieved) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onToolExecuted(Consumer<dev.langchain4j.service.tool.ToolExecution> onToolExecuted) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onComplete(Consumer<Response<AiMessage>> onComplete) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onError(Consumer<Throwable> onError) {
+            this.onError = onError;
+            return this;
+        }
+
+        @Override
+        public TokenStream ignoreErrors() {
+            return this;
+        }
+
+        @Override
+        public void start() {
+            onError.accept(failure);
         }
     }
 

@@ -18,7 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.Disabled;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "ai.openai.api-key=dummy",
+    "ai.openai.model-name=gpt-3.5-turbo"  
+})
 @Transactional  
 public class EmailServiceTest {
 

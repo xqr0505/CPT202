@@ -24,7 +24,7 @@ export const DASHBOARD_DATE_FILTER_HINT = 'Date filter is optional'
 
 
 export const DASHBOARD_STATISTIC_LABELS = {
-  totalCompletedAppointments: 'Appointments',
+  totalCompletedAppointments: 'Bookings',
   totalAmountSpent: 'Spent',
   totalConsultationHours: 'Hours',
   consultedExperts: 'Experts'

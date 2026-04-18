@@ -336,5 +336,11 @@ onBeforeUnmount(() => {
   &__canvas {
     width: 100%;
   }
+
+  @media (max-width: 900px) {
+    &__title {
+      font-size: 18px;
+    }
+  }
 }
 </style>

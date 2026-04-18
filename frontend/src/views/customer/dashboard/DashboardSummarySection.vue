@@ -782,7 +782,8 @@ onMounted(() => {
       }
 
       &__card-label {
-        font-size: 12px;
+        font-size: 10px;
+        text-align: left;
       }
 
       &__expert-avatar {
@@ -791,7 +792,7 @@ onMounted(() => {
         font-size: 12px !important;
       }
       &__expert-name {
-        font-size: 13px;
+        font-size: 9px;
         font-weight: 600;
         line-height: 1.2;
       }

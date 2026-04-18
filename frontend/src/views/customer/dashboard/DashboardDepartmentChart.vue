@@ -360,5 +360,11 @@ onBeforeUnmount(() => {
     font-size: calc(var(--space-3) + var(--space-1));
     font-weight: 600;
   }
+
+  @media (max-width: 900px) {
+    &__title {
+      font-size: 18px;
+    }
+  }
 }
 </style>

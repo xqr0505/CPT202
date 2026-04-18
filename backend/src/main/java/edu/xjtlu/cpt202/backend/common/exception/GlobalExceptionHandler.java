@@ -5,8 +5,10 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 
@@ -40,6 +42,16 @@ public class GlobalExceptionHandler {
             message = ResultCodeEnum.PARAM_ERROR.getMessage();
         }
         return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), message);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public Result<Void> handleMissingServletRequestParameterException(MissingServletRequestParameterException e) {
+        return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), e.getParameterName() + " is required");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e) {
+        return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), ResultCodeEnum.PARAM_ERROR.getMessage());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

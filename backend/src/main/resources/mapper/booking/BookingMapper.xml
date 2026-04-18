@@ -64,7 +64,7 @@
                 ORDER BY ts.slot_date ASC, ts.start_time ASC, b.id ASC
             </when>
             <otherwise>
-                ORDER BY ts.slot_date DESC, ts.start_time DESC, b.id DESC
+                ORDER BY ts.slot_date ASC, ts.start_time ASC, b.id DESC
             </otherwise>
         </choose>
         LIMIT #{limit}

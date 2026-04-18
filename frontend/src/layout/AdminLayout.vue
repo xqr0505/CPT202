@@ -1,5 +1,6 @@
 <template>
   <div class="default-layout">
+    <MobileHeader />
     <AppNavbar />
 
     <main class="layout-main">
@@ -12,6 +13,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import MobileHeader from './components/MobileHeader.vue'
 import AppNavbar from './components/AppNavbar.vue'
 import { useUserStore } from '@/stores/user'
 
@@ -39,6 +41,12 @@ onMounted(async () => {
 .layout-main {
   flex: 1;
   padding: var(--space-6) var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .layout-main {
+    padding-top: calc(56px + var(--space-6));
+  }
 }
 
 .content-shell {

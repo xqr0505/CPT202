@@ -3,9 +3,11 @@
     <div class="header-section">
       <div class="title-wrapper">
         <h1 class="main-title">Your Upcoming Appointments</h1>
-        <p class="subtitle">Manage and track your scheduled consultations effortlessly</p>
       </div>
-      <ViewAllLink class="view-all-link" />
+      <router-link to="/customer/bookings" class="view-all-link">
+        View All
+        <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+      </router-link>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -13,7 +15,7 @@
     </div>
 
     <div v-else>
-      <div v-if="appointments.length > 0" class="appointment-list">
+      <div v-if="appointments.length > 0" class="appointment-list slider-capable">
         <div
           v-for="apt in displayedAppointments"
           :key="apt.id"
@@ -60,11 +62,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Clock } from '@element-plus/icons-vue'
+import { Clock, ArrowRight } from '@element-plus/icons-vue'
 import { getUpcomingBookings } from '@/api/booking'
 import type { UpcomingBookingResponse } from '@/api/booking'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
-import ViewAllLink from '@/components/common/ViewAllLink.vue'
 
 const router = useRouter()
 const loading = ref(true)
@@ -134,7 +135,7 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-5);
 
     .title-wrapper {
       display: flex;
@@ -142,16 +143,37 @@ onMounted(() => {
       gap: var(--space-1);
 
       .main-title {
-        font-size: 24px;
+        font-size: 20px;
         font-weight: 700;
         color: var(--color-text-primary);
         margin: 0;
       }
+    }
 
-      .subtitle {
+    .view-all-link {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-primary);
+      text-decoration: none;
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-full);
+      background-color: transparent;
+      transition: all 0.3s ease;
+
+      .arrow-icon {
         font-size: 14px;
-        color: var(--color-text-secondary);
-        margin: 0;
+        transition: transform 0.3s ease;
+      }
+
+      &:hover {
+        background-color: var(--color-primary-soft);
+
+        .arrow-icon {
+          transform: translateX(4px);
+        }
       }
     }
   }
@@ -162,26 +184,29 @@ onMounted(() => {
     gap: var(--space-3);
   }
 
+  /* Desktop formatting: vertical stacked */
   .appointment-card {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: var(--space-4);
-    background-color: var(--color-bg-surface);
+    background-color: var(--color-primary-soft);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border: none;
+    border-radius: var(--radius-xl);
+    box-shadow: none;
     transition: all 0.3s;
+    flex-shrink: 0;
 
     &:hover {
-      box-shadow: 0 4px 12px var(--color-shadow);
-      border-color: var(--color-primary-soft);
+      box-shadow: none;
+      filter: brightness(0.95);
     }
 
     &.is-today {
-      background-color: var(--color-primary-soft);
+      background-color: var(--color-primary);
       color: var(--color-text-inverse);
-      border-color: var(--color-primary);
+      border-color: transparent;
 
       .date-box {
         background-color: var(--color-bg-surface);
@@ -190,11 +215,11 @@ onMounted(() => {
 
       .expert-name,
       .service-name {
-        color: var(--color-bg-surface);
+        color: var(--color-text-inverse);
       }
 
       .time-block {
-        color: var(--color-bg-surface);
+        color: var(--color-text-inverse);
       }
     }
   }
@@ -203,6 +228,7 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: var(--space-4);
+    min-width: 0;
   }
 
   .date-box {
@@ -212,7 +238,8 @@ onMounted(() => {
     justify-content: center;
     width: 60px;
     height: 60px;
-    background-color: var(--color-bg-page);
+    flex-shrink: 0;
+    background-color: var(--color-bg-surface);
     border-radius: var(--radius-md);
     color: var(--color-primary);
 
@@ -231,6 +258,7 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    min-width: 0;
 
     .expert-info {
       display: flex;
@@ -242,11 +270,57 @@ onMounted(() => {
       font-size: 16px;
       font-weight: 600;
       color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .service-name {
       font-size: 14px;
       color: var(--color-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .card-right {
+    flex-shrink: 0;
+  }
+
+  /* Mobile Swiper style overrides */
+  @media (max-width: 900px) {
+    .header-section {
+      padding: 0 var(--space-4);
+    }
+
+    .slider-capable {
+      flex-direction: row;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: var(--space-2) var(--space-4);
+      gap: var(--space-4);
+
+      /* Hide scrollbar for clean app-like UI */
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+
+    .appointment-card {
+      width: 85%;
+      min-width: 250px;
+      max-width: 320px;
+      scroll-snap-align: center;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-4);
+
+      .card-right {
+        align-self: flex-end;
+      }
     }
   }
 
@@ -261,22 +335,6 @@ onMounted(() => {
       font-size: 14px;
       font-weight: 500;
       color: var(--color-text-secondary);
-    }
-  }
-
-  .footer-section {
-    margin-top: var(--space-4);
-    text-align: center;
-
-    .view-all-link {
-      font-size: 14px;
-      color: var(--color-primary);
-      text-decoration: underline;
-      cursor: pointer;
-
-      &:hover {
-        color: var(--color-primary-dark);
-      }
     }
   }
 }

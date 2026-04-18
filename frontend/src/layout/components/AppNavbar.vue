@@ -48,19 +48,7 @@
         </el-menu-item>
       </el-menu>
 
-      <div class="mobile-user">
-        <el-dropdown trigger="click" placement="top">
-          <span class="user-trigger mobile-trigger" :class="{ 'is-active': route.path.includes('/profile') }">
-            <el-avatar :src="avatarSrc" :size="30">{{ userInitial }}</el-avatar>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="navigateToProfile">Profile</el-dropdown-item>
-              <el-dropdown-item @click="handleLogout">Logout</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
+      <!-- mobile-user avatar moved to MobileHeader.vue -->
     </div>
   </header>
 </template>

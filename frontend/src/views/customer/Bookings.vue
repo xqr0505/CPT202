@@ -458,14 +458,14 @@ const canRescheduleBooking = (row: BookingListItem) => canCancelBooking(row);
 
 const formatMoney = (value?: number) => {
   const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? `楼${amount.toFixed(2)}` : '楼0.00';
+  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '¥0.00';
 };
 
 const formatSlotTime = (time?: string) => {
   if (!time) return '';
-  const [hour = '', minute = ''] = String(time).split(':');
-  if (hour && minute) {
-    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  const parts = String(time).split(':');
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
   }
   return String(time);
 };

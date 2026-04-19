@@ -11,7 +11,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -21,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -37,7 +40,6 @@ class SpecialistBookingControllerTest {
     private BookingService bookingService;
 
     @Test
-    @WithMockUser(roles = "SPECIALIST")
     void getPendingRequests_success() throws Exception {
         SpecialistPendingBookingVO item = new SpecialistPendingBookingVO();
         item.setId(1L);
@@ -49,14 +51,14 @@ class SpecialistBookingControllerTest {
 
         when(bookingService.listPendingRequestsForSpecialist(anyLong())).thenReturn(List.of(item));
 
-        mockMvc.perform(get("/api/v1/specialist/booking-requests/pending"))
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/pending")
+                        .with(authentication(specialistAuthentication())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].customerName").value("Alice"));
     }
 
     @Test
-    @WithMockUser(roles = "SPECIALIST")
     void getHandledRequests_success() throws Exception {
         SpecialistHandledBookingVO item = new SpecialistHandledBookingVO();
         item.setId(2L);
@@ -66,14 +68,14 @@ class SpecialistBookingControllerTest {
 
         when(bookingService.listHandledRequestsForSpecialist(anyLong())).thenReturn(List.of(item));
 
-        mockMvc.perform(get("/api/v1/specialist/booking-requests/history"))
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/history")
+                        .with(authentication(specialistAuthentication())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].status").value("REJECTED"));
     }
 
     @Test
-    @WithMockUser(roles = "SPECIALIST")
     void getBookingRequestDetail_success() throws Exception {
         SpecialistBookingDetailVO detail = new SpecialistBookingDetailVO();
         detail.setId(3L);
@@ -82,29 +84,30 @@ class SpecialistBookingControllerTest {
 
         when(bookingService.getBookingRequestDetailForSpecialist(anyLong(), anyLong())).thenReturn(detail);
 
-        mockMvc.perform(get("/api/v1/specialist/booking-requests/3"))
+        mockMvc.perform(get("/api/v1/specialist/booking-requests/3")
+                        .with(authentication(specialistAuthentication())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.customerName").value("Carol"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
     }
 
     @Test
-    @WithMockUser(roles = "SPECIALIST")
     void approveBookingRequest_success() throws Exception {
         doNothing().when(bookingService).approveBookingRequest(anyLong(), anyLong());
 
         mockMvc.perform(post("/api/v1/specialist/booking-requests/3/approve")
+                        .with(authentication(specialistAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
 
     @Test
-    @WithMockUser(roles = "SPECIALIST")
     void rejectBookingRequest_success() throws Exception {
         doNothing().when(bookingService).rejectBookingRequest(anyLong(), anyLong(), any(SpecialistRejectBookingRequestDTO.class));
 
         mockMvc.perform(post("/api/v1/specialist/booking-requests/3/reject")
+                        .with(authentication(specialistAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -113,5 +116,13 @@ class SpecialistBookingControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
+    }
+
+    private Authentication specialistAuthentication() {
+        return new UsernamePasswordAuthenticationToken(
+                2L,
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_SPECIALIST")
+        );
     }
 }

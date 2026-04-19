@@ -16,6 +16,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingFormDraftVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
@@ -33,6 +34,14 @@ public interface BookingService extends IService<Booking> {
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);
 
     BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO);
+
+    AiBookingFormDraftVO buildAiBookingDraft(
+            Long customerId,
+            Long specialistId,
+            Long slotId,
+            String preferredTopic,
+            String customerNotes
+    );
 
     PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto);
 

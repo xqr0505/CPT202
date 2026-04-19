@@ -3,7 +3,9 @@ package edu.xjtlu.cpt202.backend.modules.ai.config;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -27,6 +29,8 @@ class LangChainConfigTest {
                 return redisTemplate;
             })
             .withBean(AiBookingSearchTool.class, () -> mock(AiBookingSearchTool.class))
+            .withBean(AiBookingFormTool.class, () -> mock(AiBookingFormTool.class))
+            .withBean(AiBookingSubmitTool.class, () -> mock(AiBookingSubmitTool.class))
             .withPropertyValues(
                     "ai.openai.api-key=test-openai-key",
                     "ai.openai.model-name=gpt-4o-mini"

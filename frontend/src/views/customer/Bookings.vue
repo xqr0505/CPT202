@@ -28,6 +28,7 @@
         ref="tableRef"
         :columns="tableColumns"
         :fetchData="fetchData"
+        :rowClassName="resolveRowClassName"
       >
         <template #datetime="{ row }">
           <div class="datetime-cell">
@@ -77,7 +78,7 @@
         </template>
 
         <template #mobile-item="{ row }">
-          <div class="booking-card">
+          <div class="booking-card" :class="{ 'booking-card-highlight': isHighlightedBooking(row) }">
             <div class="card-header">
               <div class="datetime-cell">
                 <el-icon class="calendar-icon"><Calendar /></el-icon>
@@ -258,7 +259,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { Calendar } from '@element-plus/icons-vue'
 import {confirmBookingCancel, confirmBookingReschedule, getBookingCancelQuote, getBookingList, getBookingRescheduleQuote} from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
@@ -272,7 +273,6 @@ import { fetchSpecialistAvailability } from '@/api/specialist'
 import type { SpecialistAvailabilitySlot } from '@/types/specialist'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router';
-import { BOOKING_STATUS } from '@/constants/booking';
 
 defineOptions({ name: 'CustomerBookings' })
 
@@ -296,6 +296,12 @@ const rescheduleDate = ref('');
 const rescheduleAvailability = ref<SpecialistAvailabilitySlot[]>([]);
 const selectedRescheduleSlotId = ref<number | null>(null);
 const rescheduleQuote = ref<Awaited<ReturnType<typeof getBookingRescheduleQuote>> | null>(null);
+const highlightedBookingId = computed(() => {
+  const raw = typeof route.query.highlightBookingId === 'string'
+    ? route.query.highlightBookingId.trim()
+    : '';
+  return raw || '';
+});
 
 const checkQueryAndOpenModal = () => {
   if (route.query.bookingId) {
@@ -306,6 +312,26 @@ const checkQueryAndOpenModal = () => {
 onMounted(() => {
   checkQueryAndOpenModal();
 });
+
+watch(
+  () => route.query.highlightBookingId,
+  (value, previousValue) => {
+    const highlightId = typeof value === 'string' ? value.trim() : '';
+    if (!highlightId) {
+      return;
+    }
+
+    activeTab.value = 'UPCOMING';
+    activeStatus.value = 'null';
+    tableRef.value?.refresh();
+
+    const previousHighlightId = typeof previousValue === 'string' ? previousValue.trim() : '';
+    if (highlightId !== previousHighlightId) {
+      ElMessage.success(`Booking #${highlightId} was created. Highlighted in list.`);
+    }
+  },
+  { immediate: true }
+);
 
 const statusOptions = [
   { label: 'All', value: 'null' },
@@ -367,6 +393,12 @@ const handleStatusChange = () => {
     tableRef.value.refresh()
   }
 }
+
+const isHighlightedBooking = (row: BookingListItem) =>
+  Boolean(highlightedBookingId.value) && String(row.id) === highlightedBookingId.value;
+
+const resolveRowClassName = ({ row }: { row: BookingListItem; rowIndex: number }) =>
+  isHighlightedBooking(row) ? 'booking-row-highlight' : '';
 
 const formatDateTime = (dtStr: string) => {
   if (!dtStr) return ''
@@ -673,6 +705,11 @@ const handleAction = (action: string, row: BookingListItem) => {
     box-shadow: 0 4px 12px var(--color-shadow);
   }
 
+  :deep(.booking-row-highlight > td) {
+    background: rgba(var(--color-primary-rgb), 0.14) !important;
+    box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.35);
+  }
+
   .datetime-cell {
     display: flex;
     align-items: center;
@@ -787,6 +824,11 @@ const handleAction = (action: string, row: BookingListItem) => {
     }
   }
 
+  .booking-card-highlight {
+    border-color: rgba(var(--color-primary-rgb), 0.75);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+  }
+
   .cancel-dialog-content {
     display: flex;
     flex-direction: column;
@@ -877,5 +919,3 @@ const handleAction = (action: string, row: BookingListItem) => {
   }
 }
 </style>
-
-

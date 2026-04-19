@@ -167,10 +167,12 @@ public class BookingServiceImplTest {
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("88.50"));
+        specialist.setStatus("ACTIVE");
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
         when(specialistQueryService.getSpecialistDetail(1L)).thenReturn(specialist);
         when(bookingTopicMapper.countActiveTopicByName("Career Planning")).thenReturn(1L);
+        when(bookingMapper.selectOne(any())).thenReturn(null);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
 
         ArgumentCaptor<Booking> bookingCaptor = ArgumentCaptor.forClass(Booking.class);
@@ -195,6 +197,87 @@ public class BookingServiceImplTest {
 
         assertEquals(TimeSlotStatusEnum.BOOKED.name(), slot.getStatus());
         verify(timeSlotMapper).update(any(TimeSlot.class), any());
+    }
+
+    @Test
+    public void createBooking_ReusesCancelledBookingOnSameSlot() {
+        Long customerId = 66L;
+        BookingCreateDTO createDTO = new BookingCreateDTO();
+        createDTO.setSpecialistId(2L);
+        createDTO.setSlotId(21L);
+        createDTO.setTopic("Initial Consultation");
+        createDTO.setCustomerNotes("Need follow-up plan");
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(21L);
+        slot.setSpecialistId(2L);
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("170.00"));
+        specialist.setStatus("ACTIVE");
+
+        Booking cancelledBooking = new Booking();
+        cancelledBooking.setId(501L);
+        cancelledBooking.setSlotId(21L);
+        cancelledBooking.setStatus(BookingStatusEnum.CANCELLED.name());
+        cancelledBooking.setCustomerId(9L);
+        cancelledBooking.setSpecialistId(2L);
+
+        when(timeSlotMapper.selectById(21L)).thenReturn(slot);
+        when(specialistQueryService.getSpecialistDetail(2L)).thenReturn(specialist);
+        when(bookingTopicMapper.countActiveTopicByName("Initial Consultation")).thenReturn(1L);
+        when(bookingMapper.selectOne(any())).thenReturn(cancelledBooking);
+        when(bookingMapper.updateById(cancelledBooking)).thenReturn(1);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        BookingCreateVO result = bookingService.createBooking(customerId, createDTO);
+
+        assertNotNull(result);
+        assertEquals(501L, result.getBookingId());
+        assertEquals(BookingStatusEnum.PENDING.name(), result.getStatus());
+        assertEquals(customerId, cancelledBooking.getCustomerId());
+        assertEquals("Initial Consultation", cancelledBooking.getTopic());
+        assertEquals("Need follow-up plan", cancelledBooking.getCustomerNotes());
+        assertEquals(new BigDecimal("170.00"), cancelledBooking.getPrice());
+        assertEquals(TimeSlotStatusEnum.BOOKED.name(), slot.getStatus());
+        verify(bookingMapper, never()).insert(any(Booking.class));
+        verify(bookingMapper).updateById(cancelledBooking);
+    }
+
+    @Test
+    public void createBooking_ExistingNonCancelledBookingOnSameSlot() {
+        BookingCreateDTO createDTO = new BookingCreateDTO();
+        createDTO.setSpecialistId(1L);
+        createDTO.setSlotId(11L);
+        createDTO.setTopic("Career Planning");
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(11L);
+        slot.setSpecialistId(1L);
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(BigDecimal.TEN);
+        specialist.setStatus("ACTIVE");
+
+        Booking existing = new Booking();
+        existing.setId(700L);
+        existing.setSlotId(11L);
+        existing.setStatus(BookingStatusEnum.PENDING.name());
+
+        when(timeSlotMapper.selectById(11L)).thenReturn(slot);
+        when(specialistQueryService.getSpecialistDetail(1L)).thenReturn(specialist);
+        when(bookingTopicMapper.countActiveTopicByName("Career Planning")).thenReturn(1L);
+        when(bookingMapper.selectOne(any())).thenReturn(existing);
+
+        BusinessException exception = assertThrows(BusinessException.class, () ->
+                bookingService.createBooking(1L, createDTO));
+
+        assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), exception.getCode());
+        assertEquals("Time slot already booked", exception.getMessage());
+        verify(bookingMapper, never()).insert(any(Booking.class));
+        verify(bookingMapper, never()).updateById(any(Booking.class));
     }
 
     @Test
@@ -291,6 +374,7 @@ public class BookingServiceImplTest {
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(BigDecimal.TEN);
+        specialist.setStatus("ACTIVE");
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
         when(specialistQueryService.getSpecialistDetail(1L)).thenReturn(specialist);
@@ -562,6 +646,7 @@ public class BookingServiceImplTest {
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
 
         BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
                 .allowed(true)
@@ -617,6 +702,7 @@ public class BookingServiceImplTest {
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
 
         BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
                 .allowed(true)
@@ -658,6 +744,77 @@ public class BookingServiceImplTest {
     }
 
     @Test
+    void customerRescheduleConfirm_TargetSlotHasCancelledBookingRecord() {
+        Long bookingId = 1401L;
+        Long newSlotId = 178L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(155L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(155L);
+        currentSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
+
+        Booking cancelledBookingOnNewSlot = new Booking();
+        cancelledBookingOnNewSlot.setId(9001L);
+        cancelledBookingOnNewSlot.setSlotId(newSlotId);
+        cancelledBookingOnNewSlot.setStatus(BookingStatusEnum.CANCELLED.name());
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, no reschedule penalty")
+                .priceDifference(new BigDecimal("20.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .refundAmount(new BigDecimal("0.00"))
+                .payableAmount(new BigDecimal("20.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(155L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
+                any(LocalDateTime.class),
+                eq(new BigDecimal("100.00")),
+                eq(new BigDecimal("120.00"))))
+                .thenReturn(quoted);
+        when(bookingMapper.selectOne(any())).thenReturn(cancelledBookingOnNewSlot);
+        when(bookingMapper.deleteById(9001L)).thenReturn(1);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:detail:1401"));
+
+        BookingRescheduleConfirmVO result = bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L);
+
+        assertNotNull(result);
+        assertEquals(bookingId, result.getBookingId());
+        assertEquals(BookingStatusEnum.PENDING.name(), result.getBookingStatus());
+        verify(bookingMapper).deleteById(9001L);
+        verify(bookingMapper).updateById(argThat(updated ->
+                newSlotId.equals(updated.getSlotId())
+                        && "RESCHEDULE".equals(updated.getChangeType())
+                        && BookingStatusEnum.PENDING.name().equals(updated.getStatus())
+        ));
+    }
+
+    @Test
     void customerRescheduleConfirm_NewSlotUpdateFails() {
         Long bookingId = 402L;
         Long newSlotId = 79L;
@@ -682,6 +839,7 @@ public class BookingServiceImplTest {
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
 
         BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
                 .allowed(true)

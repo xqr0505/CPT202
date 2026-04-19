@@ -1,48 +1,50 @@
 <template>
   <div class="pagination-table">
-    <template v-if="!isMobile">
-      <el-table
-        v-loading="loading"
-        :data="tableData"
-        class="table-content"
-        border
-        stripe
-        :row-class-name="props.rowClassName"
-      >
-        <el-table-column
-          v-for="col in columns"
-          :key="col.prop || col.label"
-          :prop="col.prop"
-          :label="col.label"
-          :width="col.width"
-          :min-width="col.minWidth"
+    <div class="table-container">
+      <template v-if="!isMobile">
+        <el-table
+          v-loading="loading"
+          :data="tableData"
+          class="table-content"
+          border
+          stripe
+          :row-class-name="props.rowClassName"
         >
-          <template #default="scope" v-if="col.slotName || $slots[col.prop || '']">
-            <slot :name="col.slotName || col.prop" :row="scope.row" :index="scope.$index">
-              {{ scope.row[col.prop!] }}
-            </slot>
+          <el-table-column
+            v-for="col in columns"
+            :key="col.prop || col.label"
+            :prop="col.prop"
+            :label="col.label"
+            :width="col.width"
+            :min-width="col.minWidth"
+          >
+            <template #default="scope" v-if="col.slotName || $slots[col.prop || '']">
+              <slot :name="col.slotName || col.prop" :row="scope.row" :index="scope.$index">
+                {{ scope.row[col.prop!] }}
+              </slot>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <template v-else>
+        <div class="mobile-list-content" v-loading="loading">
+          <template v-if="$slots.mobile">
+            <slot name="mobile" :data="tableData"></slot>
           </template>
-        </el-table-column>
-      </el-table>
-    </template>
+          <template v-else>
+            <div v-for="(row, index) in tableData" :key="index" class="mobile-fallback-card">
+              <slot name="mobile-item" :row="row" :index="index">
+                <pre>{{ row }}</pre>
+              </slot>
+            </div>
+          </template>
+          <el-empty v-if="tableData.length === 0 && !loading" description="No Data" />
+        </div>
+      </template>
+    </div>
 
-    <template v-else>
-      <div class="mobile-list-content" v-loading="loading">
-        <template v-if="$slots.mobile">
-          <slot name="mobile" :data="tableData"></slot>
-        </template>
-        <template v-else>
-          <div v-for="(row, index) in tableData" :key="index" class="mobile-fallback-card">
-            <slot name="mobile-item" :row="row" :index="index">
-              <pre>{{ row }}</pre>
-            </slot>
-          </div>
-        </template>
-        <el-empty v-if="tableData.length === 0 && !loading" description="No Data" />
-      </div>
-    </template>
-
-    <div class="pagination-wrapper" :class="{ 'is-mobile': isMobile }">
+    <div class="pagination-container" :class="{ 'is-mobile': isMobile }">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
@@ -74,7 +76,7 @@ export interface FetchDataParams {
   limit: number
 }
 
-export interface FetchDataResult<T = any> {
+export interface FetchDataResult<T = unknown> {
   list: T[]
   total: number
 }
@@ -82,7 +84,7 @@ export interface FetchDataResult<T = any> {
 interface Props {
   columns: TableColumn[]
   fetchData: (params: FetchDataParams) => Promise<FetchDataResult>
-  rowClassName?: string | ((data: { row: any; rowIndex: number }) => string)
+  rowClassName?: string | ((data: { row: unknown; rowIndex: number }) => string)
 }
 
 const props = defineProps<Props>()
@@ -91,7 +93,7 @@ const { width } = useWindowSize()
 const isMobile = computed(() => width.value < 768)
 
 const loading = ref(false)
-const tableData = ref<any[]>([])
+const tableData = ref<unknown[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -136,28 +138,33 @@ onMounted(() => {
 @use '@/styles/variables';
 
 .pagination-table {
-  background-color: var(--color-bg-surface);
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 12px var(--color-shadow);
-  padding: var(--space-4);
+  /* Removed card background and shadow for flat design */
+  background-color: var(---color-bg-page);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 
-  .table-content {
-    width: 100%;
-    margin-bottom: var(--space-4);
-  }
+  .table-container {
+    /* Adjusted styles for flat design */
+    border: 0px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
 
-  .mobile-list-content {
-    margin-bottom: var(--space-4);
-  }
-
-  .pagination-wrapper {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: var(--space-4);
-
-    &.is-mobile {
-      justify-content: center;
+    .table-content {
+      width: 100%;
+      margin-bottom: var(--space-4);
     }
+
+    .mobile-list-content {
+      margin-bottom: var(--space-4);
+    }
+  }
+
+  .pagination-container {
+    /* Adjusted styles for flat design */
+    margin-top: 16px;
+    display: flex;
+    justify-content: center;
   }
 }
 </style>

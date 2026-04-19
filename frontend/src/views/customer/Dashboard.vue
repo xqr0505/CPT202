@@ -58,7 +58,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DASHBOARD_PAGE_TITLE } from '@/constants/dashboard'
 import UpcomingAppointments from './dashboard/UpcomingAppointments.vue'
 import DashboardSummarySection from './dashboard/DashboardSummarySection.vue'
 import { useUserStore } from '@/stores/user'
@@ -78,14 +77,12 @@ const displayName = computed(() => {
 
 const userInitial = computed(() => displayName.value.charAt(0).toUpperCase())
 
-/* Mini Calendar static info */
 const today = new Date()
 const currentMonthName = today.toLocaleDateString('en-US', { month: 'long' })
 const weekDays = computed(() => {
   const days = []
   const d = new Date(today)
-  const currentDay = d.getDay() // 0 = Sun, 1 = Mon ...
-  // Calculate offset to start week at Monday
+  const currentDay = d.getDay()
   const diff = d.getDate() - currentDay + (currentDay === 0 ? -6 : 1)
   d.setDate(diff)
 
@@ -110,7 +107,7 @@ const weekDays = computed(() => {
   padding-right: var(--space-6);
   width: 100%;
   box-sizing: border-box;
-  background: var(--color-bg-page); /* Middle/Main area light green background */
+  background: var(--color-bg-page);
   min-height: 100vh;
 }
 
@@ -128,14 +125,14 @@ const weekDays = computed(() => {
   display: none;
 }
 
-/* Desktop Right Panel (approx 25%-30% width depending on how main flexes, let's fix it at 320px or 30%) */
+
 .dashboard-side-panel {
   width: 300px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  background: var(--color-bg-surface); /* Right side panel white background */
+  background: var(--color-bg-surface);
   padding: var(--space-6);
   border-radius: var(--radius-xl);
 }
@@ -227,7 +224,7 @@ const weekDays = computed(() => {
   }
 
   .dashboard-side-panel {
-    display: none; /* Hide right panel on mobile */
+    display: none;
   }
 
   .mobile-profile-header {
@@ -253,7 +250,7 @@ const weekDays = computed(() => {
 
   .mobile-upcoming-wrapper {
     display: block;
-    margin: 0 calc(var(--space-4) * -1); /* Full bleed for swiper */
+    margin: 0 calc(var(--space-4) * -1);
   }
 
   .dashboard-main {

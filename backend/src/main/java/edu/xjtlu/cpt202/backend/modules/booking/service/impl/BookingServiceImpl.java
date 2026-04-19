@@ -27,6 +27,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingFormDraftVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
@@ -67,6 +68,8 @@ import java.util.concurrent.TimeUnit;
 public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> implements BookingService {
 
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
+    private static final int MAX_CUSTOMER_NOTES_LENGTH = 500;
+    private static final String CUSTOMER_NOTES_ALLOWED_CHARS_REGEX = "[^\\p{L}\\p{N}\\p{P}\\p{Z}\\r\\n]";
 
     private final BookingMapper bookingMapper;
     private final BookingTopicMapper bookingTopicMapper;
@@ -129,10 +132,25 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(createDTO.getSpecialistId());
         validateSpecialistCanBeBooked(specialist);
 
-        Booking booking = new Booking();
+        Booking existingBookingOnSlot = bookingMapper.selectOne(
+                Wrappers.<Booking>lambdaQuery()
+                        .eq(Booking::getSlotId, createDTO.getSlotId())
+                        .last("LIMIT 1")
+        );
+
+        Booking booking;
+        if (existingBookingOnSlot == null) {
+            booking = new Booking();
+            booking.setSlotId(createDTO.getSlotId());
+        } else {
+            if (!BookingStatusEnum.CANCELLED.name().equals(existingBookingOnSlot.getStatus())) {
+                throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot already booked");
+            }
+            booking = existingBookingOnSlot;
+        }
+
         booking.setCustomerId(customerId);
         booking.setSpecialistId(createDTO.getSpecialistId());
-        booking.setSlotId(createDTO.getSlotId());
         booking.setStatus(BookingStatusEnum.PENDING.name());
         booking.setPrice(resolvePrice(specialist.getConsultationFee()));
         booking.setTopic(normalizedTopic);
@@ -144,7 +162,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setChangeType(null);
         booking.setRefundStatus("NONE");
         booking.setRejectionReason(null);
-        bookingMapper.insert(booking);
+
+        if (booking.getId() == null) {
+            bookingMapper.insert(booking);
+        } else {
+            int reused = bookingMapper.updateById(booking);
+            if (reused == 0) {
+                throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to reuse cancelled booking slot");
+            }
+        }
 
         slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
         int updated = timeSlotMapper.update(
@@ -159,6 +185,43 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
         invalidateCustomerBookingCache(customerId);
         return new BookingCreateVO(booking.getId(), booking.getStatus());
+    }
+
+    @Override
+    public AiBookingFormDraftVO buildAiBookingDraft(
+            Long customerId,
+            Long specialistId,
+            Long slotId,
+            String preferredTopic,
+            String customerNotes
+    ) {
+        List<String> availableTopics = Optional.ofNullable(bookingTopicMapper.listActiveTopicNames())
+                .orElseGet(List::of);
+        List<String> warnings = new ArrayList<>();
+
+        Long normalizedSpecialistId = normalizePositiveId(specialistId);
+        if (specialistId != null && normalizedSpecialistId == null) {
+            warnings.add("specialistId must be a positive number.");
+        }
+
+        Long normalizedSlotId = normalizePositiveId(slotId);
+        if (slotId != null && normalizedSlotId == null) {
+            warnings.add("slotId must be a positive number.");
+        }
+
+        String normalizedTopic = normalizeTopic(preferredTopic);
+        String resolvedTopic = resolveDraftTopic(availableTopics, normalizedTopic, warnings);
+        String sanitizedNotes = sanitizeDraftNotes(customerNotes, warnings);
+
+        return AiBookingFormDraftVO.builder()
+                .customerId(customerId)
+                .specialistId(normalizedSpecialistId)
+                .slotId(normalizedSlotId)
+                .topic(resolvedTopic)
+                .customerNotes(sanitizedNotes)
+                .availableTopics(availableTopics)
+                .warnings(warnings)
+                .build();
     }
 
     @Override
@@ -532,6 +595,19 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
         }
 
+        Booking existingBookingOnTargetSlot = bookingMapper.selectOne(
+                Wrappers.<Booking>lambdaQuery()
+                        .eq(Booking::getSlotId, newSlotId)
+                        .ne(Booking::getId, booking.getId())
+                        .last("LIMIT 1")
+        );
+        if (existingBookingOnTargetSlot != null) {
+            if (!BookingStatusEnum.CANCELLED.name().equals(existingBookingOnTargetSlot.getStatus())) {
+                throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
+            }
+            bookingMapper.deleteById(existingBookingOnTargetSlot.getId());
+        }
+
         TimeSlot releaseCurrentSlot = new TimeSlot();
         releaseCurrentSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
         int oldSlotUpdated = timeSlotMapper.update(
@@ -670,6 +746,54 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (allowedTopicCount == null || allowedTopicCount == 0) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Topic is not available for this specialist");
         }
+    }
+
+    private Long normalizePositiveId(Long id) {
+        if (id == null || id <= 0) {
+            return null;
+        }
+        return id;
+    }
+
+    private String resolveDraftTopic(List<String> availableTopics, String preferredTopic, List<String> warnings) {
+        if (availableTopics == null || availableTopics.isEmpty()) {
+            if (preferredTopic.isEmpty()) {
+                warnings.add("No active booking topic is currently configured.");
+                return null;
+            }
+            return preferredTopic;
+        }
+
+        if (preferredTopic.isEmpty()) {
+            return availableTopics.get(0);
+        }
+
+        return availableTopics.stream()
+                .filter(topic -> topic != null && topic.equalsIgnoreCase(preferredTopic))
+                .findFirst()
+                .orElseGet(() -> {
+                    warnings.add("Preferred topic is unavailable. Fallback topic is selected.");
+                    return availableTopics.get(0);
+                });
+    }
+
+    private String sanitizeDraftNotes(String customerNotes, List<String> warnings) {
+        String normalizedNotes = normalizeNotes(customerNotes);
+        if (normalizedNotes == null) {
+            return null;
+        }
+
+        String sanitizedNotes = normalizedNotes.replaceAll(CUSTOMER_NOTES_ALLOWED_CHARS_REGEX, "");
+        if (!sanitizedNotes.equals(normalizedNotes)) {
+            warnings.add("Unsupported characters were removed from customer notes.");
+        }
+
+        if (sanitizedNotes.length() > MAX_CUSTOMER_NOTES_LENGTH) {
+            warnings.add("customerNotes was truncated to 500 characters.");
+            sanitizedNotes = sanitizedNotes.substring(0, MAX_CUSTOMER_NOTES_LENGTH);
+        }
+
+        return sanitizedNotes.trim().isEmpty() ? null : sanitizedNotes;
     }
 
     private void validateUsageSummaryDateRange(UsageSummaryQueryDTO queryDTO) {

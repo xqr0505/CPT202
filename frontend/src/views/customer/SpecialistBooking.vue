@@ -160,11 +160,10 @@
             {{ selectedSlot ? `Selected ${selectedDate} ${selectedSlot.startTime}` : 'Please choose an available time slot first.' }}
           </span>
           <CustomButton
-            :loading="bookingSubmitting"
-            :disabled="bookingSubmitting || !isSpecialistActive || Boolean(notesFormatError)"
+            :disabled="!isSpecialistActive || Boolean(notesFormatError)"
             @click="submitBooking"
           >
-            Confirm booking
+            {{ bookingSubmitting ? 'Submitting...' : 'Confirm booking' }}
           </CustomButton>
         </div>
       </article>
@@ -178,10 +177,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createBooking, getBookingTopics } from '@/api/booking'
+import { getUser } from '@/api/request'
 import { fetchSpecialistAvailability, fetchSpecialistDetail } from '@/api/specialist'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
@@ -190,6 +190,19 @@ import type { SpecialistAvailabilitySlot, SpecialistDetail } from '@/types/speci
 defineOptions({ name: 'SpecialistBooking' })
 
 const CUSTOMER_NOTES_PATTERN = /^[\p{L}\p{N}\p{P}\p{Z}\r\n]*$/u
+const AI_BOOKING_DRAFT_EVENT = 'ai-booking-form-draft'
+const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
+const BOOKING_FORM_DRAFT_STORAGE_KEY = 'customer.booking.form.draft'
+
+interface StoredSessionUser {
+  userId?: number | string | null
+  id?: number | string | null
+}
+
+interface PersistedBookingFormDraft {
+  topic?: string
+  customerNotes?: string
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -200,6 +213,9 @@ const bookingTopics = ref<string[]>([])
 const loading = ref(false)
 const availabilityLoading = ref(false)
 const bookingSubmitting = ref(false)
+const duplicateSubmitClickCount = ref(0)
+
+const DUPLICATE_SUBMIT_CLICK_WARNING_THRESHOLD = 3
 
 const bookingForm = ref({
   slotId: null as number | null,
@@ -239,6 +255,123 @@ const notesFormatError = computed(() => {
     : 'Notes contain unsupported characters.'
 })
 
+const resolveCurrentUserId = (): number | null => {
+  const storedUser = getUser() as StoredSessionUser | null
+  const rawUserId = storedUser?.userId ?? storedUser?.id
+  const parsedUserId = Number(rawUserId)
+  if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+    return null
+  }
+  return Math.trunc(parsedUserId)
+}
+
+const resolveAiBookingContextStorageKey = (): string => {
+  const currentUserId = resolveCurrentUserId()
+  return currentUserId
+    ? `${AI_BOOKING_CONTEXT_STORAGE_KEY}:${currentUserId}`
+    : AI_BOOKING_CONTEXT_STORAGE_KEY
+}
+
+const resolveBookingFormDraftStorageKey = (): string => {
+  const currentUserId = resolveCurrentUserId()
+  return currentUserId
+    ? `${BOOKING_FORM_DRAFT_STORAGE_KEY}:${currentUserId}`
+    : BOOKING_FORM_DRAFT_STORAGE_KEY
+}
+
+const restoreBookingFormDraft = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const scopedStorageKey = resolveBookingFormDraftStorageKey()
+    let raw = window.sessionStorage.getItem(scopedStorageKey)
+    if (!raw && scopedStorageKey !== BOOKING_FORM_DRAFT_STORAGE_KEY) {
+      raw = window.sessionStorage.getItem(BOOKING_FORM_DRAFT_STORAGE_KEY)
+      if (raw) {
+        window.sessionStorage.setItem(scopedStorageKey, raw)
+      }
+    }
+    if (!raw) {
+      return
+    }
+    const parsed = JSON.parse(raw) as PersistedBookingFormDraft
+    if (parsed && typeof parsed === 'object') {
+      if (typeof parsed.topic === 'string') {
+        bookingForm.value.topic = parsed.topic
+      }
+      if (typeof parsed.customerNotes === 'string') {
+        bookingForm.value.customerNotes = parsed.customerNotes
+      }
+    }
+  } catch {
+    // Ignore malformed browser session cache
+  }
+}
+
+const syncBookingFormDraft = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const scopedStorageKey = resolveBookingFormDraftStorageKey()
+  const hasTopic = bookingForm.value.topic.trim().length > 0
+  const hasNotes = bookingForm.value.customerNotes.trim().length > 0
+  if (!hasTopic && !hasNotes) {
+    window.sessionStorage.removeItem(scopedStorageKey)
+    if (scopedStorageKey !== BOOKING_FORM_DRAFT_STORAGE_KEY) {
+      window.sessionStorage.removeItem(BOOKING_FORM_DRAFT_STORAGE_KEY)
+    }
+    return
+  }
+
+  window.sessionStorage.setItem(
+    scopedStorageKey,
+    JSON.stringify({
+      topic: bookingForm.value.topic,
+      customerNotes: bookingForm.value.customerNotes,
+    } satisfies PersistedBookingFormDraft)
+  )
+  if (scopedStorageKey !== BOOKING_FORM_DRAFT_STORAGE_KEY) {
+    window.sessionStorage.removeItem(BOOKING_FORM_DRAFT_STORAGE_KEY)
+  }
+}
+
+const syncAiBookingPageContext = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const contextStorageKey = resolveAiBookingContextStorageKey()
+  const currentSpecialistId = Number(specialistId.value)
+  if (!Number.isFinite(currentSpecialistId) || currentSpecialistId <= 0) {
+    window.sessionStorage.removeItem(contextStorageKey)
+    if (contextStorageKey !== AI_BOOKING_CONTEXT_STORAGE_KEY) {
+      window.sessionStorage.removeItem(AI_BOOKING_CONTEXT_STORAGE_KEY)
+    }
+    return
+  }
+
+  window.sessionStorage.setItem(
+    contextStorageKey,
+    JSON.stringify({
+      specialistId: Math.trunc(currentSpecialistId),
+      specialistName: specialist.value?.name || undefined,
+      consultationFee: specialist.value?.consultationFee ?? undefined,
+      selectedDate: selectedDate.value || undefined,
+      selectedSlotId: bookingForm.value.slotId ?? undefined,
+      selectedSlotStartTime: selectedSlot.value?.startTime || undefined,
+      selectedSlotEndTime: selectedSlot.value?.endTime || undefined,
+      selectedTopic: bookingForm.value.topic || undefined,
+      selectedCustomerNotes: bookingForm.value.customerNotes.trim() || undefined,
+    })
+  )
+  if (contextStorageKey !== AI_BOOKING_CONTEXT_STORAGE_KEY) {
+    window.sessionStorage.removeItem(AI_BOOKING_CONTEXT_STORAGE_KEY)
+  }
+}
+
 const loadDetail = async () => {
   if (!Number.isInteger(specialistId.value) || specialistId.value <= 0) {
     specialist.value = null
@@ -256,11 +389,13 @@ const loadDetail = async () => {
 const loadAvailability = async () => {
   if (!specialist.value || !selectedDate.value) {
     availability.value = []
+    syncAiBookingPageContext()
     return
   }
   if (!isSpecialistActive.value) {
     availability.value = []
     bookingForm.value.slotId = null
+    syncAiBookingPageContext()
     return
   }
 
@@ -270,6 +405,7 @@ const loadAvailability = async () => {
     if (!availability.value.some((slot) => slot.id === bookingForm.value.slotId && slot.status === 'AVAILABLE')) {
       bookingForm.value.slotId = null
     }
+    syncAiBookingPageContext()
   } finally {
     availabilityLoading.value = false
   }
@@ -297,15 +433,76 @@ const selectSlot = (slot: SpecialistAvailabilitySlot) => {
     return
   }
   bookingForm.value.slotId = slot.id
+  syncAiBookingPageContext()
 }
 
 const resetBookingForm = () => {
   bookingForm.value.slotId = null
   bookingForm.value.topic = ''
   bookingForm.value.customerNotes = ''
+  syncAiBookingPageContext()
+}
+
+interface AiBookingDraftPayload {
+  specialistId?: number | null
+  slotId?: number | null
+  topic?: string | null
+  customerNotes?: string | null
+  availableTopics?: string[]
+  warnings?: string[]
+}
+
+const applyAiBookingDraft = (draft: AiBookingDraftPayload) => {
+  const draftSpecialistId = Number(draft.specialistId)
+  if (Number.isFinite(draftSpecialistId) && draftSpecialistId > 0 && draftSpecialistId !== specialistId.value) {
+    ElMessage.warning(`AI draft is for specialist #${draftSpecialistId}. Please open that specialist booking page first.`)
+    return
+  }
+
+  if (draft.topic && bookingTopics.value.includes(draft.topic)) {
+    bookingForm.value.topic = draft.topic
+  }
+
+  if (typeof draft.customerNotes === 'string') {
+    bookingForm.value.customerNotes = draft.customerNotes
+  }
+
+  const draftSlotId = Number(draft.slotId)
+  if (Number.isFinite(draftSlotId) && draftSlotId > 0) {
+    const matchedSlot = availability.value.find(slot => slot.id === draftSlotId && slot.status === 'AVAILABLE')
+    if (matchedSlot) {
+      bookingForm.value.slotId = draftSlotId
+    } else {
+      ElMessage.warning(`AI draft slot #${draftSlotId} is not available on the current date.`)
+    }
+  }
+
+  if (Array.isArray(draft.warnings) && draft.warnings.length > 0) {
+    ElMessage.warning(`AI draft warning: ${draft.warnings[0]}`)
+  } else {
+    ElMessage.success('AI draft has been applied to the booking form.')
+  }
+  syncAiBookingPageContext()
+}
+
+const onAiDraftEvent = (event: Event) => {
+  const customEvent = event as CustomEvent<AiBookingDraftPayload>
+  if (!customEvent.detail) {
+    return
+  }
+  applyAiBookingDraft(customEvent.detail)
 }
 
 const submitBooking = async () => {
+  if (bookingSubmitting.value) {
+    duplicateSubmitClickCount.value += 1
+    if (duplicateSubmitClickCount.value >= DUPLICATE_SUBMIT_CLICK_WARNING_THRESHOLD) {
+      ElMessage.warning('You are clicking too fast. Please wait for the current booking request to finish.')
+      duplicateSubmitClickCount.value = 0
+    }
+    return
+  }
+
   if (!specialist.value) {
     return
   }
@@ -326,6 +523,7 @@ const submitBooking = async () => {
     return
   }
 
+  duplicateSubmitClickCount.value = 0
   bookingSubmitting.value = true
   try {
     const createdBooking = await createBooking({
@@ -362,6 +560,7 @@ const submitBooking = async () => {
     ElMessage.error(message)
   } finally {
     bookingSubmitting.value = false
+    duplicateSubmitClickCount.value = 0
   }
 }
 
@@ -385,7 +584,19 @@ const formatStatus = (status: string) =>
   status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
 
 onMounted(async () => {
+  window.addEventListener(AI_BOOKING_DRAFT_EVENT, onAiDraftEvent as EventListener)
+  restoreBookingFormDraft()
+  syncAiBookingPageContext()
   await loadBookingTopics()
+  if (bookingForm.value.topic && !bookingTopics.value.includes(bookingForm.value.topic)) {
+    bookingForm.value.topic = ''
+  }
+  syncBookingFormDraft()
+  syncAiBookingPageContext()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(AI_BOOKING_DRAFT_EVENT, onAiDraftEvent as EventListener)
 })
 
 watch(
@@ -394,8 +605,7 @@ watch(
     selectedDate.value =
       typeof route.query.date === 'string' && route.query.date ? route.query.date : toLocalDateString()
     bookingForm.value.slotId = null
-    bookingForm.value.topic = ''
-    bookingForm.value.customerNotes = ''
+    syncAiBookingPageContext()
     await loadDetail()
     await loadAvailability()
   },
@@ -403,10 +613,19 @@ watch(
 )
 
 watch(selectedDate, async () => {
+  syncAiBookingPageContext()
   if (specialist.value) {
     await loadAvailability()
   }
 })
+
+watch(
+  () => [bookingForm.value.topic, bookingForm.value.customerNotes],
+  () => {
+    syncBookingFormDraft()
+    syncAiBookingPageContext()
+  }
+)
 </script>
 
 <style scoped lang="scss">

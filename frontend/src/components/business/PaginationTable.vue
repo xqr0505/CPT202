@@ -7,6 +7,7 @@
         class="table-content"
         border
         stripe
+        :row-class-name="props.rowClassName"
       >
         <el-table-column
           v-for="col in columns"
@@ -81,6 +82,7 @@ export interface FetchDataResult<T = any> {
 interface Props {
   columns: TableColumn[]
   fetchData: (params: FetchDataParams) => Promise<FetchDataResult>
+  rowClassName?: string | ((data: { row: any; rowIndex: number }) => string)
 }
 
 const props = defineProps<Props>()

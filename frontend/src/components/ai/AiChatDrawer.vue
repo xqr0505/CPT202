@@ -44,12 +44,59 @@
         />
       </div>
     </div>
+
+    <el-dialog
+      v-model="bookingConfirmDialogVisible"
+      title="Confirm Booking"
+      width="520px"
+      :close-on-click-modal="false"
+      :z-index="3500"
+      append-to-body
+    >
+      <div v-if="bookingPreview" class="booking-confirm-content">
+        <div class="booking-confirm-row">
+          <span>Specialist</span>
+          <strong>{{ bookingPreview.specialistName || `#${bookingPreview.specialistId}` }}</strong>
+        </div>
+        <div class="booking-confirm-row">
+          <span>Time</span>
+          <strong>{{ bookingPreview.slotDate }} {{ bookingPreview.startTime }} - {{ bookingPreview.endTime }}</strong>
+        </div>
+        <div class="booking-confirm-row">
+          <span>Price</span>
+          <strong>{{ formatFee(bookingPreview.consultationFee) }}</strong>
+        </div>
+        <div class="booking-confirm-row">
+          <span>Topic</span>
+          <strong>{{ bookingPreview.topic }}</strong>
+        </div>
+        <div class="booking-confirm-row">
+          <span>Notes</span>
+          <strong>{{ bookingPreview.customerNotes || 'No notes provided' }}</strong>
+        </div>
+      </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <CustomButton :disabled="bookingSubmitting" @click="dismissBookingPreview">
+            Cancel
+          </CustomButton>
+          <CustomButton type="primary" :loading="bookingSubmitting" @click="confirmBookingFromPreview">
+            Confirm booking
+          </CustomButton>
+        </span>
+      </template>
+    </el-dialog>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import CustomButton from '@/components/common/CustomButton.vue'
+import { createBooking } from '@/api/booking'
+import { getUser } from '@/api/request'
 import { useAiChatStore } from '@/stores/aiChat'
 import {
   AI_CHAT_CLEAR_BUTTON_TEXT,
@@ -63,6 +110,547 @@ import AiComposer from './AiComposer.vue'
 import AiMessageList from './AiMessageList.vue'
 
 const aiChatStore = useAiChatStore()
+const router = useRouter()
+const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
+const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
+
+interface AiBookingSubmitPreviewPayload {
+  specialistId: number
+  slotId: number
+  slotDate: string
+  startTime: string
+  endTime: string
+  specialistName?: string | null
+  consultationFee?: number | null
+  topic: string
+  customerNotes?: string | null
+  warnings?: string[]
+}
+
+interface StoredSessionUser {
+  userId?: number | string | null
+  id?: number | string | null
+}
+
+interface AiBookingPageContext {
+  specialistId?: number
+  specialistName?: string
+  consultationFee?: number
+  selectedDate?: string
+  selectedSlotId?: number
+  selectedSlotStartTime?: string
+  selectedSlotEndTime?: string
+  selectedTopic?: string
+  selectedCustomerNotes?: string
+}
+
+const bookingSubmitting = ref(false)
+const bookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
+const bookingConfirmDialogVisible = ref(false)
+const lastPreviewKey = ref('')
+
+const normalizeString = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+const normalizeNumericId = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+  return Math.trunc(parsed)
+}
+
+const normalizeTime = (value: string | null): string | null => {
+  if (!value) {
+    return null
+  }
+  const trimmed = value.trim()
+  const hhmm = trimmed.match(/^(\d{1,2}):(\d{2})$/)
+  if (hhmm) {
+    const hour = Number(hhmm[1])
+    const minute = Number(hhmm[2])
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`
+    }
+  }
+  const hhmmss = trimmed.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
+  if (hhmmss) {
+    const hour = Number(hhmmss[1])
+    const minute = Number(hhmmss[2])
+    const second = Number(hhmmss[3])
+    if (
+      hour >= 0 && hour <= 23 &&
+      minute >= 0 && minute <= 59 &&
+      second >= 0 && second <= 59
+    ) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
+    }
+  }
+  return null
+}
+
+const normalizeLineValue = (value: string | null): string | null => {
+  if (!value) {
+    return null
+  }
+  const sanitized = value
+    .replace(/^[\u2022\-\*\d.)\s]+/, '')
+    .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
+    .trim()
+  return sanitized || null
+}
+
+const extractFirstMatch = (content: string, patterns: RegExp[]): string | null => {
+  for (const pattern of patterns) {
+    const matched = content.match(pattern)
+    if (matched?.[1]) {
+      return matched[1].trim()
+    }
+  }
+  return null
+}
+
+const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
+  const lineCandidate = extractFirstMatch(content, [
+    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D\?\-]?\s*([^\n\r]+)/i,
+  ])
+  const segment = lineCandidate || content
+  const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
+  if (segmentTimes && segmentTimes.length >= 2) {
+    return [segmentTimes[0] ?? null, segmentTimes[1] ?? null]
+  }
+
+  const allTimes = content.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
+  if (allTimes && allTimes.length >= 2) {
+    return [allTimes[0] ?? null, allTimes[1] ?? null]
+  }
+
+  return [null, null]
+}
+
+const normalizeNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const resolveCurrentUserId = (): number | null => {
+  const storedUser = getUser() as StoredSessionUser | null
+  const rawUserId = storedUser?.userId ?? storedUser?.id
+  const parsedUserId = Number(rawUserId)
+  if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+    return null
+  }
+  return Math.trunc(parsedUserId)
+}
+
+const resolveAiBookingContextStorageKey = (): string => {
+  const currentUserId = resolveCurrentUserId()
+  return currentUserId
+    ? `${AI_BOOKING_CONTEXT_STORAGE_KEY}:${currentUserId}`
+    : AI_BOOKING_CONTEXT_STORAGE_KEY
+}
+
+const readAiBookingPageContext = (): AiBookingPageContext | null => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    const scopedStorageKey = resolveAiBookingContextStorageKey()
+    let raw = window.sessionStorage.getItem(scopedStorageKey)
+    if (!raw && scopedStorageKey !== AI_BOOKING_CONTEXT_STORAGE_KEY) {
+      raw = window.sessionStorage.getItem(AI_BOOKING_CONTEXT_STORAGE_KEY)
+    }
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    return parsed as AiBookingPageContext
+  } catch {
+    return null
+  }
+}
+
+const getParsedValueByAliases = (parsed: Record<string, unknown>, aliases: string[]): unknown => {
+  for (const alias of aliases) {
+    if (alias in parsed) {
+      return parsed[alias]
+    }
+  }
+  return undefined
+}
+
+const parseJsonLikeContent = (content: string): Record<string, unknown> | null => {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = codeBlockMatch?.[1]?.trim() || trimmed
+
+  const tryParse = (raw: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  const parsedCandidate = tryParse(candidate)
+  if (parsedCandidate) {
+    return parsedCandidate
+  }
+
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start < 0 || end <= start) {
+    return null
+  }
+
+  return tryParse(candidate.slice(start, end + 1))
+}
+
+const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPreviewPayload | null => {
+  const pageContext = readAiBookingPageContext()
+
+  const parsed = parseJsonLikeContent(content)
+  if (parsed) {
+    const specialistIdFromJsonRaw = normalizeNumericId(
+      getParsedValueByAliases(parsed, ['specialistId', 'specialist_id', '\u533b\u751fID', '\u4e13\u5bb6ID'])
+    )
+    const slotIdFromJsonRaw = normalizeNumericId(
+      getParsedValueByAliases(parsed, ['slotId', 'slot_id', '\u65f6\u6bb5ID'])
+    )
+    const topicFromJson = normalizeString(
+      getParsedValueByAliases(parsed, ['topic', '\u4e3b\u9898'])
+    )
+    const slotDateFromJson = normalizeString(
+      getParsedValueByAliases(parsed, ['slotDate', 'slot_date', '\u65e5\u671f'])
+    )
+    const startTimeFromJson = normalizeTime(normalizeString(
+      getParsedValueByAliases(parsed, ['startTime', 'start_time', '\u5f00\u59cb\u65f6\u95f4'])
+    ))
+    const endTimeFromJson = normalizeTime(normalizeString(
+      getParsedValueByAliases(parsed, ['endTime', 'end_time', '\u7ed3\u675f\u65f6\u95f4'])
+    ))
+    const specialistNameFromJson = normalizeString(
+      getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
+    )
+    const customerNotesFromJson = normalizeString(
+      getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
+    )
+    const consultationFeeFromJson = normalizeNumber(
+      getParsedValueByAliases(parsed, ['consultationFee', 'consultation_fee', 'fee', 'price', '\u54a8\u8be2\u8d39'])
+    )
+
+    const specialistIdFromJson = specialistIdFromJsonRaw || normalizeNumericId(pageContext?.specialistId)
+    const slotIdFromJson = slotIdFromJsonRaw || normalizeNumericId(pageContext?.selectedSlotId)
+
+    if (specialistIdFromJson && slotIdFromJson) {
+      return {
+        specialistId: specialistIdFromJson,
+        slotId: slotIdFromJson,
+        slotDate: slotDateFromJson || normalizeString(pageContext?.selectedDate) || 'N/A',
+        startTime: startTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
+        endTime: endTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
+        specialistName: specialistNameFromJson || normalizeString(pageContext?.specialistName),
+        consultationFee: consultationFeeFromJson ?? normalizeNumber(pageContext?.consultationFee),
+        topic: topicFromJson || normalizeString(pageContext?.selectedTopic) || '',
+        customerNotes: customerNotesFromJson || normalizeString(pageContext?.selectedCustomerNotes),
+      }
+    }
+  }
+
+  const specialistIdRaw = normalizeNumericId(
+    extractFirstMatch(content, [
+      /specialistId\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
+      /specialistId\s*[^\d\n\r]{0,8}(\d+)/i,
+      /specialist\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
+      /specialist\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
+      /(?:\u533b\u751f|\u4e13\u5bb6)\s*id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
+    ])
+  )
+  const slotIdRaw = normalizeNumericId(
+    extractFirstMatch(content, [
+      /slotId\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
+      /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
+      /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
+      /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
+      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D\?]?\s*(\d+)/i,
+      /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
+    ])
+  )
+  const slotDate = normalizeString(
+    extractFirstMatch(content, [
+      /slotDate\s*[:=\uFF1A\uFF1D]\s*(\d{4}-\d{2}-\d{2})/i,
+      /(\d{4}-\d{2}-\d{2})/,
+    ])
+  )
+
+  const startTimeDirect = extractFirstMatch(content, [
+    /startTime\s*[:=\uFF1A\uFF1D]\s*(\d{1,2}:\d{2}(?::\d{2})?)/i,
+  ])
+  const endTimeDirect = extractFirstMatch(content, [
+    /endTime\s*[:=\uFF1A\uFF1D]\s*(\d{1,2}:\d{2}(?::\d{2})?)/i,
+  ])
+  const [rangeStartTime, rangeEndTime] = extractTimeRangeFromContent(content)
+  const startTime = normalizeTime(startTimeDirect || rangeStartTime || null)
+  const endTime = normalizeTime(endTimeDirect || rangeEndTime || null)
+
+  const topic = normalizeLineValue(extractFirstMatch(content, [
+    /(?:\*\*|__)?\s*topic\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\*\*|__)?\s*customer\s*topic\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\*\*|__)?\s*\u4e3b\u9898\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
+    /(?:\*\*|__)?\s*(?:\u4e3b\u9898|topic)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
+  ]))
+  const customerNotes = normalizeLineValue(extractFirstMatch(content, [
+    /(?:\*\*|__)?\s*customerNotes\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\*\*|__)?\s*notes?\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\*\*|__)?\s*\u5907\u6ce8\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
+    /(?:\*\*|__)?\s*(?:\u5907\u6ce8|notes?|customerNotes)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
+  ]))
+  const specialistName = normalizeLineValue(extractFirstMatch(content, [
+    /(?:\*\*|__)?\s*specialistName\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*[:\uFF1A]\s*([^\n\r]+)/i,
+    /(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
+  ]))
+  const consultationFee = normalizeNumber(extractFirstMatch(content, [
+    /consultationFee\s*[:=\uFF1A\uFF1D]\s*([0-9]+(?:\.[0-9]+)?)/i,
+    /(?:\*\*|__)?\s*(?:consultation\s*fee|fee|price)\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/i,
+    /(?:\*\*|__)?\s*\u54a8\u8be2\u8d39\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/,
+    /(?:\u8d39\u7528|\u54a8\u8be2\u8d39|price|fee|consultation\s*fee)\s*[^\d\n\r]{0,6}([0-9]+(?:\.[0-9]+)?)/i,
+  ]))
+
+  const specialistId = specialistIdRaw || normalizeNumericId(pageContext?.specialistId)
+  const slotId = slotIdRaw || normalizeNumericId(pageContext?.selectedSlotId)
+  if (!specialistId || !slotId) {
+    return null
+  }
+
+  return {
+    specialistId,
+    slotId,
+    slotDate: slotDate || normalizeString(pageContext?.selectedDate) || 'N/A',
+    startTime: startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
+    endTime: endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
+    specialistName: specialistName || normalizeString(pageContext?.specialistName),
+    consultationFee: consultationFee ?? normalizeNumber(pageContext?.consultationFee),
+    topic: topic || normalizeString(pageContext?.selectedTopic) || '',
+    customerNotes: customerNotes || normalizeString(pageContext?.selectedCustomerNotes),
+  }
+}
+
+const buildPreviewKey = (preview: AiBookingSubmitPreviewPayload): string => {
+  return [
+    preview.specialistId,
+    preview.slotId,
+    preview.slotDate,
+    preview.startTime,
+    preview.endTime,
+    preview.topic,
+    preview.customerNotes || '',
+  ].join('|')
+}
+
+const BOOKING_CONFLICT_PATTERN = /("success"\s*:\s*false|"readyToSubmit"\s*:\s*false|readyToSubmit\s*[:=\uFF1A\uFF1D]\s*false|not\s+available|already\s+booked|booking\s+conflict|requested\s+slot\s+is\s+not\s+available|time\s+slot\s+is\s+no\s+longer\s+available|please\s+choose\s+another|failed\s+to\s+create\s+booking|failed\s+to\s+submit\s+booking|\u9884\u7ea6\u51b2\u7a81|\u5df2\u88ab\u9884\u7ea6|\u5df2\u88ab\u5360\u7528|\u4e0d\u53ef\u7528|\u9884\u7ea6\u5931\u8d25|\u65f6\u6bb5\u4e0d\u53ef\u7528|\u8bf7\u9009\u62e9\u5176\u4ed6\u65f6\u6bb5)/i
+
+const isBookingConflictContent = (content: string): boolean => {
+  return BOOKING_CONFLICT_PATTERN.test(content || '')
+}
+
+const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
+  const latestAssistant = aiChatStore.messages
+    .slice()
+    .reverse()
+    .find(message => message.role === 'assistant' && message.content?.trim())
+  if (latestAssistant?.content && isBookingConflictContent(latestAssistant.content)) {
+    return
+  }
+  const fallback = latestAssistant ? parsePreviewFromAssistantMessage(latestAssistant.content) : null
+  const pageContext = readAiBookingPageContext()
+  const resolvedSpecialistId =
+    preview.specialistId ||
+    fallback?.specialistId ||
+    normalizeNumericId(pageContext?.specialistId) ||
+    0
+  const resolvedSlotId =
+    preview.slotId ||
+    fallback?.slotId ||
+    normalizeNumericId(pageContext?.selectedSlotId) ||
+    0
+  if (!resolvedSpecialistId || !resolvedSlotId) {
+    return
+  }
+
+  const mergedPreview: AiBookingSubmitPreviewPayload = {
+    specialistId: resolvedSpecialistId,
+    slotId: resolvedSlotId,
+    slotDate: preview.slotDate && preview.slotDate !== 'N/A'
+      ? preview.slotDate
+      : (fallback?.slotDate || normalizeString(pageContext?.selectedDate) || 'N/A'),
+    startTime: preview.startTime && preview.startTime !== '--:--:--'
+      ? preview.startTime
+      : (fallback?.startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--'),
+    endTime: preview.endTime && preview.endTime !== '--:--:--'
+      ? preview.endTime
+      : (fallback?.endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--'),
+    specialistName: preview.specialistName || fallback?.specialistName || normalizeString(pageContext?.specialistName) || null,
+    consultationFee: preview.consultationFee ?? fallback?.consultationFee ?? normalizeNumber(pageContext?.consultationFee),
+    topic: (preview.topic || fallback?.topic || normalizeString(pageContext?.selectedTopic) || '').trim(),
+    customerNotes: (preview.customerNotes || fallback?.customerNotes || normalizeString(pageContext?.selectedCustomerNotes) || '').trim() || null,
+    warnings: preview.warnings
+  }
+
+  const previewKey = buildPreviewKey(mergedPreview)
+  if (previewKey === lastPreviewKey.value && bookingConfirmDialogVisible.value) {
+    return
+  }
+  lastPreviewKey.value = previewKey
+  bookingPreview.value = mergedPreview
+  bookingConfirmDialogVisible.value = true
+}
+
+const BOOKING_PREVIEW_HINT_PATTERN = /(readyToSubmit|ready to submit|confirm booking|submit booking|slot\s*id|bookingid|\u9884\u7ea6|\u786e\u8ba4\u9884\u7ea6|\u786e\u8ba4\u63d0\u4ea4|\u4e0b\u5355)/i
+
+const buildFallbackPreviewFromPageContext = (): AiBookingSubmitPreviewPayload | null => {
+  const pageContext = readAiBookingPageContext()
+  const specialistId = normalizeNumericId(pageContext?.specialistId)
+  const slotId = normalizeNumericId(pageContext?.selectedSlotId)
+  if (!specialistId || !slotId) {
+    return null
+  }
+
+  return {
+    specialistId,
+    slotId,
+    slotDate: normalizeString(pageContext?.selectedDate) || 'N/A',
+    startTime: normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
+    endTime: normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
+    specialistName: normalizeString(pageContext?.specialistName) || null,
+    consultationFee: normalizeNumber(pageContext?.consultationFee),
+    topic: normalizeString(pageContext?.selectedTopic) || '',
+    customerNotes: normalizeString(pageContext?.selectedCustomerNotes) || null,
+  }
+}
+
+const onAiBookingSubmitPreview = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingSubmitPreviewPayload>
+  if (!customEvent.detail) {
+    return
+  }
+  openBookingPreview(customEvent.detail)
+
+  if (customEvent.detail.warnings?.length) {
+    ElMessage.warning(`AI draft warning: ${customEvent.detail.warnings[0]}`)
+  }
+}
+
+const dismissBookingPreview = () => {
+  if (bookingSubmitting.value) {
+    return
+  }
+  bookingConfirmDialogVisible.value = false
+  bookingPreview.value = null
+}
+
+const formatFee = (fee?: number | null) => {
+  if (fee === null || fee === undefined) {
+    return 'N/A'
+  }
+  const amount = Number(fee)
+  return Number.isFinite(amount) ? `CNY ${amount.toFixed(2)}` : 'N/A'
+}
+
+const confirmBookingFromPreview = async () => {
+  if (!bookingPreview.value || bookingSubmitting.value) {
+    return
+  }
+
+  bookingSubmitting.value = true
+  try {
+    const created = await createBooking({
+      specialistId: bookingPreview.value.specialistId,
+      slotId: bookingPreview.value.slotId,
+      topic: bookingPreview.value.topic,
+      customerNotes: bookingPreview.value.customerNotes || '',
+    }, true)
+
+    bookingPreview.value = null
+    bookingConfirmDialogVisible.value = false
+    aiChatStore.closeDrawer()
+    ElMessage.success(`Booking created successfully. Status: ${created.status}.`)
+    void router.push({
+      path: '/customer/bookings'
+    })
+  } catch (error: any) {
+    const message = error?.message || 'Failed to create booking.'
+    ElMessage.error(message)
+  } finally {
+    bookingSubmitting.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
+})
+
+watch(
+  () => {
+    const latest = aiChatStore.messages[aiChatStore.messages.length - 1]
+    if (!latest) {
+      return ''
+    }
+    return `${latest.id}|${latest.role}|${latest.status}|${latest.content}`
+  },
+  snapshot => {
+    if (!snapshot) {
+      return
+    }
+    const latestMessage = aiChatStore.messages[aiChatStore.messages.length - 1]
+    if (!latestMessage || latestMessage.role !== 'assistant' || latestMessage.status !== 'done') {
+      return
+    }
+    if (isBookingConflictContent(latestMessage.content || '')) {
+      return
+    }
+    const parsedPreview = parsePreviewFromAssistantMessage(latestMessage.content || '')
+    if (parsedPreview) {
+      openBookingPreview(parsedPreview)
+      return
+    }
+
+    if (BOOKING_PREVIEW_HINT_PATTERN.test(latestMessage.content || '')) {
+      const fallbackPreview = buildFallbackPreviewFromPageContext()
+      if (fallbackPreview) {
+        openBookingPreview(fallbackPreview)
+      }
+    }
+  }
+)
+
+onBeforeUnmount(() => {
+  window.removeEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
+  bookingConfirmDialogVisible.value = false
+  bookingPreview.value = null
+  bookingSubmitting.value = false
+})
 
 const drawerVisible = computed<boolean>({
   get: () => aiChatStore.isDrawerOpen,
@@ -73,6 +661,8 @@ const drawerVisible = computed<boolean>({
     }
 
     aiChatStore.closeDrawer()
+    bookingConfirmDialogVisible.value = false
+    bookingPreview.value = null
   }
 })
 </script>
@@ -135,6 +725,35 @@ const drawerVisible = computed<boolean>({
   box-shadow: 0 -12px 24px var(--color-bg-primary);
 }
 
+.booking-confirm-content {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.booking-confirm-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.booking-confirm-row span {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.booking-confirm-row strong {
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
 :deep(.ai-chat-drawer__message-area .ai-message-list) {
   flex: 1;
   min-height: 0;
@@ -171,3 +790,4 @@ const drawerVisible = computed<boolean>({
   overflow: hidden;
 }
 </style>
+

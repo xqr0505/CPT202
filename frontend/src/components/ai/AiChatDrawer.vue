@@ -130,6 +130,20 @@ interface StoredSessionUser {
   id?: number | string | null
 }
 
+interface AiBookingContextSlot {
+  id?: number
+  slotDate?: string
+  startTime?: string
+  endTime?: string
+  status?: string
+}
+
+interface AiBookingContextSpecialist {
+  id?: number
+  name?: string
+  consultationFee?: number
+}
+
 interface AiBookingPageContext {
   specialistId?: number
   specialistName?: string
@@ -138,6 +152,8 @@ interface AiBookingPageContext {
   selectedSlotId?: number
   selectedSlotStartTime?: string
   selectedSlotEndTime?: string
+  availableSlots?: AiBookingContextSlot[]
+  visibleSpecialists?: AiBookingContextSpecialist[]
   selectedTopic?: string
   selectedCustomerNotes?: string
 }
@@ -202,6 +218,149 @@ const normalizeTime = (value: string | null): string | null => {
     }
   }
   return null
+}
+
+const normalizeDate = (value: string | null): string | null => {
+  if (!value) {
+    return null
+  }
+  const trimmed = value.trim()
+  const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!dateMatch) {
+    return null
+  }
+  return `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
+}
+
+const normalizeStatus = (value: unknown): string => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+  return value.trim().toUpperCase()
+}
+
+const normalizeDoctorName = (value: string | null): string => {
+  if (!value) {
+    return ''
+  }
+  return value
+    .replace(/^doctor\s+/i, '')
+    .replace(/^dr\.?\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+const resolveSpecialistIdByName = (pageContext: AiBookingPageContext | null, specialistName: string | null): number | null => {
+  const normalizedTargetName = normalizeDoctorName(specialistName)
+  const visibleSpecialists = pageContext?.visibleSpecialists
+  if (!normalizedTargetName || !Array.isArray(visibleSpecialists) || visibleSpecialists.length === 0) {
+    return null
+  }
+
+  const normalizedItems = visibleSpecialists
+    .map(item => ({
+      id: normalizeNumericId(item.id),
+      normalizedName: normalizeDoctorName(normalizeString(item.name)),
+    }))
+    .filter(item => Boolean(item.id) && Boolean(item.normalizedName))
+
+  const exact = normalizedItems.find(item => item.normalizedName === normalizedTargetName)
+  if (exact?.id) {
+    return exact.id
+  }
+
+  const fuzzy = normalizedItems.find(item =>
+    item.normalizedName.includes(normalizedTargetName) ||
+    normalizedTargetName.includes(item.normalizedName)
+  )
+  return fuzzy?.id || null
+}
+
+const extractSpecialistNameFromContent = (content: string): string | null => {
+  const fromLabel = normalizeLineValue(extractFirstMatch(content, [
+    /(?:\*\*|__)?\s*specialistName\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+    /(?:\*\*|__)?\s*(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
+  ]))
+  if (fromLabel) {
+    return fromLabel
+  }
+
+  const drMatched = content.match(/\bDr\.?\s+[A-Za-z][A-Za-z\s'.-]{1,80}/)
+  if (drMatched?.[0]) {
+    return normalizeLineValue(drMatched[0])
+  }
+
+  return null
+}
+
+const resolveCurrentPageSpecialistId = (): number | null => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  const matched = (window.location.pathname || '').match(/^\/customer\/specialists\/(\d+)\/book$/)
+  if (!matched?.[1]) {
+    return null
+  }
+  return normalizeNumericId(matched[1])
+}
+
+const resolveSlotIdByContext = (
+  pageContext: AiBookingPageContext | null,
+  slotDate: string | null,
+  startTime: string | null,
+  endTime: string | null
+): number | null => {
+  const contextSlots = pageContext?.availableSlots
+  if (!Array.isArray(contextSlots) || contextSlots.length === 0) {
+    return null
+  }
+
+  const targetDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
+  const targetStartTime = normalizeTime(startTime)
+  const targetEndTime = normalizeTime(endTime)
+
+  const normalizedSlots = contextSlots
+    .map(slot => ({
+      id: normalizeNumericId(slot.id),
+      slotDate: normalizeDate(normalizeString(slot.slotDate)),
+      startTime: normalizeTime(normalizeString(slot.startTime)),
+      endTime: normalizeTime(normalizeString(slot.endTime)),
+      status: normalizeStatus(slot.status),
+    }))
+    .filter(slot => Boolean(slot.id))
+
+  const candidates = normalizedSlots.filter(slot => {
+    if (targetDate && slot.slotDate !== targetDate) {
+      return false
+    }
+    if (targetStartTime && slot.startTime !== targetStartTime) {
+      return false
+    }
+    if (targetEndTime && slot.endTime !== targetEndTime) {
+      return false
+    }
+    return true
+  })
+
+  if (!candidates.length) {
+    return null
+  }
+
+  const available = candidates.find(slot => slot.status === 'AVAILABLE')
+  return available?.id || candidates[0]?.id || null
+}
+
+const isSlotAvailableInContext = (pageContext: AiBookingPageContext | null, slotId: number): boolean | null => {
+  const contextSlots = pageContext?.availableSlots
+  if (!Array.isArray(contextSlots) || contextSlots.length === 0) {
+    return null
+  }
+  const matched = contextSlots.find(slot => normalizeNumericId(slot.id) === slotId)
+  if (!matched) {
+    return null
+  }
+  return normalizeStatus(matched.status) === 'AVAILABLE'
 }
 
 const normalizeLineValue = (value: string | null): string | null => {
@@ -360,6 +519,8 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
     const specialistNameFromJson = normalizeString(
       getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
     )
+    const specialistNameFromText = extractSpecialistNameFromContent(content)
+    const resolvedSpecialistName = specialistNameFromJson || specialistNameFromText
     const customerNotesFromJson = normalizeString(
       getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
     )
@@ -367,17 +528,30 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
       getParsedValueByAliases(parsed, ['consultationFee', 'consultation_fee', 'fee', 'price', '\u54a8\u8be2\u8d39'])
     )
 
-    const specialistIdFromJson = specialistIdFromJsonRaw || normalizeNumericId(pageContext?.specialistId)
-    const slotIdFromJson = slotIdFromJsonRaw || normalizeNumericId(pageContext?.selectedSlotId)
+    const resolvedSlotDateFromJson = slotDateFromJson || normalizeString(pageContext?.selectedDate)
+    const resolvedStartTimeFromJson =
+      startTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
+    const resolvedEndTimeFromJson =
+      endTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
+
+    const specialistIdFromJson =
+      specialistIdFromJsonRaw ||
+      resolveCurrentPageSpecialistId() ||
+      resolveSpecialistIdByName(pageContext, resolvedSpecialistName) ||
+      normalizeNumericId(pageContext?.specialistId)
+    const slotIdFromJson =
+      slotIdFromJsonRaw ||
+      resolveSlotIdByContext(pageContext, resolvedSlotDateFromJson, resolvedStartTimeFromJson, resolvedEndTimeFromJson) ||
+      normalizeNumericId(pageContext?.selectedSlotId)
 
     if (specialistIdFromJson && slotIdFromJson) {
       return {
         specialistId: specialistIdFromJson,
         slotId: slotIdFromJson,
-        slotDate: slotDateFromJson || normalizeString(pageContext?.selectedDate) || 'N/A',
-        startTime: startTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
-        endTime: endTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
-        specialistName: specialistNameFromJson || normalizeString(pageContext?.specialistName),
+        slotDate: resolvedSlotDateFromJson || 'N/A',
+        startTime: resolvedStartTimeFromJson || '--:--:--',
+        endTime: resolvedEndTimeFromJson || '--:--:--',
+        specialistName: resolvedSpecialistName || normalizeString(pageContext?.specialistName),
         consultationFee: consultationFeeFromJson ?? normalizeNumber(pageContext?.consultationFee),
         topic: topicFromJson || normalizeString(pageContext?.selectedTopic) || '',
         customerNotes: customerNotesFromJson || normalizeString(pageContext?.selectedCustomerNotes),
@@ -433,11 +607,7 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
     /(?:\*\*|__)?\s*\u5907\u6ce8\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
     /(?:\*\*|__)?\s*(?:\u5907\u6ce8|notes?|customerNotes)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
   ]))
-  const specialistName = normalizeLineValue(extractFirstMatch(content, [
-    /(?:\*\*|__)?\s*specialistName\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*[:\uFF1A]\s*([^\n\r]+)/i,
-    /(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
-  ]))
+  const specialistName = extractSpecialistNameFromContent(content)
   const consultationFee = normalizeNumber(extractFirstMatch(content, [
     /consultationFee\s*[:=\uFF1A\uFF1D]\s*([0-9]+(?:\.[0-9]+)?)/i,
     /(?:\*\*|__)?\s*(?:consultation\s*fee|fee|price)\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/i,
@@ -445,8 +615,20 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
     /(?:\u8d39\u7528|\u54a8\u8be2\u8d39|price|fee|consultation\s*fee)\s*[^\d\n\r]{0,6}([0-9]+(?:\.[0-9]+)?)/i,
   ]))
 
-  const specialistId = specialistIdRaw || normalizeNumericId(pageContext?.specialistId)
-  const slotId = slotIdRaw || normalizeNumericId(pageContext?.selectedSlotId)
+  const resolvedSlotDate = slotDate || normalizeString(pageContext?.selectedDate)
+  const resolvedStartTime =
+    startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
+  const resolvedEndTime =
+    endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
+  const specialistId =
+    specialistIdRaw ||
+    resolveCurrentPageSpecialistId() ||
+    resolveSpecialistIdByName(pageContext, specialistName) ||
+    normalizeNumericId(pageContext?.specialistId)
+  const slotId =
+    slotIdRaw ||
+    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
+    normalizeNumericId(pageContext?.selectedSlotId)
   if (!specialistId || !slotId) {
     return null
   }
@@ -454,9 +636,9 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
   return {
     specialistId,
     slotId,
-    slotDate: slotDate || normalizeString(pageContext?.selectedDate) || 'N/A',
-    startTime: startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
-    endTime: endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
+    slotDate: resolvedSlotDate || 'N/A',
+    startTime: resolvedStartTime || '--:--:--',
+    endTime: resolvedEndTime || '--:--:--',
     specialistName: specialistName || normalizeString(pageContext?.specialistName),
     consultationFee: consultationFee ?? normalizeNumber(pageContext?.consultationFee),
     topic: topic || normalizeString(pageContext?.selectedTopic) || '',
@@ -492,32 +674,48 @@ const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
   }
   const fallback = latestAssistant ? parsePreviewFromAssistantMessage(latestAssistant.content) : null
   const pageContext = readAiBookingPageContext()
+  const resolvedSlotDate =
+    (preview.slotDate && preview.slotDate !== 'N/A' ? preview.slotDate : null) ||
+    fallback?.slotDate ||
+    normalizeString(pageContext?.selectedDate) ||
+    'N/A'
+  const resolvedStartTime =
+    (preview.startTime && preview.startTime !== '--:--:--' ? preview.startTime : null) ||
+    fallback?.startTime ||
+    normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) ||
+    '--:--:--'
+  const resolvedEndTime =
+    (preview.endTime && preview.endTime !== '--:--:--' ? preview.endTime : null) ||
+    fallback?.endTime ||
+    normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) ||
+    '--:--:--'
   const resolvedSpecialistId =
     preview.specialistId ||
     fallback?.specialistId ||
+    resolveCurrentPageSpecialistId() ||
+    resolveSpecialistIdByName(pageContext, preview.specialistName || fallback?.specialistName || null) ||
     normalizeNumericId(pageContext?.specialistId) ||
     0
   const resolvedSlotId =
     preview.slotId ||
     fallback?.slotId ||
+    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
     normalizeNumericId(pageContext?.selectedSlotId) ||
     0
   if (!resolvedSpecialistId || !resolvedSlotId) {
+    return
+  }
+  const slotAvailable = isSlotAvailableInContext(pageContext, resolvedSlotId)
+  if (slotAvailable === false) {
     return
   }
 
   const mergedPreview: AiBookingSubmitPreviewPayload = {
     specialistId: resolvedSpecialistId,
     slotId: resolvedSlotId,
-    slotDate: preview.slotDate && preview.slotDate !== 'N/A'
-      ? preview.slotDate
-      : (fallback?.slotDate || normalizeString(pageContext?.selectedDate) || 'N/A'),
-    startTime: preview.startTime && preview.startTime !== '--:--:--'
-      ? preview.startTime
-      : (fallback?.startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--'),
-    endTime: preview.endTime && preview.endTime !== '--:--:--'
-      ? preview.endTime
-      : (fallback?.endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--'),
+    slotDate: resolvedSlotDate,
+    startTime: resolvedStartTime,
+    endTime: resolvedEndTime,
     specialistName: preview.specialistName || fallback?.specialistName || normalizeString(pageContext?.specialistName) || null,
     consultationFee: preview.consultationFee ?? fallback?.consultationFee ?? normalizeNumber(pageContext?.consultationFee),
     topic: (preview.topic || fallback?.topic || normalizeString(pageContext?.selectedTopic) || '').trim(),
@@ -539,17 +737,26 @@ const BOOKING_PREVIEW_HINT_PATTERN = /(readyToSubmit|ready to submit|confirm boo
 const buildFallbackPreviewFromPageContext = (): AiBookingSubmitPreviewPayload | null => {
   const pageContext = readAiBookingPageContext()
   const specialistId = normalizeNumericId(pageContext?.specialistId)
-  const slotId = normalizeNumericId(pageContext?.selectedSlotId)
+  const slotDate = normalizeString(pageContext?.selectedDate)
+  const startTime = normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
+  const endTime = normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
+  const slotId =
+    normalizeNumericId(pageContext?.selectedSlotId) ||
+    resolveSlotIdByContext(pageContext, slotDate, startTime, endTime)
   if (!specialistId || !slotId) {
+    return null
+  }
+  const slotAvailable = isSlotAvailableInContext(pageContext, slotId)
+  if (slotAvailable === false) {
     return null
   }
 
   return {
     specialistId,
     slotId,
-    slotDate: normalizeString(pageContext?.selectedDate) || 'N/A',
-    startTime: normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
-    endTime: normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) || '--:--:--',
+    slotDate: slotDate || 'N/A',
+    startTime: startTime || '--:--:--',
+    endTime: endTime || '--:--:--',
     specialistName: normalizeString(pageContext?.specialistName) || null,
     consultationFee: normalizeNumber(pageContext?.consultationFee),
     topic: normalizeString(pageContext?.selectedTopic) || '',

@@ -61,6 +61,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchSpecialistCategories, fetchSpecialists } from '@/api/specialist'
+import { getUser } from '@/api/request'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
 import SpecialistCard from '@/components/business/SpecialistCard.vue'
 import SpecialistFilterBar from '@/components/business/SpecialistFilterBar.vue'
@@ -75,11 +76,17 @@ import {
 defineOptions({ name: 'SpecialistSearch' })
 
 const DEFAULT_PAGE_SIZE = 12
+const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 const DEFAULT_FILTERS: SpecialistSearchForm = {
   keyword: '',
   categoryId: null,
   date: '',
   sortBy: SPECIALIST_SORT_OPTIONS.RECOMMENDED,
+}
+
+interface StoredSessionUser {
+  userId?: number | string | null
+  id?: number | string | null
 }
 
 const route = useRoute()
@@ -105,6 +112,45 @@ const resultSummary = computed(() => {
 const parsePositiveInteger = (value: unknown, fallback: number) => {
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+const resolveCurrentUserId = (): number | null => {
+  const storedUser = getUser() as StoredSessionUser | null
+  const rawUserId = storedUser?.userId ?? storedUser?.id
+  const parsedUserId = Number(rawUserId)
+  if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+    return null
+  }
+  return Math.trunc(parsedUserId)
+}
+
+const resolveAiBookingContextStorageKey = (): string => {
+  const currentUserId = resolveCurrentUserId()
+  return currentUserId
+    ? `${AI_BOOKING_CONTEXT_STORAGE_KEY}:${currentUserId}`
+    : AI_BOOKING_CONTEXT_STORAGE_KEY
+}
+
+const syncAiSearchPageContext = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const contextStorageKey = resolveAiBookingContextStorageKey()
+  window.sessionStorage.setItem(
+    contextStorageKey,
+    JSON.stringify({
+      selectedDate: filters.value.date || undefined,
+      visibleSpecialists: specialists.value.map(item => ({
+        id: item.id,
+        name: item.name,
+        consultationFee: item.consultationFee,
+      })),
+    })
+  )
+  if (contextStorageKey !== AI_BOOKING_CONTEXT_STORAGE_KEY) {
+    window.sessionStorage.removeItem(AI_BOOKING_CONTEXT_STORAGE_KEY)
+  }
 }
 
 const normalizeCategoryId = (value: unknown): number | null => {
@@ -178,6 +224,7 @@ const loadSpecialists = async () => {
     specialists.value = result.list
     const parsedTotal = Number((result as unknown as { total?: unknown })?.total)
     total.value = Number.isFinite(parsedTotal) ? parsedTotal : 0
+    syncAiSearchPageContext()
   } finally {
     loading.value = false
   }
@@ -223,8 +270,16 @@ watch(
 )
 
 onMounted(async () => {
+  syncAiSearchPageContext()
   await loadCategories()
 })
+
+watch(
+  () => filters.value.date,
+  () => {
+    syncAiSearchPageContext()
+  }
+)
 </script>
 
 <style scoped lang="scss">

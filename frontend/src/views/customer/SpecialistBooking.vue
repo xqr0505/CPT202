@@ -363,6 +363,13 @@ const syncAiBookingPageContext = () => {
       selectedSlotId: bookingForm.value.slotId ?? undefined,
       selectedSlotStartTime: selectedSlot.value?.startTime || undefined,
       selectedSlotEndTime: selectedSlot.value?.endTime || undefined,
+      availableSlots: availability.value.map(slot => ({
+        id: slot.id,
+        slotDate: slot.slotDate || selectedDate.value,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        status: slot.status,
+      })),
       selectedTopic: bookingForm.value.topic || undefined,
       selectedCustomerNotes: bookingForm.value.customerNotes.trim() || undefined,
     })

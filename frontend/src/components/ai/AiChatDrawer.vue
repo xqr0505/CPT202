@@ -1,8 +1,8 @@
 <template>
   <el-drawer
     v-model="drawerVisible"
-    :size="AI_DRAWER_SIZE"
-    :direction="AI_DRAWER_DIRECTION"
+    :size="responsiveSize"
+    :direction="responsiveDirection"
     :append-to-body="AI_DRAWER_APPEND_TO_BODY"
     class="ai-chat-drawer"
   >
@@ -10,7 +10,6 @@
       <div class="ai-chat-drawer__header">
         <div class="ai-chat-drawer__title-group">
           <span class="ai-chat-drawer__title">{{ AI_DRAWER_TITLE }}</span>
-          <span class="ai-chat-drawer__subtitle">{{ AI_CHAT_EMPTY_STATE_TEXT }}</span>
         </div>
         <CustomButton
           type="default"
@@ -100,7 +99,6 @@ import { getUser } from '@/api/request'
 import { useAiChatStore } from '@/stores/aiChat'
 import {
   AI_CHAT_CLEAR_BUTTON_TEXT,
-  AI_CHAT_EMPTY_STATE_TEXT,
   AI_DRAWER_APPEND_TO_BODY,
   AI_DRAWER_DIRECTION,
   AI_DRAWER_SIZE,
@@ -148,6 +146,15 @@ const bookingSubmitting = ref(false)
 const bookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
 const bookingConfirmDialogVisible = ref(false)
 const lastPreviewKey = ref('')
+
+const isMobile = ref(window.innerWidth <= 640)
+
+const updateMobileState = () => {
+  isMobile.value = window.innerWidth <= 640
+}
+
+const responsiveDirection = computed(() => isMobile.value ? 'btt' : AI_DRAWER_DIRECTION)
+const responsiveSize = computed(() => isMobile.value ? '85%' : AI_DRAWER_SIZE)
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -202,7 +209,7 @@ const normalizeLineValue = (value: string | null): string | null => {
     return null
   }
   const sanitized = value
-    .replace(/^[\u2022\-\*\d.)\s]+/, '')
+    .replace(/^[\u2022\-*\d.)\s]+/, '')
     .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
     .trim()
   return sanitized || null
@@ -220,7 +227,7 @@ const extractFirstMatch = (content: string, patterns: RegExp[]): string | null =
 
 const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
   const lineCandidate = extractFirstMatch(content, [
-    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D\?\-]?\s*([^\n\r]+)/i,
+    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D?-]?\s*([^\n\r]+)/i,
   ])
   const segment = lineCandidate || content
   const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
@@ -393,7 +400,7 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
       /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
       /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
       /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D\?]?\s*(\d+)/i,
+      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D?]?\s*(\d+)/i,
       /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
     ])
   )
@@ -608,6 +615,7 @@ const confirmBookingFromPreview = async () => {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', updateMobileState)
   window.addEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
 })
 
@@ -646,6 +654,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateMobileState)
   window.removeEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
   bookingConfirmDialogVisible.value = false
   bookingPreview.value = null
@@ -691,11 +700,6 @@ const drawerVisible = computed<boolean>({
   color: var(--color-text-primary);
 }
 
-.ai-chat-drawer__subtitle {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
 .ai-chat-drawer__body {
   flex: 1;
   min-height: 0;
@@ -711,8 +715,17 @@ const drawerVisible = computed<boolean>({
   display: flex;
   flex-direction: column;
   gap: var(--ai-chat-panel-gap);
-  overflow: hidden;
+  overflow-y: auto;
   padding-bottom: var(--space-4);
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
 }
 
 .ai-chat-drawer__footer {
@@ -720,9 +733,7 @@ const drawerVisible = computed<boolean>({
   position: relative;
   z-index: 10;
   padding-top: var(--space-4);
-  background-color: var(--color-bg-primary);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 -12px 24px var(--color-bg-primary);
+  background-color: var(--color-bg-surface);
 }
 
 .booking-confirm-content {
@@ -761,33 +772,46 @@ const drawerVisible = computed<boolean>({
 
 @media (max-width: 640px) {
   .ai-chat-drawer__header {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row; // Keep header items side by side on mobile for space efficiency
   }
 }
 </style>
-
 
 <style lang="scss">
 .el-drawer.ai-chat-drawer {
   display: flex;
   flex-direction: column;
-}
+  background-color: var(--color-bg-surface);
+  border-radius: 28px 0 0 28px !important; // Desktop rounded
+  box-shadow: none !important;
+  border-left: 1px solid var(--color-border);
 
-.el-drawer.ai-chat-drawer .el-drawer__header {
-  flex: 0 0 auto;
-  margin-bottom: 0;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--ai-chat-toolbar-border-color, #e4e7ed);
-}
+  &.btt {
+    border-radius: 28px 28px 0 0 !important; // Mobile bottom-to-top mode rounded top
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
 
-.el-drawer.ai-chat-drawer .el-drawer__body {
-  flex: 1;
-  min-height: 0;
-  padding: var(--ai-chat-body-padding, 20px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  .el-drawer__header {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    padding: var(--space-5) var(--space-6);
+    border-bottom: 1px solid var(--color-border-light);
+
+    .el-drawer__close-btn {
+      font-size: 20px;
+    }
+  }
+
+  .el-drawer__body {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 }
 </style>
 

@@ -6,6 +6,7 @@
     @close="handleClose"
     :destroy-on-close="true"
     class="custom-booking-dialog"
+    append-to-body
   >
     <div v-loading="loading" class="booking-detail-modal">
       <template v-if="error">
@@ -13,13 +14,11 @@
       </template>
       <template v-else-if="bookingDetail">
         <div class="header-section">
-          <div class="specialist-info">
-            <el-avatar :size="50" :src="bookingDetail.specialistAvatar">
-              {{ bookingDetail.specialistName ? bookingDetail.specialistName.charAt(0) : 'E' }}
-            </el-avatar>
+          <el-avatar :size="60" :src="bookingDetail.specialistAvatar">
+            {{ bookingDetail.specialistName ? bookingDetail.specialistName.charAt(0) : 'E' }}
+          </el-avatar>
+          <div class="header-text">
             <span class="specialist-name">{{ bookingDetail.specialistName }}</span>
-          </div>
-          <div class="status-badge">
             <BookingStatusTag :status="bookingDetail.status" />
           </div>
         </div>
@@ -59,12 +58,6 @@
         </div>
       </template>
     </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <CustomButton @click="handleClose">Close</CustomButton>
-      </span>
-    </template>
   </el-dialog>
 </template>
 
@@ -73,9 +66,8 @@ import { ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Calendar, Money, Document } from '@element-plus/icons-vue';
 import { getBookingDetail } from '@/api/booking';
-import type { BookingDetail } from '@/api/booking';
+import type { BookingDetail, BookingListItem } from '@/api/booking';
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue';
-import CustomButton from '@/components/common/CustomButton.vue';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -84,6 +76,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'close'): void;
+  (e: 'action', data: { action: string, row: BookingListItem }): void;
 }>();
 
 const route = useRoute();
@@ -117,9 +110,10 @@ const fetchDetail = async (id: string) => {
   try {
     const res = await getBookingDetail(id);
     bookingDetail.value = res as unknown as BookingDetail;
-  } catch (err: any) {
-    const errorMsg = err.message || err.response?.data?.message || err.response?.statusText;
-    if (err.response?.status === 404 || errorMsg === 'Not Found' || errorMsg === 'No reservation found') {
+  } catch (err: unknown) {
+    const errorInfo = err as { message?: string, response?: { data?: { message?: string }, statusText?: string, status?: number } };
+    const errorMsg = errorInfo.message || errorInfo.response?.data?.message || errorInfo.response?.statusText;
+    if (errorInfo.response?.status === 404 || errorMsg === 'Not Found' || errorMsg === 'No reservation found') {
       error.value = 'No reservation found';
     } else {
       error.value = 'Failed to load booking details';
@@ -170,31 +164,26 @@ const formatPrice = (price: number) => {
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
 
-:deep(.custom-booking-dialog) {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 12px 32px var(--color-shadow);
-}
-
 .booking-detail-modal {
   padding: var(--space-6);
-  background-color: var(--color-bg-page);
+  background-color: var(color-bg-muted);
 
   .header-section {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    background-color: var(--color-bg-surface);
+    gap: var(--space-3);
     padding: var(--space-5);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
     margin-bottom: var(--space-6);
-    box-shadow: 0 4px 12px var(--color-shadow);
+    text-align: center;
 
-    .specialist-info {
+    .header-text {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: var(--space-4);
+      gap: var(--space-2);
 
       .specialist-name {
         font-size: var(--font-size-xl);
@@ -211,14 +200,15 @@ const formatPrice = (price: number) => {
     gap: var(--space-4);
 
     .info-block {
-      background-color: var(--color-bg-surface);
+      background-color: var(--color-bg-muted);
       padding: var(--space-5);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-xl);
       border: 1px solid var(--color-border);
-      transition: transform var(--transition-base), box-shadow var(--transition-base);
+      transition: all var(--transition-base);
 
       &:hover {
-        box-shadow: 0 6px 16px var(--color-shadow);
+        background-color: var(--color-bg-page);
+        border-color: var(--color-primary-light);
       }
 
       .info-title {
@@ -252,9 +242,10 @@ const formatPrice = (price: number) => {
   }
 }
 
+
 :deep(.el-divider--horizontal) {
   margin: 0 0 var(--space-6) 0;
-  display: none; // Hiding the divider as we use card-based layout
+  display: none;
 }
 
 @media (max-width: 768px) {
@@ -263,7 +254,8 @@ const formatPrice = (price: number) => {
 
     .header-section {
       flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
+      text-align: center;
       gap: var(--space-4);
     }
 

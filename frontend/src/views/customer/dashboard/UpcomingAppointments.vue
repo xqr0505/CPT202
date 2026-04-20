@@ -67,7 +67,6 @@ import { getUpcomingBookings } from '@/api/booking'
 import type { UpcomingBookingResponse } from '@/api/booking'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
 
-const router = useRouter()
 const loading = ref(true)
 const appointments = ref<UpcomingBookingResponse[]>([])
 
@@ -75,13 +74,13 @@ const fetchAppointments = async () => {
   loading.value = true
   try {
     const res = await getUpcomingBookings()
-    let data: any[]
+    let data: UpcomingBookingResponse[]
     if (Array.isArray(res)) data = res
-    else if (res && Array.isArray((res as any).data)) data = (res as any).data
-    else if (res && (res as any).data && Array.isArray((res as any).data.data)) data = (res as any).data.data
+    else if (res && Array.isArray(res.data)) data = res.data
+    else if (res && res.data && Array.isArray(res.data.data)) data = res.data.data
     else data = []
     appointments.value = data
-  } catch (error) {
+  } catch {
     appointments.value = []
   } finally {
     loading.value = false
@@ -89,7 +88,6 @@ const fetchAppointments = async () => {
 }
 
 const displayedAppointments = computed(() => appointments.value.slice(0, 3))
-const hasMore = computed(() => appointments.value.length > 3)
 
 
 const toDate = (dateString?: string) => {
@@ -267,16 +265,17 @@ onMounted(() => {
     }
 
     .expert-name {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--color-text-primary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+
     }
 
     .service-name {
-      font-size: 14px;
+      font-size: 12px;
       color: var(--color-text-secondary);
       white-space: nowrap;
       overflow: hidden;
@@ -301,7 +300,6 @@ onMounted(() => {
       padding: var(--space-2) var(--space-4);
       gap: var(--space-4);
 
-      /* Hide scrollbar for clean app-like UI */
       -ms-overflow-style: none; /* IE and Edge */
       scrollbar-width: none; /* Firefox */
       &::-webkit-scrollbar {

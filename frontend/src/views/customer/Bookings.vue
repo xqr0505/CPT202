@@ -10,16 +10,18 @@
     </div>
 
     <div class="filter-wrapper">
-      <div class="status-filter">
-        <CustomButton
-          v-for="option in statusOptions"
-          :key="option.value"
-          :type="activeStatus === option.value ? 'primary' : 'default'"
-          :class="['status-btn', { 'is-active': activeStatus === option.value }]"
-          @click="activeStatus = option.value; handleStatusChange()"
-        >
-          {{ option.label }}
-        </CustomButton>
+      <div class="status-filter-scroll">
+        <div class="status-filter">
+          <CustomButton
+            v-for="option in statusOptions"
+            :key="option.value"
+            :type="activeStatus === option.value ? 'primary' : 'default'"
+            :class="['status-btn', { 'is-active': activeStatus === option.value }]"
+            @click="activeStatus = option.value; handleStatusChange()"
+          >
+            {{ option.label }}
+          </CustomButton>
+        </div>
       </div>
     </div>
 
@@ -56,23 +58,31 @@
 
         <template #action="{ row }">
           <div class="action-buttons">
-            <CustomButton size="small" type="primary" plain class="action-btn" @click="handleAction('view', row)">
-              View Details
-            </CustomButton>
+            <el-tooltip content="View Details" placement="top">
+              <CustomButton size="small" type="primary" circle class="action-btn-circle" @click="handleAction('view', row)">
+                <el-icon><View /></el-icon>
+              </CustomButton>
+            </el-tooltip>
 
             <template v-if="activeTab === 'UPCOMING'">
-              <CustomButton size="small" type="warning" plain class="action-btn" :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
-                Reschedule
-              </CustomButton>
-              <CustomButton size="small" type="danger" plain class="action-btn" :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
-                Cancel
-              </CustomButton>
+              <el-tooltip content="Reschedule" placement="top">
+                <CustomButton size="small" type="warning" circle class="action-btn-circle" :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
+                  <el-icon><Edit /></el-icon>
+                </CustomButton>
+              </el-tooltip>
+              <el-tooltip content="Cancel" placement="top">
+                <CustomButton size="small" type="danger" circle class="action-btn-circle" :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
+                  <el-icon><Close /></el-icon>
+                </CustomButton>
+              </el-tooltip>
             </template>
 
             <template v-else>
-              <CustomButton size="small" type="success" plain class="action-btn" @click="handleAction('bookAgain', row)">
-                Book Again
-              </CustomButton>
+              <el-tooltip content="Book Again" placement="top">
+                <CustomButton size="small" type="success" circle class="action-btn-circle" @click="handleAction('bookAgain', row)">
+                  <el-icon><RefreshRight /></el-icon>
+                </CustomButton>
+              </el-tooltip>
             </template>
           </div>
         </template>
@@ -102,23 +112,31 @@
               </div>
             </div>
             <div class="card-footer">
-              <CustomButton class="mobile-action-btn" type="primary" plain @click="handleAction('view', row)">
-                View
-              </CustomButton>
+              <el-tooltip content="View Details" placement="top">
+                <CustomButton class="mobile-action-btn-circle" size="small" type="primary" circle @click="handleAction('view', row)">
+                  <el-icon><View /></el-icon>
+                </CustomButton>
+              </el-tooltip>
 
               <template v-if="activeTab === 'UPCOMING'">
-                <CustomButton class="mobile-action-btn" type="warning" plain :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
-                  Reschedule
-                </CustomButton>
-                <CustomButton class="mobile-action-btn" type="danger" plain :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
-                  Cancel
-                </CustomButton>
+                <el-tooltip content="Reschedule" placement="top">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="warning" circle :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
+                    <el-icon><Edit /></el-icon>
+                  </CustomButton>
+                </el-tooltip>
+                <el-tooltip content="Cancel" placement="top">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="danger" circle :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
+                    <el-icon><Close /></el-icon>
+                  </CustomButton>
+                </el-tooltip>
               </template>
 
               <template v-else>
-                <CustomButton class="mobile-action-btn" type="success" plain @click="handleAction('bookAgain', row)">
-                  Book Again
-                </CustomButton>
+                <el-tooltip content="Book Again" placement="top">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="success" circle @click="handleAction('bookAgain', row)">
+                    <el-icon><RefreshRight /></el-icon>
+                  </CustomButton>
+                </el-tooltip>
               </template>
             </div>
           </div>
@@ -126,7 +144,7 @@
       </PaginationTable>
     </div>
   </div>
-  <BookingDetailModal v-model="showDetailModal" />
+  <BookingDetailModal v-model="showDetailModal" @action="(data) => handleAction(data.action, data.row)" />
   <el-dialog
     v-model="showCancelDialog"
     title="Cancel Booking"
@@ -260,7 +278,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
-import { Calendar } from '@element-plus/icons-vue'
+import { Calendar, View, Edit, Close, RefreshRight } from '@element-plus/icons-vue'
 import {confirmBookingCancel, confirmBookingReschedule, getBookingCancelQuote, getBookingList, getBookingRescheduleQuote} from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
 import type { FetchDataParams, FetchDataResult, TableColumn } from '@/components/business/PaginationTable.vue'
@@ -376,7 +394,7 @@ const fetchData = async (params: FetchDataParams): Promise<FetchDataResult<Booki
       list: sortedList,
       total: Number(payload.total) || 0
     }
-  } catch (_error) {
+  } catch {
     ElMessage.error('Failed to load bookings')
     return { list: [], total: 0 }
   }
@@ -440,14 +458,14 @@ const canRescheduleBooking = (row: BookingListItem) => canCancelBooking(row);
 
 const formatMoney = (value?: number) => {
   const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? `楼${amount.toFixed(2)}` : '楼0.00';
+  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '¥0.00';
 };
 
 const formatSlotTime = (time?: string) => {
   if (!time) return '';
-  const [hour = '', minute = ''] = String(time).split(':');
-  if (hour && minute) {
-    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  const parts = String(time).split(':');
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
   }
   return String(time);
 };
@@ -614,100 +632,94 @@ const handleAction = (action: string, row: BookingListItem) => {
   min-height: 100vh;
 
   .page-title {
-    font-size: var(--font-size-xxl);
-    font-weight: 700;
+    font-size: 28px;
+    font-weight: 800;
     color: var(--color-text-primary);
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-8);
+    letter-spacing: -0.02em;
   }
 
   .tabs-wrapper {
-    background-color: var(--color-bg-surface);
-    padding: var(--space-4) var(--space-6) 0;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 2px 4px var(--color-shadow);
+    margin-bottom: var(--space-4);
   }
 
   :deep(.booking-tabs) {
+    .el-tabs__header {
+      margin: 0;
+      border: none;
+    }
+
     .el-tabs__item {
-      font-size: var(--font-size-md);
-      font-weight: 600;
-      color: var(--color-text-regular);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-text-secondary);
       padding: 0 var(--space-6);
-      height: 48px;
-      line-height: 48px;
+      height: 56px;
+      line-height: 56px;
+      transition: all var(--transition-base);
 
       &.is-active {
         color: var(--color-primary);
       }
-
-      &:hover {
-        color: var(--color-primary-hover);
-      }
     }
 
     .el-tabs__active-bar {
-      height: 3px;
+      height: 4px;
+      border-radius: 2px;
       background-color: var(--color-primary);
-      border-radius: var(--radius-sm);
     }
 
     .el-tabs__nav-wrap::after {
-      height: 1px;
-      background-color: var(--color-border);
+      display: none;
     }
   }
 
   .filter-wrapper {
-    background-color: var(--color-bg-surface);
-    padding: var(--space-4) var(--space-6);
-    border-radius: 0;
-    box-shadow: 0 4px 12px var(--color-shadow);
+    margin-bottom: var(--space-6);
+
+    .status-filter-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: var(--space-2);
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
 
     .status-filter {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-4);
+      flex-wrap: nowrap; // Change to nowrap for horizontal scrolling
+      gap: var(--space-3);
+      padding: var(--space-1) 0;
 
       :deep(.status-btn) {
-        color: var(--color-text-primary);
-        background: var(--color-btn-bg-default);
-        border: 1px solid var(--color-btn-border-default);
-        font-weight: 500;
-        border-radius: var(--radius-md);
+        flex-shrink: 0; // Prevent buttons from shrinking
+        color: var(--color-text-regular);
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border);
+        font-weight: 600;
+        border-radius: 100px; // Pill shape
+        padding: 8px 20px;
         transition: all var(--transition-base);
-      }
-      :deep(.status-btn.is-active) {
-        color: var(--color-btn-text-primary);
-        background: var(--color-btn-bg-primary);
-        border-color: var(--color-btn-border-primary);
-      }
-      :deep(.status-btn):hover {
-        background: var(--color-btn-bg-default-hover);
-        color: var(--color-text-primary);
-        border-color: var(--color-btn-border-default-hover);
-        filter: brightness(1.03);
-        box-shadow: 0 2px 6px var(--color-shadow);
-      }
-      :deep(.status-btn.is-active):hover {
-        background: var(--color-btn-bg-primary-hover);
-        color: var(--color-btn-text-primary-hover);
-        border-color: var(--color-btn-border-primary-hover);
-        box-shadow: 0 2px 8px var(--color-btn-shadow-primary);
-        filter: brightness(1.03);
+
+        &.is-active {
+          background: var(--color-primary);
+          color: white;
+          border-color: var(--color-primary);
+          box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
+        }
       }
     }
   }
 
   .table-wrapper {
-    background-color: var(--color-bg-surface);
-    padding: var(--space-6);
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    box-shadow: 0 4px 12px var(--color-shadow);
+    background: transparent;
+    padding: 0;
   }
 
   :deep(.booking-row-highlight > td) {
     background: rgba(var(--color-primary-rgb), 0.14) !important;
-    box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.35);
   }
 
   .datetime-cell {
@@ -744,25 +756,22 @@ const handleAction = (action: string, row: BookingListItem) => {
     display: flex;
     flex-wrap: nowrap;
     justify-content: flex-start;
-    gap: 8px;
-
-    @media (max-width: 600px) {
-      flex-wrap: wrap;
-    }
+    gap: 12px;
   }
 
-  .action-btn {
-    margin: 0;
+  .action-btn-circle {
+    transition: all var(--transition-base);
 
-    @media (max-width: 600px) {
-      flex: 1 1 100%;
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
     }
   }
 
   .booking-card {
     background: var(--color-bg-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     padding: var(--space-4);
     margin-bottom: var(--space-4);
     display: flex;
@@ -811,14 +820,12 @@ const handleAction = (action: string, row: BookingListItem) => {
 
     .card-footer {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-      padding-top: var(--space-2);
+      justify-content: flex-end;
+      gap: var(--space-3);
+      padding-top: var(--space-3);
       border-top: 1px solid var(--color-border-light, #ebeef5);
 
-      .mobile-action-btn {
-        flex: 1;
-        min-height: 44px;
+      .mobile-action-btn-circle {
         margin: 0;
       }
     }

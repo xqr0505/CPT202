@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -213,6 +214,110 @@ class AdminSpecialistServiceImplTest {
     }
 
     @Test
+    void updateSpecialist_resetsPasswordToDefault_whenResetFlagTrue() {
+        AdminSpecialistDetailVO existing = new AdminSpecialistDetailVO();
+        existing.setId(1L);
+
+        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
+        request.setCategoryId(1L);
+        request.setLevel("CHIEF");
+        request.setConsultationFee(new BigDecimal("260.00"));
+        request.setStatus("Active");
+        request.setAvatarUrl(null);
+        request.setResetPasswordToDefault(true);
+
+        when(adminSpecialistMapper.selectSpecialistDetailById(1L)).thenReturn(existing);
+        when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
+        when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
+        when(adminSpecialistMapper.updateSpecialistProfileById(
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+        )).thenReturn(1);
+        when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
+
+        adminSpecialistService.updateSpecialist(1L, request);
+
+        verify(passwordEncoder).encode("12345Expertlink");
+        verify(adminSpecialistMapper).updateUserAccountById(
+                101L,
+                "Dr. Emily Chen",
+                "emily.chen@example.com",
+                "encoded-default-password"
+        );
+        verify(mailSender, timeout(1000).atLeastOnce()).createMimeMessage();
+    }
+
+    @Test
+    void updateSpecialist_doesNotResetDefaultPasswordOrSendEmail_whenResetFlagFalse() {
+        AdminSpecialistDetailVO existing = new AdminSpecialistDetailVO();
+        existing.setId(1L);
+
+        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
+        request.setCategoryId(1L);
+        request.setLevel("CHIEF");
+        request.setConsultationFee(new BigDecimal("260.00"));
+        request.setStatus("Active");
+        request.setAvatarUrl(null);
+        request.setResetPasswordToDefault(false);
+
+        when(adminSpecialistMapper.selectSpecialistDetailById(1L)).thenReturn(existing);
+        when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
+        when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
+        when(adminSpecialistMapper.updateSpecialistProfileById(
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+        )).thenReturn(1);
+
+        adminSpecialistService.updateSpecialist(1L, request);
+
+        verify(passwordEncoder, never()).encode("12345Expertlink");
+        verify(adminSpecialistMapper).updateUserAccountById(
+                101L,
+                "Dr. Emily Chen",
+                "emily.chen@example.com",
+                null
+        );
+        verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void updateSpecialist_ignoresCustomPassword_whenResetFlagTrue() {
+        AdminSpecialistDetailVO existing = new AdminSpecialistDetailVO();
+        existing.setId(1L);
+
+        AdminSpecialistUpdateDTO request = new AdminSpecialistUpdateDTO();
+        request.setName("Dr. Emily Chen");
+        request.setEmail("emily.chen@example.com");
+        request.setPassword("CustomPass123");
+        request.setCategoryId(1L);
+        request.setLevel("CHIEF");
+        request.setConsultationFee(new BigDecimal("260.00"));
+        request.setStatus("Active");
+        request.setAvatarUrl(null);
+        request.setResetPasswordToDefault(true);
+
+        when(adminSpecialistMapper.selectSpecialistDetailById(1L)).thenReturn(existing);
+        when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
+        when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
+        when(adminSpecialistMapper.updateSpecialistProfileById(
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+        )).thenReturn(1);
+        when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
+
+        adminSpecialistService.updateSpecialist(1L, request);
+
+        verify(passwordEncoder).encode("12345Expertlink");
+        verify(adminSpecialistMapper).updateUserAccountById(
+                101L,
+                "Dr. Emily Chen",
+                "emily.chen@example.com",
+                "encoded-default-password"
+        );
+    }
+
+    @Test
     void createSpecialist_success_whenFeeWithinRange() {
         AdminSpecialistCreateDTO request = new AdminSpecialistCreateDTO();
         request.setName("Dr. New Specialist");
@@ -231,6 +336,7 @@ class AdminSpecialistServiceImplTest {
 
         verify(userAccountService).createUser("new.specialist@example.com", "12345Expertlink", "SPECIALIST", "Dr. New Specialist");
         verify(specialistProfileMapper).insert(any());
+        verify(mailSender, timeout(1000).atLeastOnce()).createMimeMessage();
     }
 
     @Test

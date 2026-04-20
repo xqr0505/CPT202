@@ -86,6 +86,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
         String normalizedName = request.getName().trim();
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String initialPassword = DEFAULT_SPECIALIST_INITIAL_PASSWORD;
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
@@ -94,7 +95,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
         User user = userAccountService.createUser(
                 normalizedEmail,
-                DEFAULT_SPECIALIST_INITIAL_PASSWORD,
+                initialPassword,
                 UserRoleEnum.SPECIALIST.name(),
                 normalizedName
         );
@@ -108,6 +109,13 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 .status(mappedStatus)
                 .build();
         specialistProfileMapper.insert(specialistProfile);
+
+        CompletableFuture.runAsync(() -> sendSpecialistRegistrationNotification(
+                specialistProfile.getId(),
+                normalizedName,
+                normalizedEmail,
+                initialPassword
+        ));
     }
 
     @Override
@@ -148,7 +156,10 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
         String normalizedName = request.getName().trim();
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
-        String normalizedPassword = normalizeOptionalPassword(request.getPassword());
+        boolean resetPasswordToDefault = Boolean.TRUE.equals(request.getResetPasswordToDefault());
+        String normalizedPassword = resetPasswordToDefault
+                ? DEFAULT_SPECIALIST_INITIAL_PASSWORD
+                : normalizeOptionalPassword(request.getPassword());
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
         String mappedStatus = mapToDbStatus(request.getStatus());
@@ -170,6 +181,15 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
         String passwordHash = normalizedPassword == null ? null : passwordEncoder.encode(normalizedPassword);
         adminSpecialistMapper.updateUserAccountById(userId, normalizedName, normalizedEmail, passwordHash);
+
+        if (resetPasswordToDefault) {
+            CompletableFuture.runAsync(() -> sendSpecialistPasswordResetNotification(
+                    id,
+                    normalizedName,
+                    normalizedEmail,
+                    DEFAULT_SPECIALIST_INITIAL_PASSWORD
+            ));
+        }
     }
 
     @Override
@@ -373,6 +393,74 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                     ex
             );
         }
+    }
+
+    private void sendSpecialistRegistrationNotification(
+            Long specialistId,
+            String specialistName,
+            String specialistEmail,
+            String initialPassword
+    ) {
+        if (!StringUtils.hasText(specialistEmail)) {
+            log.warn("Skip specialist registration notification: specialistId={} has no email", specialistId);
+            return;
+        }
+
+        String displayName = StringUtils.hasText(specialistName) ? specialistName : specialistEmail;
+        String subject = "Your ExpertLink specialist account is ready";
+        String content = String.format(
+                "Hello %s,%n%n" +
+                "Your specialist account has been created successfully by the administrator.%n%n" +
+                "Login email: %s%n" +
+                "Initial password: %s%n%n" +
+                "Please log in and change your password as soon as possible.%n%n" +
+                "ExpertLink Team",
+                displayName,
+                specialistEmail,
+                initialPassword
+        );
+
+        sendEmail(
+                specialistEmail,
+                subject,
+                content,
+                "specialist registration notification",
+                specialistId
+        );
+    }
+
+    private void sendSpecialistPasswordResetNotification(
+            Long specialistId,
+            String specialistName,
+            String specialistEmail,
+            String resetPassword
+    ) {
+        if (!StringUtils.hasText(specialistEmail)) {
+            log.warn("Skip specialist password reset notification: specialistId={} has no email", specialistId);
+            return;
+        }
+
+        String displayName = StringUtils.hasText(specialistName) ? specialistName : specialistEmail;
+        String subject = "Your ExpertLink password has been reset";
+        String content = String.format(
+                "Hello %s,%n%n" +
+                "The administrator has reset your ExpertLink specialist password.%n%n" +
+                "Login email: %s%n" +
+                "Temporary password: %s%n%n" +
+                "Please log in and change your password as soon as possible.%n%n" +
+                "ExpertLink Team",
+                displayName,
+                specialistEmail,
+                resetPassword
+        );
+
+        sendEmail(
+                specialistEmail,
+                subject,
+                content,
+                "specialist password reset notification",
+                specialistId
+        );
     }
 
     private void sendBookingChangeNotifications(String specialistName, List<Booking> impactedBookings) {

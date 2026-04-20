@@ -44,6 +44,7 @@ export interface UpdateSpecialistPayload {
   name: string
   email: string
   password?: string
+  resetPasswordToDefault?: boolean
   categoryId: number
   level: string
   consultationFee: number

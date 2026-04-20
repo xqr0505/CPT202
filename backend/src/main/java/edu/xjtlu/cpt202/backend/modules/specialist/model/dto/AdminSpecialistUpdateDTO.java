@@ -28,6 +28,8 @@ public class AdminSpecialistUpdateDTO {
     )
     private String password;
 
+    private Boolean resetPasswordToDefault;
+
     @NotNull(message = "categoryId is required")
     private Long categoryId;
 

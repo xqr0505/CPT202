@@ -4,10 +4,14 @@ import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
+import edu.xjtlu.cpt202.backend.modules.auth.service.VerificationCodeService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangeCurrentUserEmailDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.SendChangeEmailCodeDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
@@ -39,6 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -61,6 +67,9 @@ class UserAccountServiceImplTest {
 
     @Mock
     private AvatarStorageService avatarStorageService;
+
+    @Mock
+    private VerificationCodeService verificationCodeService;
 
     @InjectMocks
     private UserAccountServiceImpl userAccountService;
@@ -170,28 +179,25 @@ class UserAccountServiceImplTest {
         User currentUser = buildUser();
         UpdateUserProfileDTO request = new UpdateUserProfileDTO();
         request.setFullName("  Alice Smith  ");
-        request.setEmail("  ALICE.SMITH@EXAMPLE.COM  ");
+        request.setEmail("  ALICE@EXAMPLE.COM  ");
         request.setPhoneNumber("  +86 13900139000  ");
-        request.setCurrentPassword("OldPass123");
 
         when(userMapper.selectById(7L)).thenReturn(currentUser);
-        when(userMapper.selectOne(any())).thenReturn(null);
         when(userMapper.updateById(any(User.class))).thenReturn(1);
 
         assertDoesNotThrow(() -> userAccountService.updateCurrentUserProfile(request));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).selectById(7L);
-        verify(userMapper).selectOne(any());
         verify(userMapper).updateById(userCaptor.capture());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
-        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService, verificationCodeService);
 
         User savedUser = userCaptor.getValue();
         assertEquals(7L, savedUser.getId());
         assertEquals("Alice Smith", savedUser.getFullName());
-        assertEquals("alice.smith@example.com", savedUser.getEmail());
+        assertEquals("alice@example.com", savedUser.getEmail());
         assertEquals("+86 13900139000", savedUser.getPhoneNumber());
         assertEquals(AccountStatusEnum.ACTIVE.name(), savedUser.getStatus());
     }
@@ -216,7 +222,7 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(userCaptor.capture());
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
-        verifyNoInteractions(refreshTokenMapper, avatarStorageService);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService, verificationCodeService);
 
         User savedUser = userCaptor.getValue();
         assertEquals("Alice Johnson Updated", savedUser.getFullName());
@@ -225,7 +231,7 @@ class UserAccountServiceImplTest {
     }
 
     @Test
-    void updateCurrentUserProfile_whenEmailChangesWithoutCurrentPassword_throwsBadRequest() {
+    void updateCurrentUserProfile_whenEmailChanges_throwsBadRequest() {
         authenticateAs(7L);
         User currentUser = buildUser();
         UpdateUserProfileDTO request = new UpdateUserProfileDTO();
@@ -241,68 +247,13 @@ class UserAccountServiceImplTest {
         );
 
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
-        assertEquals("Current password is required", exception.getMessage());
+        assertEquals("Use the email verification flow to change your email address.", exception.getMessage());
 
         verify(userMapper).selectById(7L);
         verify(userMapper, never()).selectOne(any());
         verify(userMapper, never()).updateById(any(User.class));
         verifyNoMoreInteractions(userMapper);
-        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
-    }
-
-    @Test
-    void updateCurrentUserProfile_whenEmailChangesWithWrongCurrentPassword_throwsBadRequest() {
-        authenticateAs(7L);
-        User currentUser = buildUser();
-        UpdateUserProfileDTO request = new UpdateUserProfileDTO();
-        request.setFullName("Alice Smith");
-        request.setEmail("alice.smith@example.com");
-        request.setPhoneNumber("+86 13900139000");
-        request.setCurrentPassword("WrongPass123");
-
-        when(userMapper.selectById(7L)).thenReturn(currentUser);
-
-        BusinessException exception = assertThrows(
-                BusinessException.class,
-                () -> userAccountService.updateCurrentUserProfile(request)
-        );
-
-        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
-        assertEquals("Current password is incorrect", exception.getMessage());
-
-        verify(userMapper).selectById(7L);
-        verify(userMapper, never()).selectOne(any());
-        verify(userMapper, never()).updateById(any(User.class));
-        verifyNoMoreInteractions(userMapper);
-        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
-    }
-
-    @Test
-    void updateCurrentUserProfile_whenEmailBelongsToAnotherUser_throwsDuplicateEmail() {
-        authenticateAs(7L);
-        User currentUser = buildUser();
-        UpdateUserProfileDTO request = new UpdateUserProfileDTO();
-        request.setFullName("Alice Smith");
-        request.setEmail("used@example.com");
-        request.setPhoneNumber("+86 13900139000");
-        request.setCurrentPassword("OldPass123");
-
-        when(userMapper.selectById(7L)).thenReturn(currentUser);
-        when(userMapper.selectOne(any())).thenReturn(User.builder().id(99L).email("used@example.com").build());
-
-        BusinessException exception = assertThrows(
-                BusinessException.class,
-                () -> userAccountService.updateCurrentUserProfile(request)
-        );
-
-        assertEquals(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), exception.getCode());
-        assertEquals("This email is already registered", exception.getMessage());
-
-        verify(userMapper).selectById(7L);
-        verify(userMapper).selectOne(any());
-        verify(userMapper, never()).updateById(any(User.class));
-        verifyNoMoreInteractions(userMapper);
-        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
     }
 
     @Test
@@ -324,7 +275,154 @@ class UserAccountServiceImplTest {
         verify(userMapper).updateById(any(User.class));
         verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
+        verifyNoInteractions(refreshTokenMapper, avatarStorageService, verificationCodeService);
+    }
+
+    @Test
+    void sendCurrentUserEmailChangeCode_sendsVerificationCodeToNewEmail() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        SendChangeEmailCodeDTO request = new SendChangeEmailCodeDTO();
+        request.setNewEmail("  alice.new@example.com  ");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+        when(userMapper.selectOne(any())).thenReturn(null);
+
+        assertDoesNotThrow(() -> userAccountService.sendCurrentUserEmailChangeCode(request));
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper).selectOne(any());
+        verify(verificationCodeService).sendCode(
+                eq("alice.new@example.com"),
+                eq("CHANGE_EMAIL"),
+                eq("Confirm your new email address"),
+                eq("Use this verification code to confirm your new email address: %s\nThis code will expire in %d minutes.\nIf you did not request this change, please ignore this email.")
+        );
+        verifyNoMoreInteractions(userMapper, verificationCodeService);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
+    }
+
+    @Test
+    void sendCurrentUserEmailChangeCode_whenNewEmailMatchesCurrentEmail_throwsBadRequest() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        SendChangeEmailCodeDTO request = new SendChangeEmailCodeDTO();
+        request.setNewEmail(" Alice@Example.com ");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.sendCurrentUserEmailChangeCode(request)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("New email must be different from your current email", exception.getMessage());
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper, never()).selectOne(any());
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
+    }
+
+    @Test
+    void sendCurrentUserEmailChangeCode_whenNewEmailBelongsToAnotherUser_throwsDuplicateEmail() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        SendChangeEmailCodeDTO request = new SendChangeEmailCodeDTO();
+        request.setNewEmail("used@example.com");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+        when(userMapper.selectOne(any())).thenReturn(User.builder().id(99L).email("used@example.com").build());
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.sendCurrentUserEmailChangeCode(request)
+        );
+
+        assertEquals(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), exception.getCode());
+        assertEquals("This email is already registered", exception.getMessage());
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper).selectOne(any());
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
+    }
+
+    @Test
+    void changeCurrentUserEmail_updatesEmailAfterVerification() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setNewEmail("  alice.new@example.com ");
+        request.setCode("123456");
+        VerificationCode verificationCode = VerificationCode.builder()
+                .id(88L)
+                .email("alice.new@example.com")
+                .code("123456")
+                .type("CHANGE_EMAIL")
+                .isUsed(false)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+        when(userMapper.selectOne(any())).thenReturn(null);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(verificationCode);
+        when(userMapper.updateById(any(User.class))).thenReturn(1);
+
+        UserProfileVO response = userAccountService.changeCurrentUserEmail(request);
+
+        assertEquals("alice.new@example.com", response.getEmail());
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).selectById(7L);
+        verify(userMapper).selectOne(any());
+        verify(verificationCodeService).requireLatestValidCode(
+                eq("alice.new@example.com"),
+                eq("CHANGE_EMAIL"),
+                eq("123456"),
+                eq("Invalid or expired verification code")
+        );
+        verify(userMapper).updateById(userCaptor.capture());
+        verify(verificationCodeService).markCodeUsed(verificationCode);
+        verify(userSecurityActivityMapper).insert(any(UserSecurityActivity.class));
+        verifyNoMoreInteractions(userMapper, verificationCodeService, userSecurityActivityMapper);
         verifyNoInteractions(refreshTokenMapper, avatarStorageService);
+
+        assertEquals("alice.new@example.com", userCaptor.getValue().getEmail());
+    }
+
+    @Test
+    void changeCurrentUserEmail_whenVerificationFails_throwsBusinessException() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setNewEmail("alice.new@example.com");
+        request.setCode("000000");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+        when(userMapper.selectOne(any())).thenReturn(null);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenThrow(new BusinessException(
+                        ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(),
+                        "Verification code has expired. Please request a new one."
+                ));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.changeCurrentUserEmail(request)
+        );
+
+        assertEquals(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), exception.getCode());
+        assertEquals("Verification code has expired. Please request a new one.", exception.getMessage());
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper).selectOne(any());
+        verify(verificationCodeService).requireLatestValidCode(anyString(), anyString(), anyString(), anyString());
+        verify(userMapper, never()).updateById(any(User.class));
+        verifyNoMoreInteractions(userMapper, verificationCodeService);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test

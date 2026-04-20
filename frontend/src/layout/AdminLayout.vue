@@ -20,7 +20,7 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 
 onMounted(async () => {
-  if (!userStore.userInfo) {
+  if (userStore.token && (!userStore.userInfo || typeof userStore.userInfo.avatar === 'undefined')) {
     try {
       await userStore.fetchAndSetUserProfile()
     } catch (e) {

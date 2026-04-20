@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { clearAuthData, getAuthToken, getUser, saveToken } from '@/api/request'
+import { clearAuthData, getAuthToken, getUser, isRememberMeSession, saveToken, saveUser } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -19,9 +19,13 @@ export type UserRole = UserRoleType | null
 
 interface StoredUser {
   userId?: number
+  id?: number
   role?: string
   email?: string
   displayName?: string
+  fullName?: string
+  phoneNumber?: string
+  avatar?: string
 }
 
 const normalizeRole = (role?: string | null): UserRole => {
@@ -46,15 +50,30 @@ const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; 
     token: getAuthToken(),
     userInfo: storedUser
       ? {
-          id: storedUser.userId || 0,
-          username: storedUser.email || storedUser.displayName || `user-${storedUser.userId || 0}`,
-          nickname: storedUser.displayName || storedUser.email || 'Account User',
-          email: storedUser.email
+          id: storedUser.userId || storedUser.id || 0,
+          username:
+            storedUser.email || storedUser.displayName || `user-${storedUser.userId || storedUser.id || 0}`,
+          nickname: storedUser.fullName || storedUser.displayName || storedUser.email || 'Account User',
+          fullName: storedUser.fullName,
+          email: storedUser.email,
+          phoneNumber: storedUser.phoneNumber,
+          avatar: typeof storedUser.avatar === 'string' ? storedUser.avatar.trim() : undefined
         }
       : null,
     role: normalizeRole(storedUser?.role)
   }
 }
+
+const toStoredUser = (info: UserInfo, role: UserRole): StoredUser => ({
+  id: info.id,
+  userId: info.id,
+  role: role ? role.toUpperCase() : undefined,
+  email: info.email || info.username,
+  displayName: info.fullName || info.nickname || info.username,
+  fullName: info.fullName,
+  phoneNumber: info.phoneNumber,
+  avatar: info.avatar?.trim() || ''
+})
 
 const mapUserProfileToUserInfo = (user: UserProfile): UserInfo => ({
   id: user.id,
@@ -86,6 +105,7 @@ export const useUserStore = defineStore('user', () => {
   const setUserInfo = (info: UserInfo, role: UserRole) => {
     userInfo.value = info
     userRole.value = role
+    saveUser(toStoredUser(info, role), isRememberMeSession())
   }
 
   const syncUserProfile = (user: UserProfile) => {

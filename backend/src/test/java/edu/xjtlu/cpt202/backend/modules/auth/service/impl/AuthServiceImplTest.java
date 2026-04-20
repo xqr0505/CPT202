@@ -8,23 +8,22 @@ import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.utils.JwtUtils;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.LoginResponse;
-import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
-import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.LogoutRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RefreshTokenResponse;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.RegisterRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.ResetPasswordRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.SendResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.dto.SendVerificationCodeRequest;
+import edu.xjtlu.cpt202.backend.modules.auth.dto.VerifyResetCodeRequest;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
+import edu.xjtlu.cpt202.backend.modules.auth.service.VerificationCodeService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
-import jakarta.mail.internet.MimeMessage;
-import jakarta.mail.Session;
-
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,12 +32,9 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
-import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -54,22 +50,13 @@ class AuthServiceImplTest {
     @Mock private VerificationCodeMapper verificationCodeMapper;
     @Mock private RefreshTokenMapper refreshTokenMapper;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private JavaMailSender mailSender;
-    @Mock private Environment env;
+    @Mock private VerificationCodeService verificationCodeService;
     @InjectMocks private AuthServiceImpl authService;
 
     private final String testEmail = "test@example.com";
     private final String testPassword = "Test1234";
     private final String testRole = "CUSTOMER";
     private final String validCode = "123456";
-
-    @BeforeEach
-    void setUp() {
-        // 确保 SecurityConstant 中的值被正确读取（它们在常量类中已定义）
-        doNothing().when(mailSender).send(any(MimeMessage.class));
-        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
-        when(env.getProperty("spring.mail.username")).thenReturn("noreply@example.com");
-    }
 
     // ==================== sendVerificationCode Tests ====================
 
@@ -81,19 +68,15 @@ class AuthServiceImplTest {
         request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
-        when(verificationCodeMapper.insert(any(VerificationCode.class))).thenReturn(1);
 
         assertDoesNotThrow(() -> authService.sendVerificationCode(request));
 
-        ArgumentCaptor<VerificationCode> captor = ArgumentCaptor.forClass(VerificationCode.class);
-        verify(verificationCodeMapper).insert(captor.capture());
-        VerificationCode saved = captor.getValue();
-        assertEquals(testEmail, saved.getEmail());
-        assertEquals("REGISTER", saved.getType());
-        assertFalse(saved.getIsUsed());
-        assertNotNull(saved.getCode());
-        assertEquals(6, saved.getCode().length());
+        verify(verificationCodeService).sendCode(
+                testEmail,
+                "REGISTER",
+                "Email Verification",
+                "Your verification code is: %s\nThis code will expire in %d minutes."
+        );
     }
 
     @Test
@@ -165,8 +148,9 @@ class AuthServiceImplTest {
         request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        // 模拟最近60秒内存在记录（冷却期内）
-        when(verificationCodeMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
+        doThrow(new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(), "Please wait 60 seconds"))
+                .when(verificationCodeService)
+                .sendCode(anyString(), anyString(), anyString(), anyString());
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
@@ -182,12 +166,10 @@ class AuthServiceImplTest {
         request.setType("REGISTER");
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        // 最近60秒内无记录
-        when(verificationCodeMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        when(verificationCodeMapper.insert(any(VerificationCode.class))).thenReturn(1);
 
         assertDoesNotThrow(() -> authService.sendVerificationCode(request));
-        verify(verificationCodeMapper, times(1)).insert(any(VerificationCode.class));
+        verify(verificationCodeService, times(1))
+                .sendCode(eq(testEmail), eq("REGISTER"), anyString(), anyString());
     }
 
     // ==================== register Tests ====================
@@ -208,7 +190,8 @@ class AuthServiceImplTest {
                 .isUsed(false)
                 .expiresAt(LocalDateTime.now().plusMinutes(5))
                 .build();
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(codeRecord);
 
         when(userAccountService.createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull())).thenAnswer(invocation -> {
             User u = User.builder()
@@ -232,8 +215,7 @@ class AuthServiceImplTest {
             assertEquals(testEmail, response.getEmail());
 
             verify(userAccountService).createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull());
-            verify(verificationCodeMapper).updateById(codeRecord);
-            assertTrue(codeRecord.getIsUsed());
+            verify(verificationCodeService).markCodeUsed(codeRecord);
         }
     }
 
@@ -275,16 +257,13 @@ class AuthServiceImplTest {
         request.setRole(testRole);
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        VerificationCode codeRecord = VerificationCode.builder()
-                .code(validCode)
-                .isUsed(false)
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
-                .build();
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenThrow(new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), "Verification code is incorrect"));
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertEquals(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), ex.getCode());
+        assertEquals("Verification code is incorrect", ex.getMessage());
     }
 
     @Test
@@ -297,17 +276,16 @@ class AuthServiceImplTest {
         request.setRole(testRole);
 
         when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
-        VerificationCode expiredCode = VerificationCode.builder()
-                .code(validCode)
-                .isUsed(false)
-                .expiresAt(LocalDateTime.now().minusMinutes(1))  // 已过期
-                .build();
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(expiredCode);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenThrow(new BusinessException(
+                        ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(),
+                        "Verification code has expired. Please request a new one."
+                ));
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
         assertEquals(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Verification code incorrect or expired"));
+        assertTrue(ex.getMessage().contains("Verification code has expired"));
     }
 
     @Test
@@ -326,12 +304,13 @@ class AuthServiceImplTest {
                 .isUsed(false)
                 .expiresAt(LocalDateTime.now().plusMinutes(5))
                 .build();
-        when(verificationCodeMapper.selectOne(any(QueryWrapper.class))).thenReturn(codeRecord);
+        when(verificationCodeService.requireLatestValidCode(anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(codeRecord);
         when(userAccountService.createUser(eq(testEmail), eq(testPassword), eq("CUSTOMER"), isNull()))
                 .thenThrow(new RuntimeException("insert failed"));
 
         assertThrows(RuntimeException.class, () -> authService.register(request));
-        verify(verificationCodeMapper, never()).updateById(any(VerificationCode.class));
+        verify(verificationCodeService, never()).markCodeUsed(any(VerificationCode.class));
         assertFalse(codeRecord.getIsUsed());
     }
 

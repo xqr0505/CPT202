@@ -28,6 +28,15 @@ export interface UpdateUserProfilePayload {
   currentPassword?: string
 }
 
+export interface SendEmailChangeCodePayload {
+  newEmail: string
+}
+
+export interface ChangeCurrentUserEmailPayload {
+  newEmail: string
+  code: string
+}
+
 export interface ChangePasswordPayload {
   currentPassword: string
   newPassword: string
@@ -160,21 +169,38 @@ export const updateCurrentUserProfile = async (
   )
 }
 
+export const sendCurrentUserEmailChangeCode = async (
+  payload: SendEmailChangeCodePayload
+): Promise<void> => {
+  return request.post<unknown, void>(
+    `${getUserAccountApiPrefix()}/email/send-code`,
+    payload,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
+  )
+}
+
+export const changeCurrentUserEmail = async (
+  payload: ChangeCurrentUserEmailPayload
+): Promise<AccountProfile> => {
+  const response = await request.post<unknown, unknown>(
+    `${getUserAccountApiPrefix()}/email/change`,
+    payload,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
+  )
+
+  return toSafeAccountProfile(response)
+}
+
 export const uploadCurrentUserAvatar = async (
   file: File
 ): Promise<AvatarUploadResponse> => {
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', file, file.name)
 
   const response = await request.post<unknown, unknown>(
     `${getUserAccountApiPrefix()}/avatar`,
     formData,
-    {
-      ...silentAccountRequestConfig,
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    } as unknown as Record<string, unknown>
+    silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 
   return {
@@ -209,7 +235,7 @@ export const fetchUserProfile = async (): Promise<UserProfile> => {
   const sessionEmail = storedUser?.email?.trim() || ''
   const sessionDisplayName = storedUser?.displayName?.trim() || ''
   const email = accountProfile.email || sessionEmail
-  const username = sessionEmail || email || `user-${accountProfile.id}`
+  const username = email || sessionEmail || `user-${accountProfile.id}`
 
   return {
     id: accountProfile.id,

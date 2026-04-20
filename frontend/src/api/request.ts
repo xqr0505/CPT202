@@ -53,6 +53,10 @@ const shouldSuppressErrorMessage = (config?: any): boolean => {
   return Boolean(config?.suppressErrorMessage);
 };
 
+const isFormDataPayload = (value: unknown): value is FormData => {
+  return typeof FormData !== 'undefined' && value instanceof FormData;
+};
+
 const showErrorOnce = (message: string): void => {
   if (!message) {
     return;
@@ -233,18 +237,34 @@ export const isTokenExpired = (token: string | null): boolean => {
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json;charset=UTF-8'
-  }
+  timeout: 10000
 });
 
 service.interceptors.request.use(
   config => {
+    config.headers = config.headers || {};
+    const headers = config.headers as Record<string, any> & {
+      setContentType?: (value?: string | false) => void;
+    };
+
+    if (isFormDataPayload(config.data)) {
+      if (typeof headers.setContentType === 'function') {
+        headers.setContentType(undefined);
+      } else {
+        delete headers['Content-Type'];
+        delete headers['content-type'];
+      }
+    } else if (config.data !== undefined && config.data !== null) {
+      if (typeof headers.setContentType === 'function') {
+        headers.setContentType('application/json;charset=UTF-8');
+      } else if (!headers['Content-Type'] && !headers['content-type']) {
+        headers['Content-Type'] = 'application/json;charset=UTF-8';
+      }
+    }
+
     const token = getAuthToken();
     if (token) {
-      config.headers = config.headers || {};
-      (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
+      headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
   },

@@ -1,6 +1,8 @@
 package edu.xjtlu.cpt202.backend.modules.user.service;
 
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangeCurrentUserEmailDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.SendChangeEmailCodeDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
@@ -17,6 +19,10 @@ public interface UserAccountService {
     List<UserSecurityActivityVO> getCurrentUserSecurityActivity();
 
     void updateCurrentUserProfile(UpdateUserProfileDTO request);
+
+    void sendCurrentUserEmailChangeCode(SendChangeEmailCodeDTO request);
+
+    UserProfileVO changeCurrentUserEmail(ChangeCurrentUserEmailDTO request);
 
     UserAvatarUploadVO uploadCurrentUserAvatar(MultipartFile file);
 

@@ -22,25 +22,20 @@ import edu.xjtlu.cpt202.backend.modules.auth.mapper.VerificationCodeMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.service.AuthService;
+import edu.xjtlu.cpt202.backend.modules.auth.service.VerificationCodeService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
-import jakarta.mail.internet.MimeMessage;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
 @Service
@@ -48,14 +43,19 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthServiceImpl.class);
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$");
+    private static final String REGISTER_CODE_EMAIL_SUBJECT = "Email Verification";
+    private static final String REGISTER_CODE_EMAIL_TEMPLATE =
+            "Your verification code is: %s\nThis code will expire in %d minutes.";
+    private static final String RESET_PASSWORD_CODE_EMAIL_SUBJECT = "Password Reset Verification";
+    private static final String RESET_PASSWORD_CODE_EMAIL_TEMPLATE =
+            "Your password reset verification code is: %s\nThis code will expire in %d minutes.\nIf you did not request this, please ignore this email.";
 
     private final UserMapper userMapper;
     private final UserAccountService userAccountService;
     private final VerificationCodeMapper verificationCodeMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
-    private final Environment env;
+    private final VerificationCodeService verificationCodeService;
 
     @Autowired
     public AuthServiceImpl(UserMapper userMapper,
@@ -63,15 +63,13 @@ public class AuthServiceImpl implements AuthService {
                            VerificationCodeMapper verificationCodeMapper,
                            RefreshTokenMapper refreshTokenMapper,
                            PasswordEncoder passwordEncoder,
-                           JavaMailSender mailSender,
-                           Environment env) {
+                           VerificationCodeService verificationCodeService) {
         this.userMapper = userMapper;
         this.userAccountService = userAccountService;
         this.verificationCodeMapper = verificationCodeMapper;
         this.refreshTokenMapper = refreshTokenMapper;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
-        this.env = env;
+        this.verificationCodeService = verificationCodeService;
     }
 
     @Override
@@ -105,71 +103,22 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Invalid verification type");
         }
         
-        // 2. 冷却检查（按类型分开）
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime sixtySecondsAgo = now.minusSeconds(SecurityConstant.VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS);
-        Long recentCount = verificationCodeMapper.selectCount(
-            new QueryWrapper<VerificationCode>()
-                .eq("email", email)
-                .eq("type", type)
-                .gt("created_at", sixtySecondsAgo)
+        if ("REGISTER".equals(type)) {
+            verificationCodeService.sendCode(
+                    email,
+                    type,
+                    REGISTER_CODE_EMAIL_SUBJECT,
+                    REGISTER_CODE_EMAIL_TEMPLATE
+            );
+            return;
+        }
+
+        verificationCodeService.sendCode(
+                email,
+                type,
+                RESET_PASSWORD_CODE_EMAIL_SUBJECT,
+                RESET_PASSWORD_CODE_EMAIL_TEMPLATE
         );
-        if (recentCount != null && recentCount > 0) {
-            throw new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(),
-                "Please wait " + SecurityConstant.VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS + " seconds");
-        }
-        
-        // 3. 生成验证码并发送（后续代码不变）
-        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(0, 1000000));
-        VerificationCode verificationCode = VerificationCode.builder()
-                .email(email)
-                .code(code)
-                .type(type)
-                .isUsed(false)
-                .expiresAt(now.plusMinutes(SecurityConstant.VERIFICATION_CODE_EXPIRATION_MINUTES))
-                .build();
-        verificationCodeMapper.insert(verificationCode);
-
-        try {
-            if (mailSender == null) {
-                logger.error("Mail sender not configured");
-                throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
-                        "Mail service is unavailable");
-            }
-
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            if (mimeMessage == null) {
-                logger.error("Mail sender returned null MimeMessage");
-                throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
-                        "Mail service is unavailable");
-            }
-
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-
-            String fromAddress = env == null ? null : env.getProperty("spring.mail.username");
-            if (StrUtil.isBlank(fromAddress)) {
-                fromAddress = "noreply@example.com";
-            }
-
-            helper.setFrom("ExpertLink <" + fromAddress + ">");
-            helper.setTo(email);
-            helper.setSubject("Email Verification");
-            helper.setText("Your verification code is: " + code + "\nThis code will expire in 5 minutes.");
-
-            mailSender.send(mimeMessage);
-
-            logger.info("Verification email sent to {}", request.getEmail());
-
-        } catch (Exception e) {
-            logger.error("Failed to send verification email: {}", e.getMessage(), e);
-
-            verificationCodeMapper.deleteById(verificationCode.getId());
-
-            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
-                    "Failed to send verification email");
-        }
-
-        logger.info("Verification code '{}' generated for {}", code, email);
     }
 
     @Override
@@ -202,25 +151,16 @@ public class AuthServiceImpl implements AuthService {
         if (existingCount != null && existingCount > 0) {
             throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
         }
-        LocalDateTime now = LocalDateTime.now();
-
-        VerificationCode codeRecord = verificationCodeMapper.selectOne(
-                new QueryWrapper<VerificationCode>()
-                        .eq("email", email)
-                        .eq("type", "REGISTER")
-                        .eq("is_used", false)
-                        .orderByDesc("created_at")
-                        .last("LIMIT 1")
+        VerificationCode codeRecord = verificationCodeService.requireLatestValidCode(
+                email,
+                "REGISTER",
+                request.getVerificationCode(),
+                "Verification code incorrect or expired. Please request a new one."
         );
-
-        if (codeRecord == null || codeRecord.getExpiresAt() == null || codeRecord.getExpiresAt().isBefore(now) || !codeRecord.getCode().equals(request.getVerificationCode().trim())) {
-            throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), "Verification code incorrect or expired. Please request a new one.");
-        }
 
         User newUser = userAccountService.createUser(email, request.getPassword(), "CUSTOMER", null);
 
-        codeRecord.setIsUsed(true);
-        verificationCodeMapper.updateById(codeRecord);
+        verificationCodeService.markCodeUsed(codeRecord);
 
         String token = JwtUtils.generateToken(newUser.getId(), newUser.getRole());
 
@@ -400,58 +340,12 @@ public class AuthServiceImpl implements AuthService {
                 "Email is not registered.");
         }
         
-        // 2. 冷却检查（针对 RESET_PASSWORD 类型，独立冷却）
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime sixtySecondsAgo = now.minusSeconds(SecurityConstant.VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS);
-        Long recentCount = verificationCodeMapper.selectCount(
-            new QueryWrapper<VerificationCode>()
-                .eq("email", email)
-                .eq("type", "RESET_PASSWORD")
-                .gt("created_at", sixtySecondsAgo)
+        verificationCodeService.sendCode(
+                email,
+                "RESET_PASSWORD",
+                RESET_PASSWORD_CODE_EMAIL_SUBJECT,
+                RESET_PASSWORD_CODE_EMAIL_TEMPLATE
         );
-        if (recentCount != null && recentCount > 0) {
-            throw new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(),
-                "Please wait " + SecurityConstant.VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS + 
-                " seconds before requesting a new code");
-        }
-        
-        // 3. 生成 6 位验证码
-        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(0, 1000000));
-        
-        // 4. 存储验证码记录
-        VerificationCode verificationCode = VerificationCode.builder()
-                .email(email)
-                .code(code)
-                .type("RESET_PASSWORD")
-                .isUsed(false)
-                .expiresAt(now.plusMinutes(SecurityConstant.VERIFICATION_CODE_EXPIRATION_MINUTES))
-                .build();
-        verificationCodeMapper.insert(verificationCode);
-        
-        // 5. 发送邮件
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            
-            String fromAddress = env.getProperty("spring.mail.username");
-            if (StrUtil.isBlank(fromAddress)) {
-                fromAddress = "noreply@example.com";
-            }
-            helper.setFrom("ExpertLink <" + fromAddress + ">");
-            helper.setTo(email);
-            helper.setSubject("Password Reset Verification");
-            helper.setText("Your password reset verification code is: " + code + 
-                        "\nThis code will expire in 5 minutes.\nIf you did not request this, please ignore this email.");
-            
-            mailSender.send(mimeMessage);
-            logger.info("Password reset code sent to {}", email);
-        } catch (Exception e) {
-            logger.error("Failed to send password reset email: {}", e.getMessage(), e);
-            // 发送失败则删除刚插入的记录
-            verificationCodeMapper.deleteById(verificationCode.getId());
-            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(),
-                    "Failed to send verification email");
-        }
     }
 
     @Override
@@ -459,28 +353,13 @@ public class AuthServiceImpl implements AuthService {
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String code = request.getVerificationCode().trim();
         
-        LocalDateTime now = LocalDateTime.now();
-        
-        // 查询最新的一条未使用、未过期的 RESET_PASSWORD 验证码
-        VerificationCode codeRecord = verificationCodeMapper.selectOne(
-            new QueryWrapper<VerificationCode>()
-                .eq("email", email)
-                .eq("type", "RESET_PASSWORD")
-                .eq("is_used", false)
-                .ge("expires_at", now)          // 未过期
-                .orderByDesc("created_at")
-                .last("LIMIT 1")
+        VerificationCode codeRecord = verificationCodeService.requireLatestValidCode(
+                email,
+                "RESET_PASSWORD",
+                code,
+                "Invalid or expired verification code"
         );
-        
-        if (codeRecord == null || !codeRecord.getCode().equals(code)) {
-            throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), 
-                "Invalid verification code");
-        }
-        
-        // 可选：标记为已使用，防止重复使用（也可以在 resetPassword 中标记）
-        // 这里标记后，resetPassword 中就不需要再检查 is_used 了，但仍需检查 code 和 email
-        codeRecord.setIsUsed(true);
-        verificationCodeMapper.updateById(codeRecord);
+        verificationCodeService.markCodeUsed(codeRecord);
         
         // 不返回任何数据，仅表示验证通过
     }

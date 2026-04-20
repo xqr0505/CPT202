@@ -41,12 +41,19 @@ import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -55,9 +62,11 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -70,6 +79,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
     private static final int MAX_CUSTOMER_NOTES_LENGTH = 500;
     private static final String CUSTOMER_NOTES_ALLOWED_CHARS_REGEX = "[^\\p{L}\\p{N}\\p{P}\\p{Z}\\r\\n]";
+    private static final String BOOKING_SUCCESS_EMAIL_SUBJECT = "Booking request submitted successfully";
+    private static final String BOOKING_SUCCESS_EMAIL_TEMPLATE = """
+            Your booking request has been submitted successfully.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Consultation Topic: %s
+            Status: %s
+            """;
 
     private final BookingMapper bookingMapper;
     private final BookingTopicMapper bookingTopicMapper;
@@ -77,6 +95,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private final SpecialistQueryService specialistQueryService;
     private final CustomerBookingChangePolicyService customerBookingChangePolicyService;
     private final RedisTemplate<String, Object> jsonRedisTemplate;
+    @Autowired(required = false)
+    private UserMapper userMapper;
+    @Autowired(required = false)
+    private JavaMailSender mailSender;
+    @Value("${spring.mail.username:}")
+    private String mailFromAddress;
 
     public BookingServiceImpl(
             BookingMapper bookingMapper,
@@ -184,6 +208,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(customerId);
+        sendBookingSuccessEmailAsync(customerId, booking, specialist, slot);
         return new BookingCreateVO(booking.getId(), booking.getStatus());
     }
 
@@ -714,6 +739,102 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         } catch (Exception exception) {
             log.warn("Redis cache invalidation failed, continue without cache eviction: pattern={}, reason={}", cachePattern, exception.getMessage());
         }
+    }
+
+    private void sendBookingSuccessEmailAsync(Long customerId, Booking booking, SpecialistDetailVO specialist, TimeSlot slot) {
+        CompletableFuture.runAsync(() -> sendBookingSuccessEmailSafely(customerId, booking, specialist, slot))
+                .exceptionally(exception -> {
+                    Long bookingId = booking == null ? null : booking.getId();
+                    log.error(
+                            "Unexpected async error while sending booking success email: bookingId={}, customerId={}, reason={}",
+                            bookingId,
+                            customerId,
+                            exception.getMessage()
+                    );
+                    return null;
+                });
+    }
+
+    private void sendBookingSuccessEmailSafely(Long customerId, Booking booking, SpecialistDetailVO specialist, TimeSlot slot) {
+        if (booking == null) {
+            return;
+        }
+        Long bookingId = booking.getId();
+        if (mailSender == null) {
+            log.warn("Skip booking success email because mail sender is not configured: bookingId={}, customerId={}", bookingId, customerId);
+            return;
+        }
+
+        String customerEmail = resolveCustomerEmail(customerId);
+        if (!StringUtils.hasText(customerEmail)) {
+            log.warn("Skip booking success email because customer email is missing: bookingId={}, customerId={}", bookingId, customerId);
+            return;
+        }
+
+        String specialistText = resolveSpecialistText(booking.getSpecialistId(), specialist);
+        String appointmentTimeText = formatAppointmentTime(slot);
+        String topicText = StringUtils.hasText(booking.getTopic()) ? booking.getTopic() : "N/A";
+        String statusText = StringUtils.hasText(booking.getStatus()) ? booking.getStatus() : "N/A";
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            if (StringUtils.hasText(mailFromAddress)) {
+                message.setFrom(mailFromAddress);
+            }
+            message.setTo(customerEmail);
+            message.setSubject(BOOKING_SUCCESS_EMAIL_SUBJECT);
+            message.setText(String.format(
+                    Locale.ROOT,
+                    BOOKING_SUCCESS_EMAIL_TEMPLATE,
+                    bookingId,
+                    specialistText,
+                    appointmentTimeText,
+                    topicText,
+                    statusText
+            ));
+            mailSender.send(message);
+            log.info("Booking success email sent successfully: bookingId={}, customerId={}, email={}", bookingId, customerId, customerEmail);
+        } catch (Exception exception) {
+            log.error(
+                    "Failed to send booking success email: bookingId={}, customerId={}, reason={}",
+                    bookingId,
+                    customerId,
+                    exception.getMessage()
+            );
+        }
+    }
+
+    private String resolveSpecialistText(Long specialistId, SpecialistDetailVO specialist) {
+        String specialistName = specialist == null ? null : specialist.getName();
+        if (StringUtils.hasText(specialistName)) {
+            if (specialistId == null) {
+                return specialistName;
+            }
+            return specialistName + " (ID: " + specialistId + ")";
+        }
+        return specialistId == null ? "N/A" : "ID: " + specialistId;
+    }
+
+    private String formatAppointmentTime(TimeSlot slot) {
+        if (slot == null || slot.getSlotDate() == null || slot.getStartTime() == null) {
+            return "N/A";
+        }
+        if (slot.getEndTime() == null) {
+            return slot.getSlotDate() + " " + slot.getStartTime();
+        }
+        return slot.getSlotDate() + " " + slot.getStartTime() + " - " + slot.getEndTime();
+    }
+
+    private String resolveCustomerEmail(Long customerId) {
+        if (customerId == null || userMapper == null) {
+            return null;
+        }
+
+        User customer = userMapper.selectById(customerId);
+        if (customer == null || !StringUtils.hasText(customer.getEmail())) {
+            return null;
+        }
+        return customer.getEmail().trim().toLowerCase(Locale.ROOT);
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

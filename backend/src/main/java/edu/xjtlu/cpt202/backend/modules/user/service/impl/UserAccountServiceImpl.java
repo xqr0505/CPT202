@@ -7,11 +7,15 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.storage.AvatarStorageService;
+import edu.xjtlu.cpt202.backend.modules.auth.model.entity.VerificationCode;
 import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
+import edu.xjtlu.cpt202.backend.modules.auth.service.VerificationCodeService;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangeCurrentUserEmailDTO;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.SendChangeEmailCodeDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
@@ -46,9 +50,15 @@ public class UserAccountServiceImpl implements UserAccountService {
     private static final String CURRENT_PASSWORD_REQUIRED_MESSAGE = "Current password is required";
     private static final String CURRENT_PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect";
     private static final String EVENT_TYPE_PROFILE_UPDATED = "PROFILE_UPDATED";
+    private static final String EVENT_TYPE_EMAIL_CHANGED = "EMAIL_CHANGED";
     private static final String EVENT_TYPE_PASSWORD_CHANGED = "PASSWORD_CHANGED";
     private static final String EVENT_TYPE_AVATAR_UPDATED = "AVATAR_UPDATED";
     private static final String EVENT_TYPE_ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+    private static final String EMAIL_CHANGE_REQUIRED_MESSAGE = "Use the email verification flow to change your email address.";
+    private static final String CHANGE_EMAIL_VERIFICATION_TYPE = "CHANGE_EMAIL";
+    private static final String CHANGE_EMAIL_EMAIL_SUBJECT = "Confirm your new email address";
+    private static final String CHANGE_EMAIL_EMAIL_TEMPLATE =
+            "Use this verification code to confirm your new email address: %s\nThis code will expire in %d minutes.\nIf you did not request this change, please ignore this email.";
     private static final int SECURITY_ACTIVITY_LIMIT = 8;
     private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
     private static final Set<String> ALLOWED_AVATAR_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
@@ -64,6 +74,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     private final UserSecurityActivityMapper userSecurityActivityMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
+    private final VerificationCodeService verificationCodeService;
 
     @Override
     public UserProfileVO getCurrentUserProfile() {
@@ -90,11 +101,8 @@ public class UserAccountServiceImpl implements UserAccountService {
     public void updateCurrentUserProfile(UpdateUserProfileDTO request) {
         User user = getCurrentUserOrThrow();
         String normalizedEmail = normalizeEmail(request.getEmail());
-        boolean emailChanged = !normalizedEmail.equals(normalizeEmail(user.getEmail()));
-
-        if (emailChanged) {
-            assertCurrentPasswordMatches(user, request.getCurrentPassword());
-            ensureEmailUnique(normalizedEmail, user.getId());
+        if (!normalizedEmail.equals(normalizeEmail(user.getEmail()))) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), EMAIL_CHANGE_REQUIRED_MESSAGE);
         }
 
         user.setFullName(request.getFullName().trim());
@@ -106,6 +114,45 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PROFILE_UPDATED, "Updated account profile details.");
+    }
+
+    @Override
+    public void sendCurrentUserEmailChangeCode(SendChangeEmailCodeDTO request) {
+        User user = getCurrentUserOrThrow();
+        String normalizedNewEmail = normalizeEmail(request.getNewEmail());
+
+        validateNewEmailForChange(user, normalizedNewEmail);
+        verificationCodeService.sendCode(
+                normalizedNewEmail,
+                CHANGE_EMAIL_VERIFICATION_TYPE,
+                CHANGE_EMAIL_EMAIL_SUBJECT,
+                CHANGE_EMAIL_EMAIL_TEMPLATE
+        );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public UserProfileVO changeCurrentUserEmail(ChangeCurrentUserEmailDTO request) {
+        User user = getCurrentUserOrThrow();
+        String normalizedNewEmail = normalizeEmail(request.getNewEmail());
+
+        validateNewEmailForChange(user, normalizedNewEmail);
+
+        VerificationCode codeRecord = verificationCodeService.requireLatestValidCode(
+                normalizedNewEmail,
+                CHANGE_EMAIL_VERIFICATION_TYPE,
+                request.getCode(),
+                "Invalid or expired verification code"
+        );
+
+        user.setEmail(normalizedNewEmail);
+        if (userMapper.updateById(user) == 0) {
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update email");
+        }
+
+        verificationCodeService.markCodeUsed(codeRecord);
+        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_EMAIL_CHANGED, "Changed account email address.");
+        return toUserProfileVO(user);
     }
 
     @Override
@@ -259,6 +306,21 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (existingUser != null) {
             throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
         }
+    }
+
+    private void validateNewEmailForChange(User user, String normalizedNewEmail) {
+        if (!StringUtils.hasText(normalizedNewEmail)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "New email is required");
+        }
+
+        if (normalizedNewEmail.equals(normalizeEmail(user.getEmail()))) {
+            throw new BusinessException(
+                    ResultCodeEnum.BAD_REQUEST.getCode(),
+                    "New email must be different from your current email"
+            );
+        }
+
+        ensureEmailUnique(normalizedNewEmail, user.getId());
     }
 
     private String normalizeEmail(String email) {

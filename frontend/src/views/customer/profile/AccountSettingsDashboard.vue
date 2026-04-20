@@ -200,10 +200,61 @@
               </el-form-item>
             </div>
 
+            <div
+              v-if="emailChangeNotice"
+              class="status-banner"
+              :class="`status-banner--${emailChangeNotice.tone}`"
+              aria-live="polite"
+            >
+              <div class="status-banner__body">
+                <strong class="status-banner__title">{{ emailChangeNotice.title }}</strong>
+                <p class="status-banner__text">{{ emailChangeNotice.message }}</p>
+              </div>
+            </div>
+
+            <div class="email-verification-panel">
+              <div class="email-verification-panel__header">
+                <div>
+                  <span class="email-verification-panel__label">Email verification</span>
+                  <p class="email-verification-panel__text">
+                    Changing your email requires a 6-digit code sent to the new address before the
+                    save can be completed.
+                  </p>
+                </div>
+
+                <CustomButton
+                  type="primary"
+                  :loading="isSendingEmailChangeCode"
+                  :disabled="!canSendEmailChangeCode"
+                  @click="sendEmailChangeCode"
+                >
+                  {{ emailChangeSendButtonText }}
+                </CustomButton>
+              </div>
+
+              <div class="email-verification-panel__body">
+                <el-input
+                  v-model="emailChangeVerificationCode"
+                  maxlength="6"
+                  placeholder="Enter 6-digit verification code"
+                  inputmode="numeric"
+                  :disabled="!hasPendingEmailChange"
+                  @input="sanitizeEmailChangeCodeInput"
+                />
+                <p class="email-verification-panel__hint">
+                  {{ emailChangeHelperText }}
+                </p>
+              </div>
+            </div>
+
             <div class="contact-summary">
               <div class="contact-summary__item">
                 <span class="contact-summary__label">Saved phone format</span>
                 <strong class="contact-summary__value">{{ composedPhonePreview || 'Not provided' }}</strong>
+              </div>
+              <div class="contact-summary__item">
+                <span class="contact-summary__label">Email verification status</span>
+                <strong class="contact-summary__value">{{ emailChangeStatusText }}</strong>
               </div>
               <div class="contact-summary__item">
                 <span class="contact-summary__label">Profile data source</span>
@@ -562,34 +613,17 @@
           </div>
 
           <div
-            v-if="requiresProfileReauthentication"
+            v-if="hasPendingEmailChange"
             class="status-banner status-banner--warning"
             aria-live="polite"
           >
             <div class="status-banner__body">
-              <strong class="status-banner__title">Current password required</strong>
+              <strong class="status-banner__title">Verification code required</strong>
               <p class="status-banner__text">
-                Changing the email on this account is a sensitive action, so please confirm your
-                current password before saving.
+                Send a code to {{ trimmedProfileDraft.email || 'the new email address' }}, enter it
+                in the contact section, and then confirm this save.
               </p>
             </div>
-          </div>
-
-          <div v-if="requiresProfileReauthentication" class="dialog-field">
-            <label class="dialog-field__label" for="profile-save-current-password">
-              Current password
-            </label>
-            <el-input
-              id="profile-save-current-password"
-              v-model="profileSaveCurrentPassword"
-              type="password"
-              show-password
-              autocomplete="current-password"
-              placeholder="Enter your current password"
-            />
-            <p class="dialog-field__hint">
-              This password is only used to confirm the email change in this save request.
-            </p>
           </div>
 
           <div
@@ -775,15 +809,19 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
 import {
+  changeCurrentUserEmail,
   changeCurrentUserPassword,
   deactivateCurrentUserAccount,
   getCurrentUserProfile,
   getCurrentUserSecurityActivity,
+  sendCurrentUserEmailChangeCode,
   uploadCurrentUserAvatar,
   updateCurrentUserProfile,
   type AccountProfile,
   type AvatarUploadResponse,
+  type ChangeCurrentUserEmailPayload,
   type ChangePasswordPayload,
+  type SendEmailChangeCodePayload,
   type SecurityActivityItem,
   type UpdateUserProfilePayload
 } from '@/api/user'
@@ -916,23 +954,28 @@ const profileNotice = ref<SectionNotice | null>(null)
 const passwordNotice = ref<SectionNotice | null>(null)
 const deactivationNotice = ref<SectionNotice | null>(null)
 const securityActivityNotice = ref<SectionNotice | null>(null)
+const emailChangeNotice = ref<SectionNotice | null>(null)
 const isUploadingAvatar = ref(false)
 const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
 const isDeactivatingAccount = ref(false)
 const isLoadingSecurityActivity = ref(false)
+const isSendingEmailChangeCode = ref(false)
 const isProfileSaveDialogOpen = ref(false)
 const isDeactivationDialogOpen = ref(false)
-const profileSaveCurrentPassword = ref('')
 const profileSaveDialogError = ref('')
 const deactivationCurrentPassword = ref('')
 const deactivationDialogError = ref('')
+const emailChangeVerificationCode = ref('')
+const emailChangeTargetEmail = ref('')
+const emailChangeCountdown = ref(0)
 const originalProfile = ref<AccountProfile | null>(null)
 const securityActivityItems = ref<SecurityActivityItem[]>([])
 const lastProfileSavedAt = ref<Date | null>(null)
 const lastPasswordUpdatedAt = ref<Date | null>(null)
 const highlightedSection = ref<SectionKey | null>(null)
 const highlightTimer = ref<number | null>(null)
+const emailChangeCountdownTimer = ref<number | null>(null)
 const shouldBypassUnsavedChangesPrompt = ref(false)
 
 const profileFormRef = ref<FormInstance>()
@@ -1061,6 +1104,39 @@ const trimmedProfileDraft = computed<UpdateUserProfilePayload>(() => {
   }
 })
 
+const normalizedSavedEmail = computed(() => normalizeEmail(originalProfile.value?.email))
+const normalizedDraftEmail = computed(() => normalizeEmail(trimmedProfileDraft.value.email))
+const hasPendingEmailChange = computed(() => {
+  return Boolean(originalProfile.value) && normalizedDraftEmail.value !== normalizedSavedEmail.value
+})
+
+const hasNonEmailProfileChanges = computed(() => {
+  if (!originalProfile.value) {
+    return false
+  }
+
+  return (
+    trimmedProfileDraft.value.fullName !== originalProfile.value.fullName ||
+    trimmedProfileDraft.value.phoneNumber !== originalProfile.value.phoneNumber
+  )
+})
+
+const isPendingEmailDraftValid = computed(() => {
+  return hasPendingEmailChange.value && EMAIL_PATTERN.test(trimmedProfileDraft.value.email)
+})
+
+const isEmailChangeCodeBoundToCurrentDraft = computed(() => {
+  return Boolean(emailChangeTargetEmail.value) && normalizedDraftEmail.value === emailChangeTargetEmail.value
+})
+
+const isEmailChangeCodeReady = computed(() => {
+  return (
+    hasPendingEmailChange.value &&
+    isEmailChangeCodeBoundToCurrentDraft.value &&
+    emailChangeVerificationCode.value.trim().length === 6
+  )
+})
+
 const profileCompletionItems = computed<CompletionItem[]>(() => {
   return [
     {
@@ -1109,23 +1185,7 @@ const currentPageStyleText = computed(() => {
 })
 
 const hasUnsavedProfileChanges = computed(() => {
-  if (!originalProfile.value) {
-    return false
-  }
-
-  return (
-    trimmedProfileDraft.value.fullName !== originalProfile.value.fullName ||
-    trimmedProfileDraft.value.email !== originalProfile.value.email ||
-    trimmedProfileDraft.value.phoneNumber !== originalProfile.value.phoneNumber
-  )
-})
-
-const requiresProfileReauthentication = computed(() => {
-  if (!originalProfile.value) {
-    return false
-  }
-
-  return trimmedProfileDraft.value.email !== originalProfile.value.email
+  return hasNonEmailProfileChanges.value || hasPendingEmailChange.value
 })
 
 const profileChangeSummaryItems = computed<ProfileChangeSummaryItem[]>(() => {
@@ -1182,6 +1242,10 @@ const profileMetaText = computed(() => {
     return 'Account is currently deactivated'
   }
 
+  if (hasPendingEmailChange.value) {
+    return 'Email verification is required before the new email can be saved'
+  }
+
   if (hasUnsavedProfileChanges.value) {
     return 'Unsaved profile edits in progress'
   }
@@ -1199,6 +1263,63 @@ const passwordMetaText = computed(() => {
   }
 
   return 'Ready for a secure password update'
+})
+
+const canSendEmailChangeCode = computed(() => {
+  return (
+    hasApiSession.value &&
+    currentAccountStatus.value === 'ACTIVE' &&
+    !isSendingEmailChangeCode.value &&
+    isPendingEmailDraftValid.value &&
+    emailChangeCountdown.value === 0
+  )
+})
+
+const emailChangeSendButtonText = computed(() => {
+  if (
+    emailChangeCountdown.value > 0 &&
+    isEmailChangeCodeBoundToCurrentDraft.value
+  ) {
+    return `${emailChangeCountdown.value} seconds to resend`
+  }
+
+  return 'Send Code'
+})
+
+const emailChangeStatusText = computed(() => {
+  if (!hasPendingEmailChange.value) {
+    return 'No verification pending'
+  }
+
+  if (isEmailChangeCodeReady.value) {
+    return 'Code ready for save'
+  }
+
+  if (isEmailChangeCodeBoundToCurrentDraft.value) {
+    return 'Code sent, awaiting confirmation'
+  }
+
+  return 'Code not sent'
+})
+
+const emailChangeHelperText = computed(() => {
+  if (!hasPendingEmailChange.value) {
+    return 'Enter a different email address first, then send a verification code before saving.'
+  }
+
+  if (!EMAIL_PATTERN.test(trimmedProfileDraft.value.email)) {
+    return 'Enter a valid email address before requesting a verification code.'
+  }
+
+  if (isEmailChangeCodeReady.value) {
+    return `A valid code is ready for ${trimmedProfileDraft.value.email}. Save your profile to confirm the new email.`
+  }
+
+  if (isEmailChangeCodeBoundToCurrentDraft.value && emailChangeCountdown.value > 0) {
+    return `A verification code was sent to ${trimmedProfileDraft.value.email}. Enter it here and save when ready.`
+  }
+
+  return `Send a verification code to ${trimmedProfileDraft.value.email}, enter it here, and then save your profile.`
 })
 
 const securityActivityStatusText = computed(() => {
@@ -1383,6 +1504,10 @@ const buildPhoneNumber = (countryCode: string, localPhoneNumber: string): string
   return `${countryCode.trim()} ${trimmedNumber}`.trim()
 }
 
+const normalizeEmail = (value: string | undefined | null): string => {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
 const toDisplayDate = (value: Date | string): Date | null => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value
@@ -1424,6 +1549,8 @@ const getSecurityActivityLabel = (eventType: string): string => {
   switch (eventType.trim().toUpperCase()) {
     case 'PROFILE_UPDATED':
       return 'Profile updated'
+    case 'EMAIL_CHANGED':
+      return 'Email changed'
     case 'PASSWORD_CHANGED':
       return 'Password changed'
     case 'AVATAR_UPDATED':
@@ -1450,32 +1577,47 @@ const buildAvatarInitials = (value: string): string => {
 }
 
 const syncUserStoreProfile = (profile: AccountProfile): void => {
-  const currentUser = userStore.userInfo
   const currentRole = userStore.userRole
 
-  if (!currentUser || !currentRole) {
+  if (!currentRole) {
     return
   }
 
   userStore.setUserInfo(
     {
-      ...currentUser,
+      ...(userStore.userInfo ?? {
+        id: profile.id,
+        username: '',
+        nickname: ''
+      }),
       fullName: profile.fullName,
       email: profile.email,
       phoneNumber: profile.phoneNumber,
       avatar: profile.avatarUrl,
-      nickname: profile.fullName || currentUser.nickname,
-      username: currentUser.username || profile.email || `user-${profile.id}`
+      nickname:
+        profile.fullName ||
+        userStore.userInfo?.nickname ||
+        profile.email ||
+        `user-${profile.id}`,
+      username:
+        profile.email ||
+        userStore.userInfo?.username ||
+        `user-${profile.id}`
     },
     currentRole
   )
 }
 
-const populateProfileForm = (profile: AccountProfile): void => {
+const populateProfileForm = (
+  profile: AccountProfile,
+  options: {
+    emailOverride?: string
+  } = {}
+): void => {
   const phoneParts = splitPhoneNumber(profile.phoneNumber)
 
   profileForm.fullName = profile.fullName
-  profileForm.email = profile.email
+  profileForm.email = options.emailOverride ?? profile.email
   profileForm.countryCode =
     phoneParts.countryCode && (isCountryCode(phoneParts.countryCode) || COUNTRY_CODE_PATTERN.test(phoneParts.countryCode))
       ? phoneParts.countryCode
@@ -1503,8 +1645,39 @@ const resetProfileFormState = (): void => {
   profileFormRef.value?.clearValidate()
 }
 
+const clearEmailChangeCountdown = (): void => {
+  if (emailChangeCountdownTimer.value) {
+    window.clearInterval(emailChangeCountdownTimer.value)
+    emailChangeCountdownTimer.value = null
+  }
+
+  emailChangeCountdown.value = 0
+}
+
+const resetEmailChangeFlow = (clearNotice = true): void => {
+  emailChangeVerificationCode.value = ''
+  emailChangeTargetEmail.value = ''
+  clearEmailChangeCountdown()
+
+  if (clearNotice) {
+    emailChangeNotice.value = null
+  }
+}
+
+const startEmailChangeCountdown = (): void => {
+  clearEmailChangeCountdown()
+  emailChangeCountdown.value = 60
+  emailChangeCountdownTimer.value = window.setInterval(() => {
+    if (emailChangeCountdown.value <= 1) {
+      clearEmailChangeCountdown()
+      return
+    }
+
+    emailChangeCountdown.value -= 1
+  }, 1000)
+}
+
 const resetProfileSaveDialogState = (): void => {
-  profileSaveCurrentPassword.value = ''
   profileSaveDialogError.value = ''
 }
 
@@ -1529,10 +1702,13 @@ const clearSensitiveAccountState = (): void => {
   profileNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
+  emailChangeNotice.value = null
   isProfileSaveDialogOpen.value = false
   isDeactivationDialogOpen.value = false
+  isSendingEmailChangeCode.value = false
   resetProfileSaveDialogState()
   resetDeactivationDialogState()
+  resetEmailChangeFlow(false)
   resetProfileFormState()
   resetPasswordForm(false)
   viewState.value = 'loading'
@@ -1746,9 +1922,85 @@ const handleCountryCodeChange = (): void => {
   }
 }
 
+const sanitizeEmailChangeCodeInput = (value: string | number): void => {
+  emailChangeVerificationCode.value = String(value ?? '')
+    .replace(/\D+/g, '')
+    .slice(0, 6)
+}
+
 const resetAvatarInput = (): void => {
   if (avatarInputRef.value) {
     avatarInputRef.value.value = ''
+  }
+}
+
+const sendEmailChangeCode = async (): Promise<void> => {
+  emailChangeNotice.value = null
+
+  if (!hasPendingEmailChange.value) {
+    emailChangeNotice.value = {
+      tone: 'info',
+      title: 'No new email to verify',
+      message: 'Enter a different email address before requesting a verification code.'
+    }
+    return
+  }
+
+  const isEmailValid = profileFormRef.value
+    ? await profileFormRef.value.validateField('email').then(() => true).catch(() => false)
+    : false
+  if (isEmailValid !== true) {
+    emailChangeNotice.value = {
+      tone: 'error',
+      title: 'Invalid email address',
+      message: 'Enter a valid new email address before requesting a verification code.'
+    }
+    return
+  }
+
+  if (!hasApiSession.value) {
+    handleAuthenticationLoss()
+    return
+  }
+
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    emailChangeNotice.value = {
+      tone: 'warning',
+      title: 'Email changes unavailable',
+      message: 'Only active accounts can request a verification code for a new email address.'
+    }
+    return
+  }
+
+  isSendingEmailChangeCode.value = true
+
+  try {
+    const payload: SendEmailChangeCodePayload = {
+      newEmail: trimmedProfileDraft.value.email
+    }
+
+    await sendCurrentUserEmailChangeCode(payload)
+    emailChangeTargetEmail.value = normalizedDraftEmail.value
+    emailChangeVerificationCode.value = ''
+    startEmailChangeCountdown()
+    emailChangeNotice.value = {
+      tone: 'success',
+      title: 'Verification code sent',
+      message: `A 6-digit verification code was sent to ${trimmedProfileDraft.value.email}. Enter it below, then save your profile.`
+    }
+  } catch (error) {
+    if (isAuthFailureError(error)) {
+      handleAuthenticationLoss()
+      return
+    }
+
+    emailChangeNotice.value = {
+      tone: 'error',
+      title: 'Unable to send verification code',
+      message: getErrorMessage(error, 'Unable to send a verification code right now.')
+    }
+  } finally {
+    isSendingEmailChangeCode.value = false
   }
 }
 
@@ -1892,6 +2144,7 @@ const loadDashboard = async (): Promise<void> => {
   profileNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
+  resetEmailChangeFlow()
   resetSecurityActivityState()
 
   try {
@@ -1928,6 +2181,7 @@ const loadDashboard = async (): Promise<void> => {
 
 const saveProfile = async (): Promise<void> => {
   profileNotice.value = null
+  emailChangeNotice.value = null
 
   if (!profileFormRef.value || !originalProfile.value) {
     return
@@ -1974,39 +2228,73 @@ const confirmProfileSave = async (): Promise<void> => {
 
   profileSaveDialogError.value = ''
 
-  if (requiresProfileReauthentication.value && !profileSaveCurrentPassword.value.trim()) {
-    profileSaveDialogError.value = 'Current password is required to change your email address.'
+  const emailWillChange = hasPendingEmailChange.value
+  const profileFieldsWillChange = hasNonEmailProfileChanges.value
+  const draftEmail = trimmedProfileDraft.value.email
+  let savedProfileSnapshot = normalizeProfile(originalProfile.value)
+  let savedNonEmailChanges = false
+
+  if (emailWillChange) {
+    if (!isEmailChangeCodeBoundToCurrentDraft.value) {
+      profileSaveDialogError.value = 'Send a verification code to the new email address before saving.'
+      return
+    }
+
+    if (emailChangeVerificationCode.value.trim().length !== 6) {
+      profileSaveDialogError.value = 'Enter the 6-digit verification code before saving your new email.'
+      return
+    }
+  }
+
+  if (!hasApiSession.value) {
+    isProfileSaveDialogOpen.value = false
+    handleAuthenticationLoss()
     return
   }
 
   isSavingProfile.value = true
 
   try {
-    const payload: UpdateUserProfilePayload = {
-      ...trimmedProfileDraft.value,
-      ...(requiresProfileReauthentication.value
-        ? { currentPassword: profileSaveCurrentPassword.value.trim() }
-        : {})
+    if (profileFieldsWillChange) {
+      const profilePayload: UpdateUserProfilePayload = {
+        fullName: trimmedProfileDraft.value.fullName,
+        email: originalProfile.value.email,
+        phoneNumber: trimmedProfileDraft.value.phoneNumber
+      }
+
+      await updateCurrentUserProfile(profilePayload)
+      savedProfileSnapshot = normalizeProfile({
+        ...savedProfileSnapshot,
+        ...profilePayload
+      })
+      savedNonEmailChanges = true
     }
-    await updateCurrentUserProfile(payload)
 
-    const savedProfile = normalizeProfile({
-      id: originalProfile.value.id,
-      status: originalProfile.value.status,
-      avatarUrl: originalProfile.value.avatarUrl,
-      ...payload
-    })
+    if (emailWillChange) {
+      const emailPayload: ChangeCurrentUserEmailPayload = {
+        newEmail: draftEmail,
+        code: emailChangeVerificationCode.value.trim()
+      }
 
-    originalProfile.value = savedProfile
-    populateProfileForm(savedProfile)
-    syncUserStoreProfile(savedProfile)
+      savedProfileSnapshot = normalizeProfile(await changeCurrentUserEmail(emailPayload))
+    }
+
+    originalProfile.value = savedProfileSnapshot
+    populateProfileForm(savedProfileSnapshot)
+    resetEmailChangeFlow()
+    syncUserStoreProfile(savedProfileSnapshot)
     lastProfileSavedAt.value = new Date()
     isProfileSaveDialogOpen.value = false
 
     profileNotice.value = {
       tone: 'success',
       title: 'Profile saved successfully',
-      message: 'Your personal and contact details were updated using the existing profile endpoint.'
+      message:
+        emailWillChange && profileFieldsWillChange
+          ? 'Your profile details were updated and the new email address was verified successfully.'
+          : emailWillChange
+            ? 'Your new email address was verified and saved successfully.'
+            : 'Your personal and contact details were updated successfully.'
     }
     void loadSecurityActivity(true)
   } catch (error) {
@@ -2016,6 +2304,22 @@ const confirmProfileSave = async (): Promise<void> => {
     }
 
     profileSaveDialogError.value = getErrorMessage(error, 'Unable to save your profile right now.')
+
+    if (savedNonEmailChanges) {
+      originalProfile.value = savedProfileSnapshot
+      populateProfileForm(savedProfileSnapshot, {
+        emailOverride: draftEmail
+      })
+      syncUserStoreProfile(savedProfileSnapshot)
+      lastProfileSavedAt.value = new Date()
+      profileNotice.value = {
+        tone: 'warning',
+        title: 'Profile details saved, email still pending',
+        message: `${profileSaveDialogError.value} Your other profile details were saved, but the email change still needs a valid verification code.`
+      }
+      return
+    }
+
     profileNotice.value = {
       tone: 'error',
       title: 'Unable to save profile changes',
@@ -2031,6 +2335,7 @@ const resetProfileForm = (): void => {
     return
   }
 
+  resetEmailChangeFlow()
   populateProfileForm(originalProfile.value)
   profileNotice.value = {
     tone: 'info',
@@ -2204,6 +2509,17 @@ const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
 }
 
 watch(
+  () => profileForm.email,
+  newValue => {
+    const normalizedEmail = normalizeEmail(newValue)
+
+    if (emailChangeTargetEmail.value && normalizedEmail !== emailChangeTargetEmail.value) {
+      resetEmailChangeFlow()
+    }
+  }
+)
+
+watch(
   () => passwordForm.newPassword,
   () => {
     if (passwordForm.confirmationPassword.trim()) {
@@ -2249,6 +2565,8 @@ onBeforeUnmount(() => {
   if (highlightTimer.value) {
     window.clearTimeout(highlightTimer.value)
   }
+
+  clearEmailChangeCountdown()
 })
 </script>
 
@@ -2490,6 +2808,47 @@ onBeforeUnmount(() => {
 .contact-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.email-verification-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.08), rgba(var(--color-bg-surface-rgb), 0.96)),
+    var(--color-bg-page);
+}
+
+.email-verification-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.email-verification-panel__label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.email-verification-panel__text,
+.email-verification-panel__hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.email-verification-panel__body {
+  display: grid;
   gap: var(--space-3);
 }
 
@@ -3060,6 +3419,7 @@ onBeforeUnmount(() => {
 
   .settings-card__header,
   .avatar-panel,
+  .email-verification-panel__header,
   .form-footer,
   .strength-panel__header,
   .danger-item {
@@ -3106,4 +3466,3 @@ onBeforeUnmount(() => {
   }
 }
 </style>
-

@@ -2,7 +2,9 @@ package edu.xjtlu.cpt202.backend.modules.user.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangeCurrentUserEmailDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ConfirmCurrentPasswordDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.dto.SendChangeEmailCodeDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
@@ -10,6 +12,7 @@ import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -44,7 +47,18 @@ public class UserAccountController {
         return Result.success();
     }
 
-    @PostMapping("/avatar")
+    @PostMapping("/email/send-code")
+    public Result<Void> sendEmailChangeCode(@Valid @RequestBody SendChangeEmailCodeDTO request) {
+        userAccountService.sendCurrentUserEmailChangeCode(request);
+        return Result.success();
+    }
+
+    @PostMapping("/email/change")
+    public Result<UserProfileVO> changeEmail(@Valid @RequestBody ChangeCurrentUserEmailDTO request) {
+        return Result.success(userAccountService.changeCurrentUserEmail(request));
+    }
+
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UserAvatarUploadVO> uploadAvatar(@RequestParam("file") MultipartFile file) {
         return Result.success(userAccountService.uploadCurrentUserAvatar(file));
     }

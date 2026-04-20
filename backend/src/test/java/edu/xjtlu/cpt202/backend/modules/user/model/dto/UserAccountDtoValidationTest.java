@@ -63,4 +63,30 @@ class UserAccountDtoValidationTest {
 
         assertTrue(messages.contains("Current password is required"));
     }
+
+    @Test
+    void sendChangeEmailCodeDto_rejectsBlankOrInvalidEmail() {
+        SendChangeEmailCodeDTO request = new SendChangeEmailCodeDTO();
+        request.setNewEmail("not-an-email");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("Please enter a valid email address."));
+    }
+
+    @Test
+    void changeCurrentUserEmailDto_rejectsInvalidEmailAndCode() {
+        ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setNewEmail(" ");
+        request.setCode("12ab");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("New email is required."));
+        assertTrue(messages.contains("Verification code must be 6 digits."));
+    }
 }

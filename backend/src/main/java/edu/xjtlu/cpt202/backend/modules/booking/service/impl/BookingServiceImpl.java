@@ -43,6 +43,9 @@ import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +92,62 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             Consultation Topic: %s
             Status: %s
             """;
+    private static final String SPECIALIST_CANCEL_CUSTOMER_EMAIL_SUBJECT = "Your booking was cancelled by specialist";
+    private static final String SPECIALIST_CANCEL_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking has been cancelled by the specialist.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Cancellation Reason: %s
+            Refund Amount: %s
+            Status: CANCELLED
+            """;
+    private static final String SPECIALIST_CANCEL_SPECIALIST_EMAIL_SUBJECT = "Cancellation confirmation";
+    private static final String SPECIALIST_CANCEL_SPECIALIST_EMAIL_TEMPLATE = """
+            You have successfully cancelled a booking.
+            Booking ID: %d
+            Customer: %s
+            Appointment Time: %s
+            Cancellation Reason: %s
+            Slot Handling: %s
+            """;
+    private static final String CUSTOMER_CANCEL_CUSTOMER_EMAIL_SUBJECT = "Your booking cancellation is confirmed";
+    private static final String CUSTOMER_CANCEL_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking cancellation has been confirmed.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Refund Amount: %s
+            Penalty Amount: %s
+            Status: CANCELLED
+            """;
+    private static final String CUSTOMER_CANCEL_SPECIALIST_EMAIL_SUBJECT = "Booking was cancelled by customer";
+    private static final String CUSTOMER_CANCEL_SPECIALIST_EMAIL_TEMPLATE = """
+            A customer has cancelled a booking.
+            Booking ID: %d
+            Customer: %s
+            Appointment Time: %s
+            Status: CANCELLED
+            """;
+    private static final String CUSTOMER_RESCHEDULE_CUSTOMER_EMAIL_SUBJECT = "Your booking reschedule is confirmed";
+    private static final String CUSTOMER_RESCHEDULE_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking has been rescheduled successfully.
+            Booking ID: %d
+            Specialist: %s
+            New Appointment Time: %s
+            Refund Amount: %s
+            Penalty Amount: %s
+            Payable Amount: %s
+            Status: %s
+            """;
+    private static final String CUSTOMER_RESCHEDULE_SPECIALIST_EMAIL_SUBJECT = "Booking has been rescheduled by customer";
+    private static final String CUSTOMER_RESCHEDULE_SPECIALIST_EMAIL_TEMPLATE = """
+            A customer has rescheduled a booking.
+            Booking ID: %d
+            Customer: %s
+            New Appointment Time: %s
+            Status: %s
+            """;
 
     private final BookingMapper bookingMapper;
     private final BookingTopicMapper bookingTopicMapper;
@@ -98,6 +157,8 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private final RedisTemplate<String, Object> jsonRedisTemplate;
     @Autowired(required = false)
     private UserMapper userMapper;
+    @Autowired(required = false)
+    private SpecialistProfileMapper specialistProfileMapper;
     @Autowired(required = false)
     private JavaMailSender mailSender;
     @Value("${spring.mail.username:}")
@@ -485,6 +546,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());
+        sendSpecialistForceCancelEmailAsync(booking, slot, cancelReason, releaseSlot);
     }
 
     @Override
@@ -614,6 +676,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(currentCustomerId);
+        sendCustomerCancellationEmailsAsync(booking, slot, quote);
         return BookingCancelConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(BookingStatusEnum.CANCELLED.name())
@@ -718,6 +781,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         bookingMapper.updateById(booking);
 
         invalidateCustomerBookingCache(currentCustomerId);
+        sendCustomerRescheduleEmailsAsync(booking, newSlot, quote);
         return BookingRescheduleConfirmVO.builder()
                 .bookingId(bookingId)
                 .bookingStatus(booking.getStatus())
@@ -889,6 +953,185 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             return null;
         }
         return customer.getEmail().trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void sendSpecialistForceCancelEmailAsync(Booking booking, TimeSlot slot, String cancelReason, boolean releaseSlot) {
+        CompletableFuture.runAsync(() -> sendSpecialistForceCancelEmailSafely(booking, slot, cancelReason, releaseSlot))
+                .exceptionally(exception -> {
+                    log.error("Unexpected async error while sending specialist cancel emails: bookingId={}, reason={}",
+                            booking == null ? null : booking.getId(), exception.getMessage());
+                    return null;
+                });
+    }
+
+    private void sendSpecialistForceCancelEmailSafely(Booking booking, TimeSlot slot, String cancelReason, boolean releaseSlot) {
+        if (booking == null || mailSender == null) {
+            return;
+        }
+        String reasonText = StringUtils.hasText(cancelReason) ? cancelReason : "N/A";
+        String appointmentText = formatAppointmentTime(slot);
+        String specialistText = resolveSpecialistText(booking.getSpecialistId(), null);
+        String customerText = resolveCustomerText(booking.getCustomerId());
+        String refundText = booking.getPrice() == null ? "0.00" : booking.getPrice().toPlainString();
+        String slotHandlingText = releaseSlot ? "Released for booking" : "Locked";
+
+        String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+        if (StringUtils.hasText(customerEmail)) {
+            sendSimpleEmail(customerEmail, SPECIALIST_CANCEL_CUSTOMER_EMAIL_SUBJECT, String.format(
+                    Locale.ROOT,
+                    SPECIALIST_CANCEL_CUSTOMER_EMAIL_TEMPLATE,
+                    booking.getId(),
+                    specialistText,
+                    appointmentText,
+                    reasonText,
+                    refundText
+            ));
+        }
+
+        String specialistEmail = resolveSpecialistEmail(booking.getSpecialistId());
+        if (StringUtils.hasText(specialistEmail)) {
+            sendSimpleEmail(specialistEmail, SPECIALIST_CANCEL_SPECIALIST_EMAIL_SUBJECT, String.format(
+                    Locale.ROOT,
+                    SPECIALIST_CANCEL_SPECIALIST_EMAIL_TEMPLATE,
+                    booking.getId(),
+                    customerText,
+                    appointmentText,
+                    reasonText,
+                    slotHandlingText
+            ));
+        }
+    }
+
+    private void sendSimpleEmail(String to, String subject, String text) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            if (StringUtils.hasText(mailFromAddress)) {
+                message.setFrom(mailFromAddress);
+            }
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(text);
+            mailSender.send(message);
+        } catch (Exception exception) {
+            log.error("Failed to send email: to={}, subject={}, reason={}", to, subject, exception.getMessage());
+        }
+    }
+
+    private String resolveSpecialistEmail(Long specialistId) {
+        if (specialistId == null || specialistProfileMapper == null || userMapper == null) {
+            return null;
+        }
+        SpecialistProfile profile = specialistProfileMapper.selectById(specialistId);
+        if (profile == null || profile.getUserId() == null) {
+            return null;
+        }
+        User specialistUser = userMapper.selectById(profile.getUserId());
+        if (specialistUser == null || !StringUtils.hasText(specialistUser.getEmail())) {
+            return null;
+        }
+        return specialistUser.getEmail().trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveCustomerText(Long customerId) {
+        if (customerId == null || userMapper == null) {
+            return customerId == null ? "N/A" : "ID: " + customerId;
+        }
+        User customer = userMapper.selectById(customerId);
+        if (customer == null) {
+            return "ID: " + customerId;
+        }
+        if (StringUtils.hasText(customer.getFullName())) {
+            return customer.getFullName().trim() + " (ID: " + customerId + ")";
+        }
+        if (StringUtils.hasText(customer.getEmail())) {
+            return customer.getEmail().trim() + " (ID: " + customerId + ")";
+        }
+        return "ID: " + customerId;
+    }
+
+    private void sendCustomerCancellationEmailsAsync(Booking booking, TimeSlot slot, BookingCancelQuoteVO quote) {
+        CompletableFuture.runAsync(() -> {
+            String specialistText = resolveSpecialistText(booking.getSpecialistId(), null);
+            String customerText = resolveCustomerText(booking.getCustomerId());
+            String appointmentText = formatAppointmentTime(slot);
+            String refundText = moneyText(quote == null ? null : quote.getRefundAmount());
+            String penaltyText = moneyText(quote == null ? null : quote.getPenaltyAmount());
+
+            String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+            if (StringUtils.hasText(customerEmail)) {
+                sendSimpleEmail(customerEmail, CUSTOMER_CANCEL_CUSTOMER_EMAIL_SUBJECT, String.format(
+                        Locale.ROOT,
+                        CUSTOMER_CANCEL_CUSTOMER_EMAIL_TEMPLATE,
+                        booking.getId(),
+                        specialistText,
+                        appointmentText,
+                        refundText,
+                        penaltyText
+                ));
+            }
+
+            String specialistEmail = resolveSpecialistEmail(booking.getSpecialistId());
+            if (StringUtils.hasText(specialistEmail)) {
+                sendSimpleEmail(specialistEmail, CUSTOMER_CANCEL_SPECIALIST_EMAIL_SUBJECT, String.format(
+                        Locale.ROOT,
+                        CUSTOMER_CANCEL_SPECIALIST_EMAIL_TEMPLATE,
+                        booking.getId(),
+                        customerText,
+                        appointmentText
+                ));
+            }
+        }).exceptionally(exception -> {
+            log.error("Unexpected async error while sending customer cancel emails: bookingId={}, reason={}",
+                    booking == null ? null : booking.getId(), exception.getMessage());
+            return null;
+        });
+    }
+
+    private void sendCustomerRescheduleEmailsAsync(Booking booking, TimeSlot newSlot, BookingRescheduleQuoteVO quote) {
+        CompletableFuture.runAsync(() -> {
+            String specialistText = resolveSpecialistText(booking.getSpecialistId(), null);
+            String customerText = resolveCustomerText(booking.getCustomerId());
+            String appointmentText = formatAppointmentTime(newSlot);
+            String refundText = moneyText(quote == null ? null : quote.getRefundAmount());
+            String penaltyText = moneyText(quote == null ? null : quote.getPenaltyAmount());
+            String payableText = moneyText(quote == null ? null : quote.getPayableAmount());
+            String statusText = StringUtils.hasText(booking.getStatus()) ? booking.getStatus() : "N/A";
+
+            String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+            if (StringUtils.hasText(customerEmail)) {
+                sendSimpleEmail(customerEmail, CUSTOMER_RESCHEDULE_CUSTOMER_EMAIL_SUBJECT, String.format(
+                        Locale.ROOT,
+                        CUSTOMER_RESCHEDULE_CUSTOMER_EMAIL_TEMPLATE,
+                        booking.getId(),
+                        specialistText,
+                        appointmentText,
+                        refundText,
+                        penaltyText,
+                        payableText,
+                        statusText
+                ));
+            }
+
+            String specialistEmail = resolveSpecialistEmail(booking.getSpecialistId());
+            if (StringUtils.hasText(specialistEmail)) {
+                sendSimpleEmail(specialistEmail, CUSTOMER_RESCHEDULE_SPECIALIST_EMAIL_SUBJECT, String.format(
+                        Locale.ROOT,
+                        CUSTOMER_RESCHEDULE_SPECIALIST_EMAIL_TEMPLATE,
+                        booking.getId(),
+                        customerText,
+                        appointmentText,
+                        statusText
+                ));
+            }
+        }).exceptionally(exception -> {
+            log.error("Unexpected async error while sending customer reschedule emails: bookingId={}, reason={}",
+                    booking == null ? null : booking.getId(), exception.getMessage());
+            return null;
+        });
+    }
+
+    private String moneyText(BigDecimal amount) {
+        return amount == null ? "0.00" : amount.toPlainString();
     }
 
     private BigDecimal resolvePrice(BigDecimal consultationFee) {

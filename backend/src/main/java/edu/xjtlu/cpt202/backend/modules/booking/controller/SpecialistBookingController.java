@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistForceCancelBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
@@ -72,6 +73,17 @@ public class SpecialistBookingController {
             @Valid @RequestBody SpecialistRejectBookingRequestDTO requestDTO) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         bookingService.rejectBookingRequest(bookingId, currentUserId, requestDTO);
+        return Result.success();
+    }
+
+    @PostMapping("/{id}/force-cancel")
+    @Operation(summary = "Force cancel a booking by specialist")
+    @PreAuthorize("hasRole('SPECIALIST')")
+    public Result<Void> specialistForceCancelBooking(
+            @PathVariable("id") Long bookingId,
+            @Valid @RequestBody SpecialistForceCancelBookingRequestDTO requestDTO) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        bookingService.specialistForceCancelBooking(bookingId, currentUserId, requestDTO);
         return Result.success();
     }
 }

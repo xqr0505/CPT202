@@ -13,6 +13,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistForceCancelBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
@@ -940,6 +941,110 @@ public class BookingServiceImplTest {
         assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
         verify(bookingMapper, times(0)).updateById(any(Booking.class));
 
+    }
+
+    @Test
+    void specialistForceCancelBooking_ReleaseSlot_Success() {
+        Long bookingId = 501L;
+        Long specialistUserId = 2L;
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(9L);
+        booking.setSlotId(99L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(99L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.now().plusDays(2));
+        slot.setStartTime(LocalTime.now());
+
+        SpecialistForceCancelBookingRequestDTO requestDTO = new SpecialistForceCancelBookingRequestDTO();
+        requestDTO.setCancelReason("Emergency issue");
+        requestDTO.setReleaseSlot(true);
+
+        when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(99L)).thenReturn(slot);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO);
+
+        verify(bookingMapper).updateById(argThat(updated ->
+                BookingStatusEnum.CANCELLED.name().equals(updated.getStatus())
+                        && "SPECIALIST".equals(updated.getCancelledBy())
+                        && "SPECIALIST_FORCE_CANCEL".equals(updated.getChangeType())
+                        && "Emergency issue".equals(updated.getCancelReason())
+        ));
+        verify(timeSlotMapper).update(argThat(updated ->
+                TimeSlotStatusEnum.AVAILABLE.name().equals(updated.getStatus())
+        ), any());
+    }
+
+    @Test
+    void specialistForceCancelBooking_LockSlot_Success() {
+        Long bookingId = 502L;
+        Long specialistUserId = 2L;
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(9L);
+        booking.setSlotId(100L);
+        booking.setStatus(BookingStatusEnum.PENDING.name());
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(100L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.now().plusDays(2));
+        slot.setStartTime(LocalTime.now());
+
+        SpecialistForceCancelBookingRequestDTO requestDTO = new SpecialistForceCancelBookingRequestDTO();
+        requestDTO.setCancelReason("Clinic unavailable");
+        requestDTO.setReleaseSlot(false);
+
+        when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(100L)).thenReturn(slot);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+
+        bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO);
+
+        verify(timeSlotMapper).update(argThat(updated ->
+                TimeSlotStatusEnum.LOCKED.name().equals(updated.getStatus())
+        ), any());
+    }
+
+    @Test
+    void specialistForceCancelBooking_WithinTwoHours_ThrowsException() {
+        Long bookingId = 503L;
+        Long specialistUserId = 2L;
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setSlotId(101L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        LocalDateTime startAt = LocalDateTime.now().plusMinutes(90);
+        TimeSlot slot = new TimeSlot();
+        slot.setId(101L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(startAt.toLocalDate());
+        slot.setStartTime(startAt.toLocalTime());
+
+        SpecialistForceCancelBookingRequestDTO requestDTO = new SpecialistForceCancelBookingRequestDTO();
+        requestDTO.setCancelReason("Emergency");
+        requestDTO.setReleaseSlot(true);
+
+        when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(101L)).thenReturn(slot);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO));
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
+        assertEquals("Cannot cancel within 2 hours before start time", ex.getMessage());
+        verify(bookingMapper, never()).updateById(any(Booking.class));
     }
 
     @Test

@@ -17,6 +17,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistForceCancelBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.UsageSummaryQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
@@ -428,6 +429,59 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (timeSlot != null) {
             timeSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
             timeSlotMapper.updateById(timeSlot);
+        }
+
+        invalidateCustomerBookingCache(booking.getCustomerId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void specialistForceCancelBooking(
+            Long bookingId,
+            Long currentUserId,
+            SpecialistForceCancelBookingRequestDTO requestDTO
+    ) {
+        validateBookingOwnershipForSpecialist(bookingId, currentUserId);
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!BookingStatusEnum.PENDING.name().equals(booking.getStatus())
+                && !BookingStatusEnum.CONFIRMED.name().equals(booking.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only pending or confirmed bookings can be cancelled");
+        }
+
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+        LocalDateTime slotStart = resolveSlotStart(slot);
+        LocalDateTime now = LocalDateTime.now();
+        if (!now.isBefore(slotStart.minusHours(2))) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Cannot cancel within 2 hours before start time");
+        }
+
+        String cancelReason = requestDTO.getCancelReason().trim();
+        boolean releaseSlot = Boolean.TRUE.equals(requestDTO.getReleaseSlot());
+
+        booking.setStatus(BookingStatusEnum.CANCELLED.name());
+        booking.setCancelledBy("SPECIALIST");
+        booking.setCancelReason(cancelReason);
+        booking.setRejectionReason(cancelReason);
+        booking.setChangeType("SPECIALIST_FORCE_CANCEL");
+        booking.setDecisionTime(now);
+        bookingMapper.updateById(booking);
+
+        TimeSlot slotToUpdate = new TimeSlot();
+        slotToUpdate.setStatus(releaseSlot ? TimeSlotStatusEnum.AVAILABLE.name() : TimeSlotStatusEnum.LOCKED.name());
+        int updated = timeSlotMapper.update(
+                slotToUpdate,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, slot.getId())
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
+        );
+        if (updated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to update slot status");
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());

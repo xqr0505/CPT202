@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 
 /**
  * Splits Markdown documents by heading hierarchy.
- * LangChain4j 0.36.2 does not ship a MarkdownHeadingSplitter, so this keeps the same behavior locally.
  *
  * @author QiranXiao
  * @since 2026/4/21

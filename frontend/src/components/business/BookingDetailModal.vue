@@ -19,6 +19,7 @@
           </el-avatar>
           <div class="header-text">
             <span class="specialist-name">{{ bookingDetail.specialistName }}</span>
+            <span class="booking-id">Booking ID: {{ bookingDetail.bookingId }}</span>
             <BookingStatusTag :status="bookingDetail.status" />
           </div>
         </div>
@@ -190,6 +191,11 @@ const formatPrice = (price: number) => {
         font-weight: 700;
         color: var(--color-text-primary);
         letter-spacing: -0.01em;
+      }
+
+      .booking-id {
+        font-size: var(--font-size-sm);
+        color: var(--color-text-secondary);
       }
     }
   }

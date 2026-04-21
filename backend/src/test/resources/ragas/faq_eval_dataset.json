@@ -1,0 +1,122 @@
+[
+  {
+    "category": "About Search & Discovery",
+    "question": "How can I find an expert with a fee below $100?",
+    "groundTruth": "On the search page, select \"Fee: Low to High\" from the \"Sort by\" dropdown menu. The system will list experts with the lowest fees first, allowing you to filter for appointments within your budget."
+  },
+  {
+    "category": "About Search & Discovery",
+    "question": "I'm only available on weekends. Can I filter for doctors available on Saturdays or Sundays?",
+    "groundTruth": "Absolutely. In the search filters under \"Available on,\" select your preferred Saturday or Sunday date, then click \"Search.\" The system will exclude experts unavailable on those days."
+  },
+  {
+    "category": "About Search & Discovery",
+    "question": "What determines the \"Recommended\" sorting in search results?",
+    "groundTruth": "\"Recommended\" is the platform's default algorithm. For more explicit sorting, manually select options like \"Level\" (expert tier) or \"Fee\" (consultation cost)."
+  },
+  {
+    "category": "About Search & Discovery",
+    "question": "I can't find a doctor I've seen before. Did they leave the platform?",
+    "groundTruth": "This usually happens when your filters (e.g., date or department) don't match the expert's current schedule. Click \"Reset\" to clear filters, then search for the doctor's name directly in the \"Expert name\" field."
+  },
+  {
+    "category": "About Search & Discovery",
+    "question": "Can I trust an expert without a profile photo?",
+    "groundTruth": "All experts undergo identity and credential verification before joining. A missing photo may mean they haven't uploaded one. Check their \"Bio\" and \"Category\" to decide if they meet your needs."
+  },
+  {
+    "category": "About Booking Status & Process",
+    "question": "Why is my booking stuck as \"Pending\"?",
+    "groundTruth": "\"Pending\" means your request is submitted and awaiting expert confirmation. Experts typically need time to review their schedule. Once approved, the status changes to \"Confirmed.\""
+  },
+  {
+    "category": "About Booking Status & Process",
+    "question": "What if the expert doesn't approve (stays \"Pending\")?",
+    "groundTruth": "Experts may delay due to workload. If urgent and unconfirmed after hours, consider canceling (no-fee if canceled 24+ hours prior) and booking an \"Active\" expert instead."
+  },
+  {
+    "category": "About Booking Status & Process",
+    "question": "Can experts reject bookings? Will I get a refund?",
+    "groundTruth": "Yes, experts may decline due to scheduling conflicts. If rejected, the status becomes \"Cancelled,\" freeing the slot. Refunds follow platform policies."
+  },
+  {
+    "category": "About Booking Status & Process",
+    "question": "Can I book two different experts simultaneously?",
+    "groundTruth": "Yes, if time slots don't overlap. Manage your schedule carefully to avoid late/no-show penalties."
+  },
+  {
+    "category": "About Cancellations & Fees",
+    "question": "Will I be charged for canceling last-minute?",
+    "groundTruth": "Fees depend on timing: 24+ hours before: Full refund. 2-24 hours before: Partial penalty. <2 hours before: Non-refundable. The exact fee is shown in the \"Quote\" popup when clicking \"Cancel.\""
+  },
+  {
+    "category": "About Cancellations & Fees",
+    "question": "Why is the \"Cancel\" button missing?",
+    "groundTruth": "It's disabled if the booking starts in <2 hours, or if status is \"Completed\"/\"Cancelled.\""
+  },
+  {
+    "category": "About Cancellations & Fees",
+    "question": "Can I undo a cancellation?",
+    "groundTruth": "No. If the slot is still available, rebook manually."
+  },
+  {
+    "category": "About Cancellations & Fees",
+    "question": "What's a \"Cancellation Quote\"? Why not cancel directly?",
+    "groundTruth": "It ensures transparency by showing refunds/penalties in real time. Click \"Confirm Cancel\" to finalize."
+  },
+  {
+    "category": "About Rescheduling",
+    "question": "Must I cancel and rebook to change times?",
+    "groundTruth": "No. For \"Pending\" or \"Confirmed\" bookings (>2 hours before start), click \"Reschedule\" to pick a new time without restarting the process."
+  },
+  {
+    "category": "About Rescheduling",
+    "question": "Does a rescheduled time require reconfirmation?",
+    "groundTruth": "Yes. The status reverts to \"Pending\" for expert approval."
+  },
+  {
+    "category": "About Rescheduling",
+    "question": "Can I reschedule a Monday booking to Wednesday with the same expert?",
+    "groundTruth": "Yes, if Wednesday's slot is \"Available.\""
+  },
+  {
+    "category": "About Rescheduling",
+    "question": "Why is there an extra fee for rescheduling?",
+    "groundTruth": "Possible reasons: 1. The new slot's fee is higher (price difference applies). 2. Rescheduling <24 hours before the original time incurs a policy-based fee. Check the \"Reschedule Quote\" for details."
+  },
+  {
+    "category": "About Specialist Details",
+    "question": "How are expert \"Levels\" determined?",
+    "groundTruth": "Levels reflect experience, seniority, and qualifications. Higher levels often correlate with higher fees."
+  },
+  {
+    "category": "About Specialist Details",
+    "question": "Can I call a doctor before booking?",
+    "groundTruth": "For privacy, direct calls aren't permitted. Use the \"Notes\" feature during booking to message the expert."
+  },
+  {
+    "category": "About Specialist Details",
+    "question": "How do I report an unprofessional expert?",
+    "groundTruth": "Note the \"Booking ID\" and email complaints to 2906326615@qq.com for support."
+  },
+  {
+    "category": "Troubleshooting",
+    "question": "Why does the system say \"Time slot already booked\" when it appears green?",
+    "groundTruth": "Another user may have booked it seconds earlier during high traffic. Refresh to see updated availability."
+  },
+  {
+    "category": "Troubleshooting",
+    "question": "What if \"Notes contain unsupported characters\" appears?",
+    "groundTruth": "Avoid special emojis or uncommon punctuation. Use basic English, numbers, and standard symbols."
+  },
+  {
+    "category": "Troubleshooting",
+    "question": "No confirmation email—is my booking confirmed?",
+    "groundTruth": "Check spam folders. The \"My Bookings\" page is authoritative. \"Pending\" or \"Confirmed\" status means it's recorded."
+  },
+  {
+    "category": "Troubleshooting",
+    "question": "If payment fails, is my booking saved?",
+    "groundTruth": "If the process didn't complete, the booking likely wasn't created. Verify under \"My Bookings\" and retry if needed."
+  }
+]

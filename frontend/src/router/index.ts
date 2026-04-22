@@ -4,15 +4,17 @@ import { setupRouterGuard } from './permission'
 const routes = [
   {
     path: '/auth',
-    component: () => import('../layout/AuthLayout.vue'),
-    children: [
-      { path: 'login', name: 'Login', component: () => import('../views/auth/Login.vue') }
-    ]
+    name: 'Auth',
+    component: () => import('../views/auth/AuthCard.vue')  // 直接指向新组件
+  },
+  // 保留旧路径重定向
+  {
+    path: '/login',
+    redirect: '/auth'
   },
   {
     path: '/register',
-    component: () => import('../views/auth/Register.vue'),
-    name: 'Register'
+    redirect: '/auth'
   },
   {
     path: '/forgot-password',
@@ -99,7 +101,7 @@ const routes = [
   },
   {
     path: '/login',
-    redirect: '/auth/login'
+    redirect: '/auth'
   },
   {
     path: '/',

@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistRejectBookingRequestDTO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.SpecialistForceCancelBookingRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistBookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
@@ -116,6 +117,36 @@ class SpecialistBookingControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void specialistForceCancelBooking_success() throws Exception {
+        doNothing().when(bookingService).specialistForceCancelBooking(anyLong(), anyLong(), any(SpecialistForceCancelBookingRequestDTO.class));
+
+        mockMvc.perform(post("/api/v1/specialist/booking-requests/3/force-cancel")
+                        .with(authentication(specialistAuthentication()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cancelReason": "Emergency leave",
+                                  "releaseSlot": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void specialistForceCancelBooking_validationFailWhenReleaseSlotMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/specialist/booking-requests/3/force-cancel")
+                        .with(authentication(specialistAuthentication()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cancelReason": "Emergency leave"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     private Authentication specialistAuthentication() {

@@ -274,3 +274,15 @@ export const rejectBookingRequest = (id: number, rejectionReason: string): Promi
     rejectionReason
   })
 }
+
+export interface SpecialistForceCancelBookingRequest {
+  cancelReason: string
+  releaseSlot: boolean
+}
+
+export const specialistForceCancelBooking = (
+  id: number,
+  data: SpecialistForceCancelBookingRequest
+): Promise<void> => {
+  return request.post(`/api/v1/specialist/booking-requests/${id}/force-cancel`, data)
+}

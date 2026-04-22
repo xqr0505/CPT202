@@ -147,6 +147,10 @@
           <el-button type="primary" @click="openUpdateDialog">Update</el-button>
           <el-button type="danger" @click="handleDelete">Delete</el-button>
         </div>
+        <div v-else-if="selectedSlot && canForceCancelSlot(selectedSlot)">
+          <el-button @click="showDetailDialog = false">Close</el-button>
+          <el-button type="danger" @click="openForceCancelDialog">Force Cancel Booking</el-button>
+        </div>
         <div v-else>
           <el-button @click="showDetailDialog = false">Close</el-button>
         </div>
@@ -188,6 +192,44 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showForceCancelDialog" title="Force Cancel Booking" width="560px">
+      <el-form label-position="top">
+        <el-form-item label="Cancel Reason" required>
+          <el-input
+            v-model="forceCancelForm.cancelReason"
+            type="textarea"
+            :rows="4"
+            maxlength="300"
+            show-word-limit
+            placeholder="Please provide cancellation reason."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showForceCancelDialog = false">Cancel</el-button>
+        <el-button type="primary" @click="goToForceCancelOptionStep">
+          Confirm
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showForceCancelOptionDialog" title="Slot Handling Option" width="560px">
+      <el-form label-position="top">
+        <el-form-item label="After cancellation" required>
+          <el-radio-group v-model="forceCancelForm.releaseSlot">
+            <el-radio :value="true">Release this slot for new bookings</el-radio>
+            <el-radio :value="false">Keep this slot locked</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="backToForceCancelReasonStep">Back</el-button>
+        <el-button type="danger" :loading="submitting" @click="handleForceCancel">
+          Confirm Cancellation
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -195,6 +237,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft, ArrowRight, Loading, Plus, Refresh } from '@element-plus/icons-vue'
+import { specialistForceCancelBooking } from '@/api/booking'
 import {
   createSlot,
   deleteSlot,
@@ -212,6 +255,8 @@ const slots = ref<TimeSlotVO[]>([])
 const showCreateDialog = ref(false)
 const showDetailDialog = ref(false)
 const showUpdateDialog = ref(false)
+const showForceCancelDialog = ref(false)
+const showForceCancelOptionDialog = ref(false)
 
 const currentWeekStart = ref(getWeekStart(new Date()))
 const selectedSlot = ref<TimeSlotVO | null>(null)
@@ -228,6 +273,11 @@ const createForm = ref<CreateSlotRequest>({
 const updateForm = ref<UpdateSlotRequest>({
   startTime: '',
   endTime: ''
+})
+
+const forceCancelForm = ref({
+  cancelReason: '',
+  releaseSlot: true
 })
 
 const validateCreateTimeRange = (rule: unknown, value: unknown, callback: (error?: Error) => void) => {
@@ -333,6 +383,13 @@ function canEditSlot(slot: TimeSlotVO): boolean {
   return slot.status === 'AVAILABLE' && !slot.bookingStatus
 }
 
+function canForceCancelSlot(slot: TimeSlotVO): boolean {
+  if (!slot.bookingId) {
+    return false
+  }
+  return slot.bookingStatus === 'PENDING' || slot.bookingStatus === 'CONFIRMED'
+}
+
 function getSlotStatusClass(slot: TimeSlotVO): string {
   const statusMap: Record<string, string> = {
     AVAILABLE: 'status-available',
@@ -400,6 +457,38 @@ function openUpdateDialog() {
   }
   showDetailDialog.value = false
   showUpdateDialog.value = true
+}
+
+function openForceCancelDialog() {
+  if (!selectedSlot.value || !canForceCancelSlot(selectedSlot.value)) {
+    return
+  }
+  forceCancelForm.value = {
+    cancelReason: '',
+    releaseSlot: true
+  }
+  showForceCancelOptionDialog.value = false
+  showForceCancelDialog.value = true
+}
+
+function goToForceCancelOptionStep() {
+  const reason = forceCancelForm.value.cancelReason.trim()
+  if (!reason) {
+    ElMessage.warning('Cancel reason is required')
+    return
+  }
+  if (reason.length > 300) {
+    ElMessage.warning('Cancel reason must be within 300 characters')
+    return
+  }
+  forceCancelForm.value.cancelReason = reason
+  showForceCancelDialog.value = false
+  showForceCancelOptionDialog.value = true
+}
+
+function backToForceCancelReasonStep() {
+  showForceCancelOptionDialog.value = false
+  showForceCancelDialog.value = true
 }
 
 function resetCreateForm() {
@@ -484,6 +573,36 @@ async function handleDelete() {
     if (error !== 'cancel') {
       console.error('Failed to delete slot:', error)
     }
+  }
+}
+
+async function handleForceCancel() {
+  if (!selectedSlot.value || !selectedSlot.value.bookingId) {
+    return
+  }
+  const reason = forceCancelForm.value.cancelReason.trim()
+  if (!reason) {
+    ElMessage.warning('Cancel reason is required')
+    return
+  }
+  if (reason.length > 300) {
+    ElMessage.warning('Cancel reason must be within 300 characters')
+    return
+  }
+
+  submitting.value = true
+  try {
+    await specialistForceCancelBooking(selectedSlot.value.bookingId, {
+      cancelReason: reason,
+      releaseSlot: forceCancelForm.value.releaseSlot
+    })
+    ElMessage.success('Booking cancelled successfully')
+    showForceCancelOptionDialog.value = false
+    showForceCancelDialog.value = false
+    showDetailDialog.value = false
+    await fetchSchedule()
+  } finally {
+    submitting.value = false
   }
 }
 

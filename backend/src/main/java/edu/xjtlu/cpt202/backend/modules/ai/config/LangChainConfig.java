@@ -14,6 +14,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -92,12 +93,13 @@ public class LangChainConfig {
             AiChatMemoryProperties aiChatMemoryProperties,
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
-            AiBookingSubmitTool aiBookingSubmitTool
+            AiBookingSubmitTool aiBookingSubmitTool,
+            KnowledgeTools knowledgeTools
     ) {
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
-                .tools(aiBookingSearchTool, aiBookingFormTool, aiBookingSubmitTool)
+                .tools(aiBookingSearchTool, aiBookingFormTool, aiBookingSubmitTool, knowledgeTools)
                 .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
                         .id(memoryId)
                         .maxMessages(aiChatMemoryProperties.getMaxMessages())

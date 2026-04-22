@@ -4,7 +4,7 @@ import { ElMessageBox } from 'element-plus';
 import { getAuthToken, getRefreshToken, getUser, isTokenExpired, refreshAuthToken, clearAuthData } from '@/api/request';
 
 const publicRoutes = ['/customer/search'];
-const authRoutes = ['/auth/login', '/login', '/register', '/forgot-password'];
+const authRoutes = ['/auth/login', '/login', '/register', '/forgot-password', '/auth'];
 
 const getDefaultHomePath = (role: string): string => {
   switch (role) {
@@ -39,7 +39,7 @@ export function setupRouterGuard(router: Router) {
     const isAuthenticated = Boolean(currentToken && currentUser);
 
     if (isAuthenticated) {
-      if (to.path === '/auth/login' || to.path === '/login' || to.path === '/register') {
+      if (to.path === '/auth' || to.path === '/auth/login' || to.path === '/login' || to.path === '/register') {
         return { path: getDefaultHomePath(currentUser.role) };
       }
 
@@ -69,7 +69,7 @@ export function setupRouterGuard(router: Router) {
           type: 'warning'
         });
 
-        return { path: '/login', query: { redirect: to.fullPath } };
+        return { path: '/auth', query: { redirect: to.fullPath } };
       } catch {
         return { path: '/customer/search' };
       }

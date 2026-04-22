@@ -56,8 +56,8 @@ ai:
       password: ${AI_RAG_REDIS_PASSWORD:${REDIS_PASSWORD:}}
       index-name: ${AI_RAG_REDIS_INDEX_NAME:expertlink:rag:knowledge}
       prefix: ${AI_RAG_REDIS_PREFIX:expertlink:rag:segment:}
-    max-results: ${AI_RAG_MAX_RESULTS:3}
-    min-score: ${AI_RAG_MIN_SCORE:0.7}
+    max-results: ${AI_RAG_MAX_RESULTS:5}
+    min-score: ${AI_RAG_MIN_SCORE:0.65}
   chat:
     memory:
       max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:20}

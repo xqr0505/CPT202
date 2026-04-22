@@ -55,3 +55,6 @@ mvnw
 
 .env
 node_modules/
+
+backend/ragas_data.json
+backend/results.json

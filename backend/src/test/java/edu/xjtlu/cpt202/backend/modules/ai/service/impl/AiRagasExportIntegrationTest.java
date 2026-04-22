@@ -10,6 +10,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.rag.MarkdownHeadingSegmenter;
 import edu.xjtlu.cpt202.backend.modules.ai.rag.RagConfig;
 import edu.xjtlu.cpt202.backend.modules.ai.rag.RagIngestionService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.KnowledgeQueryRewriteService;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
@@ -185,6 +186,7 @@ class AiRagasExportIntegrationTest {
             RagConfig.class,
             RagIngestionService.class,
             MarkdownHeadingSegmenter.class,
+            KnowledgeQueryRewriteService.class,
             KnowledgeTools.class,
             AiChatServiceImpl.class
     })

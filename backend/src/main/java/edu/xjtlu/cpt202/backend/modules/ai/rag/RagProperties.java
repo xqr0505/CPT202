@@ -16,8 +16,8 @@ public class RagProperties {
     private boolean enabled = true;
     private String knowledgeLocation = "classpath*:/knowledge/**/*.md";
     private Redis redis = new Redis();
-    private int maxResults = 3;
-    private double minScore = 0.7;
+    private int maxResults = 5;
+    private double minScore = 0.65;
 
     @Data
     public static class Redis {

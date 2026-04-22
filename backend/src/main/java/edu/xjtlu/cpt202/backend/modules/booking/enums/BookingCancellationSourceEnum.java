@@ -2,13 +2,6 @@ package edu.xjtlu.cpt202.backend.modules.booking.enums;
 
 import edu.xjtlu.cpt202.backend.common.enums.BaseEnum;
 
-/**
- * Cancellation source enum for booking lifecycle.
- * Intended for distinguishing manual and system-triggered cancellations.
- *
- * @author QiranXiao
- * @date 2026/4/22
- */
 public enum BookingCancellationSourceEnum implements BaseEnum<String> {
     
     CUSTOMER_MANUAL("CUSTOMER_MANUAL", "Cancelled manually by customer"),

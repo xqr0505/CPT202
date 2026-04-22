@@ -1,0 +1,508 @@
+package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.agent.tool.ToolSpecifications;
+import dev.langchain4j.agent.tool.ToolMemoryId;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.output.Response;
+import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.service.tool.ToolExecution;
+import dev.langchain4j.service.tool.ToolExecutor;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.util.ToolArgumentSanitizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import jakarta.annotation.PreDestroy;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
+/**
+ * Assistant implementation that executes read-only tool calls in parallel.
+ *
+ * @author QiranXiao
+ * @since 2026/4/23
+ */
+public class ParallelToolAssistant implements Assistant {
+
+    private static final Logger log = LoggerFactory.getLogger(ParallelToolAssistant.class);
+    private static final int MAX_TOOL_ROUNDS = 8;
+    private static final int STREAM_CHUNK_SIZE = 24;
+    private static final ObjectMapper TOOL_ARGUMENT_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+    private final ChatLanguageModel chatLanguageModel;
+    private final StreamingChatLanguageModel streamingChatLanguageModel;
+    private final ChatMemoryStore chatMemoryStore;
+    private final AiChatMemoryProperties chatMemoryProperties;
+    private final AiToolParallelProperties parallelProperties;
+    private final String systemPrompt;
+    private final List<ToolSpecification> toolSpecifications;
+    private final Map<String, ToolExecutor> toolExecutors;
+    private final ExecutorService parallelExecutor;
+
+    public ParallelToolAssistant(
+            ChatLanguageModel chatLanguageModel,
+            StreamingChatLanguageModel streamingChatLanguageModel,
+            ChatMemoryStore chatMemoryStore,
+            AiChatMemoryProperties chatMemoryProperties,
+            AiToolParallelProperties parallelProperties,
+            String systemPrompt,
+            List<Object> toolSources
+    ) {
+        this.chatLanguageModel = chatLanguageModel;
+        this.streamingChatLanguageModel = streamingChatLanguageModel;
+        this.chatMemoryStore = chatMemoryStore;
+        this.chatMemoryProperties = chatMemoryProperties;
+        this.parallelProperties = parallelProperties;
+        this.systemPrompt = systemPrompt;
+        this.toolSpecifications = collectSpecifications(toolSources);
+        this.toolExecutors = collectExecutors(toolSources);
+        this.parallelExecutor = Executors.newFixedThreadPool(
+                parallelProperties.getMaxConcurrency(),
+                runnable -> {
+                    Thread thread = new Thread(runnable);
+                    thread.setName("ai-tool-parallel-" + THREAD_COUNTER.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
+    }
+
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
+
+    @Override
+    public String chat(Long memoryId, String userMessage) {
+        Response<AiMessage> response = runConversation(memoryId, userMessage, ignored -> {
+        });
+        AiMessage content = response.content();
+        if (content == null || content.text() == null) {
+            return AiConstant.EMPTY_CONTENT;
+        }
+        return content.text();
+    }
+
+    @Override
+    public TokenStream streamChat(Long memoryId, String userMessage) {
+        return new ParallelAssistantTokenStream(memoryId, userMessage);
+    }
+
+    private Response<AiMessage> runConversation(
+            Long memoryId,
+            String userMessage,
+            Consumer<ToolExecution> onToolExecuted
+    ) {
+        MessageWindowChatMemory chatMemory = chatMemory(memoryId);
+        ensureSystemMessage(chatMemory);
+        chatMemory.add(UserMessage.userMessage(userMessage));
+
+        Response<AiMessage> response = invokeModel(chatMemory.messages());
+        AiMessage aiMessage = response.content();
+        if (aiMessage == null) {
+            return response;
+        }
+        chatMemory.add(aiMessage);
+
+        int rounds = 0;
+        while (aiMessage.hasToolExecutionRequests()) {
+            rounds++;
+            if (rounds > MAX_TOOL_ROUNDS) {
+                throw new IllegalStateException("Too many tool execution rounds: " + rounds);
+            }
+
+            List<ToolExecutionResultMessage> results = executeToolRequests(aiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+            for (ToolExecutionResultMessage result : results) {
+                chatMemory.add(result);
+            }
+
+            response = invokeModel(chatMemory.messages());
+            aiMessage = response.content();
+            if (aiMessage == null) {
+                break;
+            }
+            chatMemory.add(aiMessage);
+        }
+
+        return response;
+    }
+
+    private Response<AiMessage> invokeModel(List<ChatMessage> messages) {
+        List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
+        Response<AiMessage> response = chatLanguageModel.generate(sanitizedMessages, toolSpecifications);
+        return ToolArgumentSanitizer.sanitizeResponse(response, toolSpecifications);
+    }
+
+    private MessageWindowChatMemory chatMemory(Long memoryId) {
+        return MessageWindowChatMemory.builder()
+                .id(memoryId)
+                .maxMessages(chatMemoryProperties.getMaxMessages())
+                .chatMemoryStore(chatMemoryStore)
+                .build();
+    }
+
+    private void ensureSystemMessage(MessageWindowChatMemory chatMemory) {
+        if (chatMemory.messages().isEmpty()) {
+            chatMemory.add(SystemMessage.systemMessage(systemPrompt));
+        }
+    }
+
+    private List<ToolExecutionResultMessage> executeToolRequests(
+            List<ToolExecutionRequest> requests,
+            Long memoryId,
+            Consumer<ToolExecution> onToolExecuted
+    ) {
+        Map<Integer, ToolExecutionResultMessage> resultsByIndex = new LinkedHashMap<>();
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> readOnlyNames = parallelProperties.getReadOnlyNames();
+        Map<Integer, CompletableFuture<ToolExecutionResultMessage>> asyncReadOnlyByIndex = new LinkedHashMap<>();
+
+        for (int index = 0; index < requests.size(); index++) {
+            ToolExecutionRequest request = requests.get(index);
+            ToolExecutor executor = toolExecutors.get(request.name());
+            if (executor == null) {
+                throw new IllegalStateException("No tool executor found for: " + request.name());
+            }
+
+            boolean shouldParallelize = parallelProperties.isEnabled() && readOnlyNames.contains(request.name());
+            if (shouldParallelize) {
+                int finalIndex = index;
+                asyncReadOnlyByIndex.put(finalIndex, CompletableFuture.supplyAsync(
+                        () -> executeSingleRequest(request, executor, memoryId, onToolExecuted),
+                        parallelExecutor
+                ));
+                continue;
+            }
+
+            flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex);
+            resultsByIndex.put(index, executeSingleRequest(request, executor, memoryId, onToolExecuted));
+        }
+        flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex);
+
+        List<ToolExecutionResultMessage> ordered = new ArrayList<>(requests.size());
+        for (int index = 0; index < requests.size(); index++) {
+            ToolExecutionResultMessage result = resultsByIndex.get(index);
+            if (result != null) {
+                ordered.add(result);
+            }
+        }
+        return ordered;
+    }
+
+    private void flushReadOnlyBatch(
+            Map<Integer, CompletableFuture<ToolExecutionResultMessage>> asyncReadOnlyByIndex,
+            Map<Integer, ToolExecutionResultMessage> resultsByIndex
+    ) {
+        if (asyncReadOnlyByIndex.isEmpty()) {
+            return;
+        }
+        CompletableFuture<?>[] futures = asyncReadOnlyByIndex.values().toArray(CompletableFuture[]::new);
+        try {
+            CompletableFuture.allOf(futures).get(parallelProperties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+            for (Map.Entry<Integer, CompletableFuture<ToolExecutionResultMessage>> entry : asyncReadOnlyByIndex.entrySet()) {
+                resultsByIndex.put(entry.getKey(), entry.getValue().join());
+            }
+        } catch (TimeoutException e) {
+            futuresCancel(futures);
+            throw new IllegalStateException("Parallel tool execution timed out after " + parallelProperties.getTimeoutMs() + " ms", e);
+        } catch (Exception e) {
+            futuresCancel(futures);
+            throw unwrapParallelError(e);
+        } finally {
+            asyncReadOnlyByIndex.clear();
+        }
+    }
+
+    private ToolExecutionResultMessage executeSingleRequest(
+            ToolExecutionRequest request,
+            ToolExecutor executor,
+            Long memoryId,
+            Consumer<ToolExecution> onToolExecuted
+    ) {
+        try {
+            String result = executor.execute(request, memoryId);
+            ToolExecution toolExecution = ToolExecution.builder()
+                    .request(request)
+                    .result(result)
+                    .build();
+            onToolExecuted.accept(toolExecution);
+            return ToolExecutionResultMessage.from(request, result);
+        } catch (Exception exception) {
+            String errorMessage = "Tool execution failed for " + request.name();
+            log.warn(errorMessage, exception);
+            throw new IllegalStateException(errorMessage, exception);
+        }
+    }
+
+    private IllegalStateException unwrapParallelError(Exception exception) {
+        Throwable current = exception;
+        if (current instanceof CompletionException completionException && completionException.getCause() != null) {
+            current = completionException.getCause();
+        }
+        if (current instanceof IllegalStateException stateException) {
+            return stateException;
+        }
+        return new IllegalStateException("Parallel tool execution failed", current);
+    }
+
+    private void futuresCancel(CompletableFuture<?>[] futures) {
+        for (CompletableFuture<?> future : futures) {
+            future.cancel(true);
+        }
+    }
+
+    @PreDestroy
+    public void shutdownExecutor() {
+        parallelExecutor.shutdownNow();
+    }
+
+    private List<ToolSpecification> collectSpecifications(List<Object> toolSources) {
+        List<ToolSpecification> specifications = new ArrayList<>();
+        for (Object source : toolSources) {
+            specifications.addAll(ToolSpecifications.toolSpecificationsFrom(source));
+        }
+        return List.copyOf(specifications);
+    }
+
+    private Map<String, ToolExecutor> collectExecutors(List<Object> toolSources) {
+        Map<String, ToolExecutor> executors = new LinkedHashMap<>();
+        for (Object source : toolSources) {
+            for (Method method : source.getClass().getMethods()) {
+                Tool tool = method.getAnnotation(Tool.class);
+                if (tool == null) {
+                    continue;
+                }
+                String name = tool.name() == null || tool.name().isBlank() ? method.getName() : tool.name();
+                executors.put(name, new ReflectiveToolExecutor(source, method));
+            }
+        }
+        return Map.copyOf(executors);
+    }
+
+    private static final class ReflectiveToolExecutor implements ToolExecutor {
+
+        private final Object source;
+        private final Method method;
+
+        private ReflectiveToolExecutor(Object source, Method method) {
+            this.source = source;
+            this.method = method;
+        }
+
+        @Override
+        public String execute(ToolExecutionRequest request, Object memoryId) {
+            try {
+                Object[] args = prepareArguments(request.arguments(), method.getParameters(), memoryId);
+                Object rawResult = method.invoke(source, args);
+                return rawResult == null ? "null" : TOOL_ARGUMENT_MAPPER.writeValueAsString(rawResult);
+            } catch (Exception exception) {
+                throw new IllegalStateException("Tool invocation failed for " + request.name(), exception);
+            }
+        }
+
+        private Object[] prepareArguments(String rawArguments, Parameter[] parameters, Object memoryId) {
+            Map<String, Object> argumentMap = parseArguments(rawArguments);
+            Object[] prepared = new Object[parameters.length];
+            for (int index = 0; index < parameters.length; index++) {
+                Parameter parameter = parameters[index];
+                if (parameter.isAnnotationPresent(ToolMemoryId.class)) {
+                    prepared[index] = memoryId;
+                    continue;
+                }
+                Object rawValue = argumentMap.get(parameter.getName());
+                prepared[index] = coerce(rawValue, parameter);
+            }
+            return prepared;
+        }
+
+        private Map<String, Object> parseArguments(String rawArguments) {
+            if (rawArguments == null || rawArguments.isBlank()) {
+                return Map.of();
+            }
+            try {
+                return TOOL_ARGUMENT_MAPPER.readValue(rawArguments, new TypeReference<Map<String, Object>>() {
+                });
+            } catch (Exception exception) {
+                throw new IllegalStateException("Failed to parse tool arguments: " + rawArguments, exception);
+            }
+        }
+
+        private Object coerce(Object rawValue, Parameter parameter) {
+            if (rawValue == null) {
+                if (parameter.getType().isPrimitive()) {
+                    throw new IllegalStateException("Missing required primitive argument: " + parameter.getName());
+                }
+                return null;
+            }
+            try {
+                Object normalizedValue = normalizeTemporalArgument(rawValue, parameter.getType());
+                return TOOL_ARGUMENT_MAPPER.convertValue(normalizedValue, TOOL_ARGUMENT_MAPPER.constructType(parameter.getParameterizedType()));
+            } catch (IllegalArgumentException exception) {
+                P annotation = parameter.getAnnotation(P.class);
+                String hint = annotation == null ? parameter.getName() : annotation.value();
+                throw new IllegalStateException("Failed to coerce argument " + parameter.getName() + " (" + hint + ")", exception);
+            }
+        }
+
+        private Object normalizeTemporalArgument(Object rawValue, Class<?> targetType) {
+            if (!LocalDate.class.equals(targetType)) {
+                return rawValue;
+            }
+            if (rawValue instanceof String || rawValue instanceof Number) {
+                return rawValue;
+            }
+            if (!(rawValue instanceof Map<?, ?> valueMap)) {
+                return rawValue;
+            }
+            if (valueMap.containsKey("year") && valueMap.containsKey("month") && valueMap.containsKey("day")) {
+                Object yearRaw = valueMap.get("year");
+                Object monthRaw = valueMap.get("month");
+                Object dayRaw = valueMap.get("day");
+                if (yearRaw instanceof Number year && monthRaw instanceof Number month && dayRaw instanceof Number day) {
+                    return LocalDate.of(year.intValue(), month.intValue(), day.intValue()).toString();
+                }
+            }
+            if (valueMap.containsKey("epochDay")) {
+                Object epochDayRaw = valueMap.get("epochDay");
+                if (epochDayRaw instanceof Number epochDay) {
+                    return LocalDate.ofEpochDay(epochDay.longValue()).toString();
+                }
+            }
+            if (valueMap.containsKey("epochMilli")) {
+                Object epochMilliRaw = valueMap.get("epochMilli");
+                if (epochMilliRaw instanceof Number epochMilli) {
+                    return Instant.ofEpochMilli(epochMilli.longValue())
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .toString();
+                }
+            }
+            return rawValue;
+        }
+    }
+
+    private final class ParallelAssistantTokenStream implements TokenStream {
+
+        private final Long memoryId;
+        private final String userMessage;
+        private Consumer<String> onNext = ignored -> {
+        };
+        private Consumer<List<dev.langchain4j.rag.content.Content>> onRetrieved = ignored -> {
+        };
+        private Consumer<ToolExecution> onToolExecuted = ignored -> {
+        };
+        private Consumer<Response<AiMessage>> onComplete = ignored -> {
+        };
+        private Consumer<Throwable> onError = ignored -> {
+        };
+        private boolean ignoreErrors;
+
+        private ParallelAssistantTokenStream(Long memoryId, String userMessage) {
+            this.memoryId = memoryId;
+            this.userMessage = userMessage;
+        }
+
+        @Override
+        public TokenStream onNext(Consumer<String> onNext) {
+            this.onNext = onNext;
+            return this;
+        }
+
+        @Override
+        public TokenStream onRetrieved(Consumer<List<dev.langchain4j.rag.content.Content>> onRetrieved) {
+            this.onRetrieved = onRetrieved;
+            return this;
+        }
+
+        @Override
+        public TokenStream onToolExecuted(Consumer<ToolExecution> onToolExecuted) {
+            this.onToolExecuted = onToolExecuted;
+            return this;
+        }
+
+        @Override
+        public TokenStream onComplete(Consumer<Response<AiMessage>> onComplete) {
+            this.onComplete = onComplete;
+            return this;
+        }
+
+        @Override
+        public TokenStream onError(Consumer<Throwable> onError) {
+            this.onError = onError;
+            return this;
+        }
+
+        @Override
+        public TokenStream ignoreErrors() {
+            this.ignoreErrors = true;
+            return this;
+        }
+
+        @Override
+        public void start() {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    onRetrieved.accept(List.of());
+                    Response<AiMessage> response = runConversation(memoryId, userMessage, onToolExecuted);
+                    String reply = response.content() == null || response.content().text() == null
+                            ? AiConstant.EMPTY_CONTENT
+                            : response.content().text();
+                    emitChunks(reply);
+                    onComplete.accept(response);
+                } catch (Throwable throwable) {
+                    if (ignoreErrors) {
+                        return;
+                    }
+                    onError.accept(throwable);
+                }
+            });
+        }
+
+        private void emitChunks(String reply) {
+            if (reply.isEmpty()) {
+                return;
+            }
+            for (int index = 0; index < reply.length(); index += STREAM_CHUNK_SIZE) {
+                int endIndex = Math.min(index + STREAM_CHUNK_SIZE, reply.length());
+                onNext.accept(reply.substring(index, endIndex));
+            }
+        }
+    }
+}

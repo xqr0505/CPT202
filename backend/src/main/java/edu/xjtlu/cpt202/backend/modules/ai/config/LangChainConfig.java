@@ -4,13 +4,13 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
-import dev.langchain4j.service.AiServices;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
@@ -22,12 +22,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import java.util.List;
+
 /**
  * @author QiranXiao
  * @since 2026/4/15
  */
 @Configuration
-@EnableConfigurationProperties(AiChatMemoryProperties.class)
+@EnableConfigurationProperties({AiChatMemoryProperties.class, AiToolParallelProperties.class})
 public class LangChainConfig {
 
     @Bean
@@ -91,20 +93,20 @@ public class LangChainConfig {
             StreamingChatLanguageModel streamingChatLanguageModel,
             ChatMemoryStore chatMemoryStore,
             AiChatMemoryProperties aiChatMemoryProperties,
+            AiToolParallelProperties aiToolParallelProperties,
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
             KnowledgeTools knowledgeTools
     ) {
-        return AiServices.builder(Assistant.class)
-                .chatLanguageModel(chatLanguageModel)
-                .streamingChatLanguageModel(streamingChatLanguageModel)
-                .tools(aiBookingSearchTool, aiBookingFormTool, aiBookingSubmitTool, knowledgeTools)
-                .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
-                        .id(memoryId)
-                        .maxMessages(aiChatMemoryProperties.getMaxMessages())
-                        .chatMemoryStore(chatMemoryStore)
-                        .build())
-                .build();
+        return new ParallelToolAssistant(
+                chatLanguageModel,
+                streamingChatLanguageModel,
+                chatMemoryStore,
+                aiChatMemoryProperties,
+                aiToolParallelProperties,
+                AiConstant.AI_SYSTEM_PROMPT,
+                List.of(aiBookingSearchTool, aiBookingFormTool, aiBookingSubmitTool, knowledgeTools)
+        );
     }
 }

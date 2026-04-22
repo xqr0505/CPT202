@@ -63,6 +63,14 @@ ai:
       max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:20}
       ttl-seconds: ${AI_CHAT_MEMORY_TTL_SECONDS:86400}
       key-prefix: ${AI_CHAT_MEMORY_KEY_PREFIX:expertlink:ai:memory}
+  tools:
+    parallel:
+      enabled: ${AI_TOOLS_PARALLEL_ENABLED:true}
+      max-concurrency: ${AI_TOOLS_PARALLEL_MAX_CONCURRENCY:4}
+      timeout-ms: ${AI_TOOLS_PARALLEL_TIMEOUT_MS:8000}
+      read-only-names:
+        - searchCurrentCustomerBookings
+        - searchKnowledgeBase
 
 
 # Logging

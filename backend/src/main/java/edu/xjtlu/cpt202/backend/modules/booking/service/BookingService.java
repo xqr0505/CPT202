@@ -75,4 +75,6 @@ public interface BookingService extends IService<Booking> {
             Long currentUserId,
             SpecialistForceCancelBookingRequestDTO requestDTO
     );
+
+    void systemTimeoutCancelPendingBooking(Long bookingId, String cancelReason);
 }

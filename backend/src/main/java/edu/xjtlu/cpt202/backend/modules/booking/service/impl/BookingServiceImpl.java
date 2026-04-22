@@ -10,7 +10,9 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.utils.RedisKeyUtils;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.constant.DashboardConstant;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingCancellationSourceEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.booking.enums.RefundStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingTopicMapper;
@@ -481,7 +483,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setStatus(BookingStatusEnum.CANCELLED.name());
         booking.setDecisionTime(LocalDateTime.now());
         booking.setRejectionReason(rejectionReason);
-        booking.setCancelledBy("SPECIALIST");
+        booking.setCancelledBy(BookingCancellationSourceEnum.SPECIALIST_MANUAL.getCode());
         booking.setCancelReason(rejectionReason);
         booking.setChangeType("REJECT");
         bookingMapper.updateById(booking);
@@ -526,7 +528,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         boolean releaseSlot = Boolean.TRUE.equals(requestDTO.getReleaseSlot());
 
         booking.setStatus(BookingStatusEnum.CANCELLED.name());
-        booking.setCancelledBy("SPECIALIST");
+        booking.setCancelledBy(BookingCancellationSourceEnum.SPECIALIST_MANUAL.getCode());
         booking.setCancelReason(cancelReason);
         booking.setRejectionReason(cancelReason);
         booking.setChangeType("SPECIALIST_FORCE_CANCEL");
@@ -658,7 +660,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         booking.setStatus(BookingStatusEnum.CANCELLED.name());
-        booking.setCancelledBy("CUSTOMER");
+        booking.setCancelledBy(BookingCancellationSourceEnum.CUSTOMER_MANUAL.getCode());
         booking.setChangeType("CANCEL");
         booking.setDecisionTime(now);
         bookingMapper.updateById(booking);
@@ -685,6 +687,49 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 .penaltyAmount(quote.getPenaltyAmount())
                 .message(quote.getMessage())
                 .build();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void systemTimeoutCancelPendingBooking(Long bookingId, String cancelReason) {
+        Booking booking = bookingMapper.selectById(bookingId);
+        if (booking == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        if (!BookingStatusEnum.PENDING.name().equals(booking.getStatus())) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only pending booking requests can be timeout-cancelled");
+        }
+
+        TimeSlot slot = timeSlotMapper.selectById(booking.getSlotId());
+        if (slot == null) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "Time slot not found");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String timeoutReason = StringUtils.hasText(cancelReason) ? cancelReason.trim() : "Specialist confirmation timeout";
+
+        booking.setStatus(BookingStatusEnum.CANCELLED.name());
+        booking.setCancelledBy(BookingCancellationSourceEnum.SYSTEM_TIMEOUT.getCode());
+        booking.setCancelReason(timeoutReason);
+        booking.setRejectionReason(timeoutReason);
+        booking.setChangeType("SYSTEM_TIMEOUT_CANCEL");
+        booking.setRefundStatus(RefundStatusEnum.PENDING.name());
+        booking.setDecisionTime(now);
+        bookingMapper.updateById(booking);
+
+        TimeSlot releaseSlot = new TimeSlot();
+        releaseSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        int updated = timeSlotMapper.update(
+                releaseSlot,
+                Wrappers.<TimeSlot>lambdaUpdate()
+                        .eq(TimeSlot::getId, slot.getId())
+                        .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
+        );
+        if (updated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
+        }
+
+        invalidateCustomerBookingCache(booking.getCustomerId());
     }
 
     @Override

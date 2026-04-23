@@ -1,0 +1,18 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        # Rendered by nginx docker entrypoint via envsubst.
+        # Override in docker-compose with `API_UPSTREAM`, e.g. `backend:8080`.
+        proxy_pass http://${API_UPSTREAM}/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}

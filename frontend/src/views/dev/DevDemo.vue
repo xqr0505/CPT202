@@ -35,24 +35,24 @@
         :fetch-data="fetchMockBookings"
       >
         <template #status="{ row }">
-          <BookingStatusTag :status="row.status" />
+          <BookingStatusTag :status="mockBookingRow(row).status" />
         </template>
         <template #mobile-item="{ row }">
           <div class="booking-card">
             <div class="card-header">
               <div class="datetime-cell">
-                <span>{{ row.date }} {{ row.time }}</span>
+                <span>{{ mockBookingRow(row).date }} {{ mockBookingRow(row).time }}</span>
               </div>
-              <BookingStatusTag :status="row.status" />
+              <BookingStatusTag :status="mockBookingRow(row).status" />
             </div>
             <div class="card-body">
               <div class="info-row">
                 <span class="info-label">Specialist:</span>
-                <span class="info-value">{{ row.specialist }}</span>
+                <span class="info-value">{{ mockBookingRow(row).specialist }}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">Topic:</span>
-                <span class="info-value">{{ row.topic }}</span>
+                <span class="info-value">{{ mockBookingRow(row).topic }}</span>
               </div>
             </div>
           </div>
@@ -75,6 +75,17 @@ defineOptions({ name: 'DevDemo' })
 
 const statuses = Object.values(BOOKING_STATUS) as BookingStatus[]
 
+interface MockBookingRow {
+  id: string
+  date: string
+  time: string
+  specialist: string
+  topic: string
+  status: BookingStatus
+}
+
+const mockBookingRow = (row: unknown) => row as MockBookingRow
+
 const tableColumns: TableColumn[] = [
   { label: 'ID', prop: 'id', width: 100 },
   { label: 'Date', prop: 'date', width: 150 },
@@ -84,7 +95,7 @@ const tableColumns: TableColumn[] = [
   { label: 'Status', prop: 'status', slotName: 'status', width: 150 }
 ]
 
-const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResult> => {
+const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResult<MockBookingRow>> => {
   await new Promise(resolve => setTimeout(resolve, 800))
 
   const mockData = Array.from({ length: 45 }).map((_, idx) => ({
@@ -93,7 +104,7 @@ const fetchMockBookings = async (params: FetchDataParams): Promise<FetchDataResu
     time: `${String(9 + (idx % 8)).padStart(2, '0')}:00`,
     specialist: `Dr. Expert ${idx % 5 + 1}`,
     topic: `Career Consulting ${idx + 1}`,
-    status: statuses[idx % statuses.length]
+    status: statuses[idx % statuses.length] ?? BOOKING_STATUS.PENDING
   }))
 
   const start = (params.page - 1) * params.limit

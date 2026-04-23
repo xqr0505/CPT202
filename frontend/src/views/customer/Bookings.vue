@@ -35,7 +35,7 @@
         <template #datetime="{ row }">
           <div class="datetime-cell">
             <el-icon class="calendar-icon"><Calendar /></el-icon>
-            <span>{{ formatDateTime(row.appointmentDateTime) }}</span>
+            <span>{{ formatDateTime(bookingRow(row).appointmentDateTime) }}</span>
           </div>
         </template>
 
@@ -43,35 +43,35 @@
           <div class="expert-cell">
             <el-avatar
               :size="36"
-              :src="row.specialistAvatar"
+              :src="bookingRow(row).specialistAvatar"
               class="expert-avatar"
             >
-              {{ row.specialistName ? row.specialistName.charAt(0) : 'E' }}
+              {{ bookingRow(row).specialistName ? bookingRow(row).specialistName.charAt(0) : 'E' }}
             </el-avatar>
-            <span class="expert-name">{{ row.specialistName }}</span>
+            <span class="expert-name">{{ bookingRow(row).specialistName }}</span>
           </div>
         </template>
 
         <template #status="{ row }">
-          <BookingStatusTag :status="row.status" />
+          <BookingStatusTag :status="bookingRow(row).status" />
         </template>
 
         <template #action="{ row }">
           <div class="action-buttons">
             <el-tooltip content="View Details" placement="top">
-              <CustomButton size="small" type="primary" circle class="action-btn-circle" @click="handleAction('view', row)">
+              <CustomButton size="small" type="primary" circle class="action-btn-circle" @click="handleAction('view', bookingRow(row))">
                 <el-icon><View /></el-icon>
               </CustomButton>
             </el-tooltip>
 
             <template v-if="activeTab === 'UPCOMING'">
               <el-tooltip content="Reschedule" placement="top">
-                <CustomButton size="small" type="warning" circle class="action-btn-circle" :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
+                <CustomButton size="small" type="warning" circle class="action-btn-circle" :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                   <el-icon><Edit /></el-icon>
                 </CustomButton>
               </el-tooltip>
               <el-tooltip content="Cancel" placement="top">
-                <CustomButton size="small" type="danger" circle class="action-btn-circle" :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
+                <CustomButton size="small" type="danger" circle class="action-btn-circle" :disabled="!canCancelBooking(bookingRow(row))" @click="handleAction('cancel', bookingRow(row))">
                   <el-icon><Close /></el-icon>
                 </CustomButton>
               </el-tooltip>
@@ -79,7 +79,7 @@
 
             <template v-else>
               <el-tooltip content="Book Again" placement="top">
-                <CustomButton size="small" type="success" circle class="action-btn-circle" @click="handleAction('bookAgain', row)">
+                <CustomButton size="small" type="success" circle class="action-btn-circle" @click="handleAction('bookAgain', bookingRow(row))">
                   <el-icon><RefreshRight /></el-icon>
                 </CustomButton>
               </el-tooltip>
@@ -88,44 +88,44 @@
         </template>
 
         <template #mobile-item="{ row }">
-          <div class="booking-card" :class="{ 'booking-card-highlight': isHighlightedBooking(row) }">
+          <div class="booking-card" :class="{ 'booking-card-highlight': isHighlightedBooking(bookingRow(row)) }">
             <div class="card-header">
               <div class="datetime-cell">
                 <el-icon class="calendar-icon"><Calendar /></el-icon>
-                <span>{{ formatDateTime(row.appointmentDateTime) }}</span>
+                <span>{{ formatDateTime(bookingRow(row).appointmentDateTime) }}</span>
               </div>
-              <BookingStatusTag :status="row.status" />
+              <BookingStatusTag :status="bookingRow(row).status" />
             </div>
             <div class="card-body">
               <div class="info-row">
                 <span class="info-label">Expert:</span>
                 <span class="info-value">
-                  <el-avatar :size="24" :src="row.specialistAvatar" class="expert-avatar-small">
-                    {{ row.specialistName ? row.specialistName.charAt(0) : 'E' }}
+                  <el-avatar :size="24" :src="bookingRow(row).specialistAvatar" class="expert-avatar-small">
+                    {{ bookingRow(row).specialistName ? bookingRow(row).specialistName.charAt(0) : 'E' }}
                   </el-avatar>
-                  {{ row.specialistName }}
+                  {{ bookingRow(row).specialistName }}
                 </span>
               </div>
               <div class="info-row">
                 <span class="info-label">Service:</span>
-                <span class="info-value">{{ row.serviceName }}</span>
+                <span class="info-value">{{ bookingRow(row).serviceName }}</span>
               </div>
             </div>
             <div class="card-footer">
               <el-tooltip content="View Details" placement="top">
-                <CustomButton class="mobile-action-btn-circle" size="small" type="primary" circle @click="handleAction('view', row)">
+                <CustomButton class="mobile-action-btn-circle" size="small" type="primary" circle @click="handleAction('view', bookingRow(row))">
                   <el-icon><View /></el-icon>
                 </CustomButton>
               </el-tooltip>
 
               <template v-if="activeTab === 'UPCOMING'">
                 <el-tooltip content="Reschedule" placement="top">
-                  <CustomButton class="mobile-action-btn-circle" size="small" type="warning" circle :disabled="!canRescheduleBooking(row)" @click="handleAction('reschedule', row)">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="warning" circle :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                     <el-icon><Edit /></el-icon>
                   </CustomButton>
                 </el-tooltip>
                 <el-tooltip content="Cancel" placement="top">
-                  <CustomButton class="mobile-action-btn-circle" size="small" type="danger" circle :disabled="!canCancelBooking(row)" @click="handleAction('cancel', row)">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="danger" circle :disabled="!canCancelBooking(bookingRow(row))" @click="handleAction('cancel', bookingRow(row))">
                     <el-icon><Close /></el-icon>
                   </CustomButton>
                 </el-tooltip>
@@ -133,7 +133,7 @@
 
               <template v-else>
                 <el-tooltip content="Book Again" placement="top">
-                  <CustomButton class="mobile-action-btn-circle" size="small" type="success" circle @click="handleAction('bookAgain', row)">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="success" circle @click="handleAction('bookAgain', bookingRow(row))">
                     <el-icon><RefreshRight /></el-icon>
                   </CustomButton>
                 </el-tooltip>
@@ -412,11 +412,13 @@ const handleStatusChange = () => {
   }
 }
 
+const bookingRow = (row: unknown) => row as BookingListItem;
+
 const isHighlightedBooking = (row: BookingListItem) =>
   Boolean(highlightedBookingId.value) && String(row.id) === highlightedBookingId.value;
 
-const resolveRowClassName = ({ row }: { row: BookingListItem; rowIndex: number }) =>
-  isHighlightedBooking(row) ? 'booking-row-highlight' : '';
+const resolveRowClassName = ({ row }: { row: unknown; rowIndex: number }) =>
+  isHighlightedBooking(bookingRow(row)) ? 'booking-row-highlight' : '';
 
 const formatDateTime = (dtStr: string) => {
   if (!dtStr) return ''
@@ -464,8 +466,9 @@ const formatMoney = (value?: number) => {
 const formatSlotTime = (time?: string) => {
   if (!time) return '';
   const parts = String(time).split(':');
-  if (parts.length >= 2) {
-    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+  const [hour, minute] = parts;
+  if (hour && minute) {
+    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
   }
   return String(time);
 };

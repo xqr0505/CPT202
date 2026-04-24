@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/categories")
+@RequestMapping({"/admin/categories", "/api/admin/categories"})
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminCategoryController {
 

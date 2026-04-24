@@ -11,7 +11,7 @@ server {
     location /api/ {
         # Rendered by nginx docker entrypoint via envsubst.
         # Override in docker-compose with `API_UPSTREAM`, e.g. `backend:8080`.
-        proxy_pass http://${API_UPSTREAM}/api/;
+        proxy_pass http://${API_UPSTREAM};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

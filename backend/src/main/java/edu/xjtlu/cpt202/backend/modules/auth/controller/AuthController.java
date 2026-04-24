@@ -28,46 +28,46 @@ public class AuthController {
         this.authService = authService;
     }
 
-    @PostMapping("/auth/verify-email")
+    @PostMapping({"/auth/verify-email", "/api/auth/verify-email"})
     public Result<Void> sendVerificationCode(@Valid @RequestBody SendVerificationCodeRequest request) {
         authService.sendVerificationCode(request);
         return Result.success();
     }
 
-    @PostMapping("/auth/register")
+    @PostMapping({"/auth/register", "/api/auth/register"})
     public Result<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
         return Result.success(authService.register(request));
     }
 
-    @PostMapping("/auth/login")
+    @PostMapping({"/auth/login", "/api/auth/login"})
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return Result.success(authService.login(request));
     }
 
-    @PostMapping("/auth/logout")
+    @PostMapping({"/auth/logout", "/api/auth/logout"})
     public Result<Void> logout(@RequestBody(required = false) LogoutRequest request) {
         authService.logout(request == null ? null : request);
         return Result.success();
     }
 
-    @PostMapping("/auth/refresh-token")
+    @PostMapping({"/auth/refresh-token", "/api/auth/refresh-token"})
     public Result<RefreshTokenResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         return Result.success(authService.refreshToken(request));
     }
 
-    @PostMapping("/auth/reset-password/send-code")
+    @PostMapping({"/auth/reset-password/send-code", "/api/auth/reset-password/send-code"})
     public Result<Void> sendResetCode(@Valid @RequestBody SendResetCodeRequest request) {
         authService.sendResetPasswordCode(request);
         return Result.success();
     }
 
-    @PostMapping("/auth/reset-password/verify")
+    @PostMapping({"/auth/reset-password/verify", "/api/auth/reset-password/verify"})
     public Result<Void> verifyResetCode(@Valid @RequestBody VerifyResetCodeRequest request) {
         authService.verifyResetCode(request);
         return Result.success();
     }
 
-    @PostMapping("/auth/reset-password/update")
+    @PostMapping({"/auth/reset-password/update", "/api/auth/reset-password/update"})
     public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return Result.success();

@@ -53,38 +53,38 @@ export interface CreateRecurringRuleRequest {
 // ============== Time Slot APIs ==============
 export const getWeeklySchedule = (weekStartDate?: string): Promise<TimeSlotVO[]> => {
   const params = weekStartDate ? { weekStartDate } : {}
-  return request.get('/api/specialist/schedule/slots/weekly', { params })
+  return request.get('/specialist/schedule/slots/weekly', { params })
 }
 
 export const getSlotById = (id: number): Promise<TimeSlotVO> => {
-  return request.get(`/api/specialist/schedule/slots/${id}`)
+  return request.get(`/specialist/schedule/slots/${id}`)
 }
 
 export const createSlot = (data: CreateSlotRequest): Promise<TimeSlotVO> => {
-  return request.post('/api/specialist/schedule/slots', data)
+  return request.post('/specialist/schedule/slots', data)
 }
 
 export const updateSlot = (id: number, data: UpdateSlotRequest): Promise<TimeSlotVO> => {
-  return request.put(`/api/specialist/schedule/slots/${id}`, data)
+  return request.put(`/specialist/schedule/slots/${id}`, data)
 }
 
 export const deleteSlot = (id: number): Promise<void> => {
-  return request.delete(`/api/specialist/schedule/slots/${id}`)
+  return request.delete(`/specialist/schedule/slots/${id}`)
 }
 
 // ============== Recurring Rule APIs ==============
 export const getAllRecurringRules = (): Promise<RecurringRuleVO[]> => {
-  return request.get('/api/specialist/schedule/rules')
+  return request.get('/specialist/schedule/rules')
 }
 
 export const getActiveRecurringRules = (): Promise<RecurringRuleVO[]> => {
-  return request.get('/api/specialist/schedule/rules/active')
+  return request.get('/specialist/schedule/rules/active')
 }
 
 export const createRecurringRule = (data: CreateRecurringRuleRequest): Promise<RecurringRuleVO> => {
-  return request.post('/api/specialist/schedule/rules', data)
+  return request.post('/specialist/schedule/rules', data)
 }
 
 export const deleteRecurringRule = (id: number): Promise<void> => {
-  return request.delete(`/api/specialist/schedule/rules/${id}`)
+  return request.delete(`/specialist/schedule/rules/${id}`)
 }

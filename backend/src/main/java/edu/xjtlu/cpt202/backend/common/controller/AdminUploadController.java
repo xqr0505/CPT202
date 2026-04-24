@@ -12,7 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/admin/uploads")
+@RequestMapping({"/admin/uploads", "/api/admin/uploads"})
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUploadController {
 

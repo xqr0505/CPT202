@@ -59,7 +59,8 @@ Defines the following services:
    Then fill in the real values for `DB_PASSWORD`, `MAIL_PASSWORD`, and `JWT_SECRET`.
    Frontend API addresses are also read strictly from environment variables:
    - Production-like compose uses `FRONTEND_VITE_API_BASE_URL` and defaults to `/api`
-   - Development compose uses `FRONTEND_VITE_API_BASE_URL_DEV` and defaults to `http://localhost:8081`
+   - Development compose uses `FRONTEND_VITE_API_BASE_URL_DEV` and defaults to `http://localhost:8081/api`
+   - The value must end with `/api` (for example `/api` or `http://localhost:8081/api`)
    If you already have Redis running locally, set `REDIS_HOST` to your host address.
 
 3. Start the services:

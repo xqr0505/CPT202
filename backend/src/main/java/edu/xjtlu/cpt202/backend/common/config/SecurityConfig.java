@@ -83,7 +83,7 @@ public class SecurityConfig {
                                 "/error/**"
                         ).permitAll()
 
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/specialist/**").hasRole("SPECIALIST")
                         .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/user/**").hasAnyRole("ADMIN", "SPECIALIST", "CUSTOMER")

@@ -35,7 +35,7 @@
           {{ loading ? 'Sending...' : 'Send Verification Code' }}
         </button>
         <div class="back-link">
-          <router-link to="/auth/login">Back to Login</router-link>
+          <router-link to="/auth">Back to Login</router-link>
         </div>
       </div>
 
@@ -207,7 +207,7 @@ async function resetPassword() {
       confirmPassword: confirmPassword.value
     });
     ElMessage.success('Password reset successfully. Please login with your new password.');
-    router.push('/auth/login');
+    router.push('/auth');
   } catch (error: any) {
     ElMessage.error(error.message || 'Failed to reset password');
   } finally {

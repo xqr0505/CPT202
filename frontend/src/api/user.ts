@@ -22,10 +22,9 @@ export interface AccountProfile {
 }
 
 export interface UpdateUserProfilePayload {
-  fullName: string
-  email: string
-  phoneNumber: string
-  currentPassword?: string
+  fullName?: string
+  email?: string
+  phoneNumber?: string
 }
 
 export interface SendEmailChangeCodePayload {
@@ -33,6 +32,7 @@ export interface SendEmailChangeCodePayload {
 }
 
 export interface ChangeCurrentUserEmailPayload {
+  currentPassword: string
   newEmail: string
   code: string
 }
@@ -53,9 +53,18 @@ export interface DeactivateCurrentUserAccountPayload {
 
 export interface SecurityActivityItem {
   id: number
-  eventType: string
-  summary: string
+  activityType: string
+  description: string
+  changedFields: string[]
   createdAt: string
+}
+
+export interface VerifyCurrentUserPasswordPayload {
+  currentPassword: string
+}
+
+export interface VerifyCurrentUserPasswordResponse {
+  valid: boolean
 }
 
 interface StoredSessionUser {
@@ -90,6 +99,19 @@ const sanitizeSecurityActivityText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+const sanitizeChangedFields = (value: unknown): string[] => {
+  return Array.isArray(value)
+    ? value
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : []
+}
+
+const getUserAccountApiPrefix = (): string => {
+  const baseUrl = String(request.defaults.baseURL ?? '')
+  return /\/api\/?$/.test(baseUrl) ? '/user' : '/api/user'
+}
+
 const toSafeAccountProfile = (payload: unknown): AccountProfile => {
   if (!payload || typeof payload !== 'object') {
     return {
@@ -121,8 +143,9 @@ const toSafeSecurityActivityItem = (payload: unknown): SecurityActivityItem => {
   if (!payload || typeof payload !== 'object') {
     return {
       id: 0,
-      eventType: '',
-      summary: '',
+      activityType: '',
+      description: '',
+      changedFields: [],
       createdAt: ''
     }
   }
@@ -131,8 +154,9 @@ const toSafeSecurityActivityItem = (payload: unknown): SecurityActivityItem => {
 
   return {
     id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : 0,
-    eventType: sanitizeSecurityActivityText(item.eventType),
-    summary: sanitizeSecurityActivityText(item.summary),
+    activityType: sanitizeSecurityActivityText(item.activityType),
+    description: sanitizeSecurityActivityText(item.description),
+    changedFields: sanitizeChangedFields(item.changedFields),
     createdAt: sanitizeSecurityActivityText(item.createdAt)
   }
 }
@@ -145,7 +169,7 @@ export const getCurrentUserProfile = async (): Promise<AccountProfile> => {
   return toSafeAccountProfile(response)
 }
 
-export const getCurrentUserSecurityActivity = async (): Promise<SecurityActivityItem[]> => {
+export const getCurrentUserSecurityActivities = async (): Promise<SecurityActivityItem[]> => {
   const response = await request.get<unknown, unknown>(
     '/user/security-activity',
     silentAccountRequestConfig as unknown as Record<string, unknown>
@@ -153,6 +177,8 @@ export const getCurrentUserSecurityActivity = async (): Promise<SecurityActivity
 
   return Array.isArray(response) ? response.map(toSafeSecurityActivityItem) : []
 }
+
+export const getCurrentUserSecurityActivity = getCurrentUserSecurityActivities
 
 export const updateCurrentUserProfile = async (
   payload: UpdateUserProfilePayload
@@ -211,6 +237,20 @@ export const changeCurrentUserPassword = async (
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
+}
+
+export const verifyCurrentUserPassword = async (
+  payload: VerifyCurrentUserPasswordPayload
+): Promise<VerifyCurrentUserPasswordResponse> => {
+  const response = await request.post<unknown, unknown>(
+    `${getUserAccountApiPrefix()}/verify-password`,
+    payload,
+    silentAccountRequestConfig as unknown as Record<string, unknown>
+  )
+
+  return {
+    valid: Boolean((response as Partial<VerifyCurrentUserPasswordResponse>)?.valid)
+  }
 }
 
 export const deactivateCurrentUserAccount = async (

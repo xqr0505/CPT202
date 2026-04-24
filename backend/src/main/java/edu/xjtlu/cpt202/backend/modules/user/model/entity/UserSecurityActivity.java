@@ -24,9 +24,11 @@ public class UserSecurityActivity {
 
     private Long userId;
 
-    private String eventType;
+    private String activityType;
 
-    private String summary;
+    private String description;
+
+    private String changedFields;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

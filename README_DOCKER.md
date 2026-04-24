@@ -65,7 +65,7 @@ Defines the following services:
 
 3. Start the services:
    ```bash
-   docker compose up -d
+   docker-compose up -d
    ```
 
 4. Access the services:
@@ -75,7 +75,7 @@ Defines the following services:
 
 5. Stop the services:
    ```bash
-   docker compose down
+   docker-compose down
    ```
 
 ## Development (`docker-compose.dev.yml`)

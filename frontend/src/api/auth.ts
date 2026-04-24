@@ -1,5 +1,4 @@
 import request from './request';
-import { logout as clearAndRedirect } from './request';
 
 export interface LoginPayload {
   email: string;
@@ -22,6 +21,7 @@ export interface RegisterPayload {
   verificationCode: string;
   password: string;
   confirmPassword: string;
+  role: 'CUSTOMER';
 }
 
 export interface SendVerificationCodePayload {
@@ -62,9 +62,7 @@ export function sendVerificationCode(payload: SendVerificationCodePayload): Prom
  * @returns 服务器响应
  */
 export function logout(): Promise<any> {
-  return request.post('/auth/logout', {}).finally(() => {
-    clearAndRedirect();
-  });
+  return request.post('/auth/logout', {});
 }
 
 /**

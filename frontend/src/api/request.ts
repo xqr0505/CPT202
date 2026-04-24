@@ -151,9 +151,20 @@ export const dispatchSessionActivityEvent = () => {
   setTimeout(() => localStorage.removeItem(ACTIVITY_EVENT_KEY), 100);
 };
 
-export const logout = () => {
+export const logout = (options?: { redirectTo?: string | null }) => {
   clearAuthData();
   triggerLogoutEvent();
+
+  const redirectTo = options?.redirectTo;
+  if (redirectTo === null) {
+    return;
+  }
+
+  if (redirectTo) {
+    router.push({ path: redirectTo }).catch(() => null);
+    return;
+  }
+
   router.push({ name: 'Login' }).catch(() => null);
 };
 

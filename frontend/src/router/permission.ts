@@ -3,8 +3,18 @@ import type { Router } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { getAuthToken, getRefreshToken, getUser, isTokenExpired, refreshAuthToken, clearAuthData } from '@/api/request';
 
-const publicRoutes = ['/customer/search'];
-const authRoutes = ['/auth/login', '/login', '/register', '/forgot-password', '/auth'];
+const publicRoutes = [
+  '/',
+  '/customer/search',
+  '/customer/specialists',
+  '/error/403',
+  '/error/404',
+  '/error/500',
+  '/error/global'
+];
+const authRoutes = ['/auth', '/login', '/register', '/forgot-password'];
+
+const isPublicPath = (path: string): boolean => publicRoutes.includes(path);
 
 const getDefaultHomePath = (role: string): string => {
   switch (role) {
@@ -39,7 +49,7 @@ export function setupRouterGuard(router: Router) {
     const isAuthenticated = Boolean(currentToken && currentUser);
 
     if (isAuthenticated) {
-      if (to.path === '/auth' || to.path === '/auth/login' || to.path === '/login' || to.path === '/register') {
+      if (to.path === '/auth' || to.path === '/login' || to.path === '/register') {
         return { path: getDefaultHomePath(currentUser.role) };
       }
 
@@ -54,7 +64,7 @@ export function setupRouterGuard(router: Router) {
 
       return true;
     } else {
-      if (publicRoutes.includes(to.path) || authRoutes.includes(to.path)) {
+      if (isPublicPath(to.path) || authRoutes.includes(to.path)) {
         return true;
       }
 

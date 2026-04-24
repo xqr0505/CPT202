@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.VerifyPasswordVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -16,7 +17,9 @@ public interface UserAccountService {
 
     UserProfileVO getCurrentUserProfile();
 
-    List<UserSecurityActivityVO> getCurrentUserSecurityActivity();
+    List<UserSecurityActivityVO> getCurrentUserSecurityActivities();
+
+    VerifyPasswordVO verifyCurrentUserPassword(String currentPassword);
 
     void updateCurrentUserProfile(UpdateUserProfileDTO request);
 

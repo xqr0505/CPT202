@@ -9,6 +9,7 @@ import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.VerifyPasswordVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,9 +37,14 @@ public class UserAccountController {
         return Result.success(userAccountService.getCurrentUserProfile());
     }
 
-    @GetMapping("/security-activity")
+    @GetMapping({"/security-activity", "/security-activities"})
     public Result<List<UserSecurityActivityVO>> getSecurityActivity() {
-        return Result.success(userAccountService.getCurrentUserSecurityActivity());
+        return Result.success(userAccountService.getCurrentUserSecurityActivities());
+    }
+
+    @PostMapping("/verify-password")
+    public Result<VerifyPasswordVO> verifyPassword(@Valid @RequestBody ConfirmCurrentPasswordDTO request) {
+        return Result.success(userAccountService.verifyCurrentUserPassword(request.getCurrentPassword()));
     }
 
     @PutMapping("/profile")

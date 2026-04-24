@@ -80,16 +80,22 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void sendVerificationCode_RoleMissing_Throws() {
+    void sendVerificationCode_RoleMissing_DefaultsToCustomer_Success() {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest();
         request.setEmail(testEmail);
         request.setRole(null);
         request.setType("REGISTER");
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> authService.sendVerificationCode(request));
-        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Please select a role"));
+        when(userMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+
+        assertDoesNotThrow(() -> authService.sendVerificationCode(request));
+
+        verify(verificationCodeService).sendCode(
+                testEmail,
+                "REGISTER",
+                "Email Verification",
+                "Your verification code is: %s\nThis code will expire in %d minutes."
+        );
     }
 
     @Test
@@ -114,7 +120,7 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.sendVerificationCode(request));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Please select a role first"));
+        assertTrue(ex.getMessage().contains("Only CUSTOMER role is allowed"));
     }
 
     @Test

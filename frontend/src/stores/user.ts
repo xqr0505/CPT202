@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { clearAuthData, getAuthToken, getUser, isRememberMeSession, saveToken, saveUser } from '@/api/request'
+import { getAuthToken, getUser, isRememberMeSession, logout as clearLocalAuth, saveToken, saveUser } from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -123,7 +123,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = null
       userInfo.value = null
       userRole.value = null
-      clearAuthData()
+      clearLocalAuth({ redirectTo: null })
     }
   }
 

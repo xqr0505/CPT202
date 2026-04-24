@@ -140,6 +140,7 @@ async function getVerificationCode() {
   try {
     await sendVerificationCode({
       email: form.email,
+      role: 'CUSTOMER',
       type: 'REGISTER'
     });
 
@@ -188,7 +189,8 @@ async function handleRegister() {
       email: form.email,
       verificationCode: form.verificationCode,
       password: form.password,
-      confirmPassword: form.confirmPassword
+      confirmPassword: form.confirmPassword,
+      role: 'CUSTOMER'
     };
 
     const response = await register(payload);

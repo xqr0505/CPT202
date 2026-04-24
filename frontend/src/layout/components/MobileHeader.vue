@@ -11,8 +11,9 @@
         </span>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="navigateToProfile">Profile</el-dropdown-item>
-            <el-dropdown-item @click="handleLogout">Logout</el-dropdown-item>
+            <el-dropdown-item v-if="userStore.isLoggedIn" @click="navigateToProfile">Profile</el-dropdown-item>
+            <el-dropdown-item v-if="userStore.isLoggedIn" @click="handleLogout">Logout</el-dropdown-item>
+            <el-dropdown-item v-else @click="handleLogin">Login</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -21,12 +22,13 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { logout as clearAndRedirect } from '@/api/request'
+import { ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 const displayName = computed(() => {
@@ -39,10 +41,40 @@ const avatarSrc = computed(() => userStore.userInfo?.avatar?.trim() || '')
 const userInitial = computed(() => displayName.value.charAt(0).toUpperCase())
 
 const navigateToProfile = () => {
-  window.location.href = '/customer/profile'
+  router.push({ name: 'CustomerProfile' }).catch(() => null)
 }
-const handleLogout = () => {
-  clearAndRedirect()
+
+const handleLogin = (): void => {
+  router.push({ path: '/auth', query: { redirect: route.fullPath } }).catch(() => null)
+}
+
+const handleLogout = async (): Promise<void> => {
+  try {
+    await ElMessageBox.confirm(
+      'After logging out, where do you want to go?',
+      'Logout',
+      {
+        confirmButtonText: 'Go to Login',
+        cancelButtonText: 'Browse as Guest',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        showCancelButton: true,
+        distinguishCancelAndClose: true,
+        type: 'warning'
+      }
+    )
+
+    await userStore.logout()
+    await router.push('/auth')
+  } catch (e: any) {
+    if (e === 'cancel' || e?.toString?.() === 'cancel') {
+      await userStore.logout()
+      await router.push('/customer/search')
+      return
+    }
+
+    // closed dialog -> do nothing
+  }
 }
 </script>
 

@@ -62,6 +62,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -84,6 +85,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
     private static final int MAX_CUSTOMER_NOTES_LENGTH = 500;
+    private static final int RESCHEDULE_MIN_LEAD_HOURS = 2;
     private static final String CUSTOMER_NOTES_ALLOWED_CHARS_REGEX = "[^\\p{L}\\p{N}\\p{P}\\p{Z}\\r\\n]";
     private static final String BOOKING_SUCCESS_EMAIL_SUBJECT = "Booking request submitted successfully";
     private static final String BOOKING_SUCCESS_EMAIL_TEMPLATE = """
@@ -533,7 +535,19 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setRejectionReason(cancelReason);
         booking.setChangeType("SPECIALIST_FORCE_CANCEL");
         booking.setDecisionTime(now);
-        bookingMapper.updateById(booking);
+        int bookingUpdated = bookingMapper.updateSpecialistForceCancelIfCancellable(
+                booking.getId(),
+                booking.getSpecialistId(),
+                booking.getStatus(),
+                booking.getCancelledBy(),
+                booking.getCancelReason(),
+                booking.getRejectionReason(),
+                booking.getChangeType(),
+                booking.getDecisionTime()
+        );
+        if (bookingUpdated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Booking status changed, please refresh and try again");
+        }
 
         TimeSlot slotToUpdate = new TimeSlot();
         slotToUpdate.setStatus(releaseSlot ? TimeSlotStatusEnum.AVAILABLE.name() : TimeSlotStatusEnum.LOCKED.name());
@@ -582,6 +596,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (newSlotId == null) {
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "newSlotId is required");
         }
+        LocalDateTime now = LocalDateTime.now();
 
         Booking booking = bookingMapper.selectById(bookingId);
         if (booking == null) {
@@ -611,6 +626,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (!TimeSlotStatusEnum.AVAILABLE.name().equals(newSlot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot is not available");
         }
+        validateRescheduleTargetLeadTime(resolveSlotStart(newSlot), now);
 
         SpecialistDetailVO specialist = specialistQueryService.getSpecialistDetail(booking.getSpecialistId());
         validateSpecialistCanBeBooked(specialist);
@@ -620,7 +636,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         return customerBookingChangePolicyService.customerRescheduleQuote(
                 booking.getStatus(),
                 slotStart,
-                LocalDateTime.now(),
+                now,
                 booking.getPrice(),
                 newPrice
         );
@@ -663,7 +679,17 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setCancelledBy(BookingCancellationSourceEnum.CUSTOMER_MANUAL.getCode());
         booking.setChangeType("CANCEL");
         booking.setDecisionTime(now);
-        bookingMapper.updateById(booking);
+        int bookingUpdated = bookingMapper.updateCustomerCancelIfCancellable(
+                booking.getId(),
+                currentCustomerId,
+                booking.getStatus(),
+                booking.getCancelledBy(),
+                booking.getChangeType(),
+                booking.getDecisionTime()
+        );
+        if (bookingUpdated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Booking status changed, please refresh and try again");
+        }
 
         slotToUpdate.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
         int updated = timeSlotMapper.update(
@@ -771,6 +797,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         validateSpecialistCanBeBooked(specialist);
         BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
         LocalDateTime now = LocalDateTime.now();
+        validateRescheduleTargetLeadTime(resolveSlotStart(newSlot), now);
         BookingRescheduleQuoteVO quote = customerBookingChangePolicyService.customerRescheduleQuote(
                 booking.getStatus(),
                 resolveSlotStart(currentSlot),
@@ -823,7 +850,17 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setStatus(BookingStatusEnum.PENDING.name());
         booking.setChangeType("RESCHEDULE");
         booking.setDecisionTime(now);
-        bookingMapper.updateById(booking);
+        int bookingUpdated = bookingMapper.updateCustomerRescheduleIfCancellable(
+                booking.getId(),
+                currentCustomerId,
+                newSlotId,
+                booking.getStatus(),
+                booking.getChangeType(),
+                booking.getDecisionTime()
+        );
+        if (bookingUpdated == 0) {
+            throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Booking status changed, please refresh and try again");
+        }
 
         invalidateCustomerBookingCache(currentCustomerId);
         sendCustomerRescheduleEmailsAsync(booking, newSlot, quote);
@@ -869,6 +906,16 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Time slot has no start time");
         }
         return LocalDateTime.of(date, start);
+    }
+
+    private void validateRescheduleTargetLeadTime(LocalDateTime newSlotStart, LocalDateTime now) {
+        Duration leadTime = Duration.between(now, newSlotStart);
+        if (leadTime.compareTo(Duration.ofHours(RESCHEDULE_MIN_LEAD_HOURS)) <= 0) {
+            throw new BusinessException(
+                    ResultCodeEnum.PARAM_ERROR.getCode(),
+                    "New slot must be more than 2 hours from now"
+            );
+        }
     }
 
     private <T> Optional<T> readCache(String key, Class<T> expectedType) {

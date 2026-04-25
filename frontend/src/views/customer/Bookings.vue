@@ -473,6 +473,20 @@ const formatSlotTime = (time?: string) => {
   return String(time);
 };
 
+const slotStartsAfterTwoHours = (slot: SpecialistAvailabilitySlot) => {
+  const datePart = String(slot.slotDate || '').trim();
+  const timePart = String(slot.startTime || '').trim();
+  if (!datePart || !timePart) {
+    return false;
+  }
+  const iso = `${datePart}T${timePart.length === 5 ? `${timePart}:00` : timePart}`;
+  const slotTime = new Date(iso).getTime();
+  if (Number.isNaN(slotTime)) {
+    return false;
+  }
+  return slotTime - Date.now() > 2 * 60 * 60 * 1000;
+};
+
 const openCancelDialog = async (row: BookingListItem) => {
   if (!canCancelBooking(row)) {
     ElMessage.warning('Cancellation is only available for bookings more than 2 hours away.');
@@ -519,7 +533,9 @@ const loadRescheduleAvailability = async () => {
   rescheduleAvailabilityLoading.value = true;
   try {
     const slots = await fetchSpecialistAvailability(Number(selectedBooking.value.specialistId), rescheduleDate.value);
-    rescheduleAvailability.value = (slots || []).filter((slot) => slot.status === 'AVAILABLE');
+    rescheduleAvailability.value = (slots || []).filter(
+      (slot) => slot.status === 'AVAILABLE' && slotStartsAfterTwoHours(slot),
+    );
     if (!rescheduleAvailability.value.some((slot) => slot.id === selectedRescheduleSlotId.value)) {
       selectedRescheduleSlotId.value = null;
       rescheduleQuote.value = null;

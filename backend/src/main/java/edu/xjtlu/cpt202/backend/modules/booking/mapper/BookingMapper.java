@@ -15,6 +15,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -144,5 +145,69 @@ public interface BookingMapper extends BaseMapper<Booking> {
     Long countBookingOwnedBySpecialist(
             @Param("bookingId") Long bookingId,
             @Param("currentUserId") Long currentUserId
+    );
+
+    @Update("""
+            UPDATE bookings
+            SET status = #{status},
+                cancelled_by = #{cancelledBy},
+                cancel_reason = #{cancelReason},
+                rejection_reason = #{rejectionReason},
+                change_type = #{changeType},
+                decision_time = #{decisionTime},
+                updated_at = NOW()
+            WHERE id = #{bookingId}
+              AND specialist_id = #{specialistId}
+              AND status IN ('PENDING', 'CONFIRMED')
+            """)
+    int updateSpecialistForceCancelIfCancellable(
+            @Param("bookingId") Long bookingId,
+            @Param("specialistId") Long specialistId,
+            @Param("status") String status,
+            @Param("cancelledBy") String cancelledBy,
+            @Param("cancelReason") String cancelReason,
+            @Param("rejectionReason") String rejectionReason,
+            @Param("changeType") String changeType,
+            @Param("decisionTime") LocalDateTime decisionTime
+    );
+
+    @Update("""
+            UPDATE bookings
+            SET status = #{status},
+                cancelled_by = #{cancelledBy},
+                change_type = #{changeType},
+                decision_time = #{decisionTime},
+                updated_at = NOW()
+            WHERE id = #{bookingId}
+              AND customer_id = #{customerId}
+              AND status IN ('PENDING', 'CONFIRMED')
+            """)
+    int updateCustomerCancelIfCancellable(
+            @Param("bookingId") Long bookingId,
+            @Param("customerId") Long customerId,
+            @Param("status") String status,
+            @Param("cancelledBy") String cancelledBy,
+            @Param("changeType") String changeType,
+            @Param("decisionTime") LocalDateTime decisionTime
+    );
+
+    @Update("""
+            UPDATE bookings
+            SET slot_id = #{newSlotId},
+                status = #{status},
+                change_type = #{changeType},
+                decision_time = #{decisionTime},
+                updated_at = NOW()
+            WHERE id = #{bookingId}
+              AND customer_id = #{customerId}
+              AND status IN ('PENDING', 'CONFIRMED')
+            """)
+    int updateCustomerRescheduleIfCancellable(
+            @Param("bookingId") Long bookingId,
+            @Param("customerId") Long customerId,
+            @Param("newSlotId") Long newSlotId,
+            @Param("status") String status,
+            @Param("changeType") String changeType,
+            @Param("decisionTime") LocalDateTime decisionTime
     );
 }

@@ -4,8 +4,8 @@
       <p class="page-tag">Account</p>
       <h1 class="page-title">Page Style Settings</h1>
       <p class="page-text">
-        Review the currently active interface theme without mixing appearance preferences into the
-        live account profile APIs.
+        Switch between light and dark mode for this browser without affecting your saved account
+        details.
       </p>
     </div>
 
@@ -14,7 +14,7 @@
         <div>
           <h2 class="style-panel__title">Loading style settings</h2>
           <p class="style-panel__subtitle">
-            We are reading the currently active interface theme.
+            We are loading your current theme preference.
           </p>
         </div>
       </div>
@@ -47,7 +47,7 @@
         <div>
           <h2 class="style-panel__title">Page Style Preference</h2>
           <p class="style-panel__subtitle">
-            Saved appearance preferences are not available through the current backend account APIs.
+            Choose the interface theme you want to use across your customer pages on this device.
           </p>
         </div>
 
@@ -61,12 +61,15 @@
           <p class="summary-label">Current page style</p>
           <p class="summary-value">{{ selectedPreferenceLabel }}</p>
           <p class="summary-text">
-            This page shows the active interface theme only. Persistent theme preferences are not
-            part of the current backend-backed account settings flow.
+            Your selection applies immediately and is remembered after refresh.
           </p>
         </div>
 
-        <el-radio-group v-model="selectedPreference" class="style-options" disabled>
+        <el-radio-group
+          v-model="selectedPreference"
+          class="style-options"
+          @change="handlePreferenceChange"
+        >
           <label
             v-for="option in options"
             :key="option.value"
@@ -79,31 +82,28 @@
             <p class="style-option__text">{{ option.description }}</p>
           </label>
         </el-radio-group>
+
+        <p class="feedback-message">Theme changes are saved in this browser for your next visit.</p>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CustomButton from '@/components/common/CustomButton.vue'
+import {
+  applyThemeMode,
+  getCurrentThemeMode,
+  THEME_MODE_EVENT_NAME,
+  type ThemeMode
+} from '@/utils/theme'
 
 defineOptions({ name: 'CustomerStyleSettings' })
 
 type ViewState = 'loading' | 'ready' | 'error'
-type UserThemePreference = 'light' | 'dark'
-
-const getCurrentThemePreference = (): UserThemePreference => {
-  if (typeof document === 'undefined') {
-    return 'light'
-  }
-
-  const html = document.documentElement
-  return html.getAttribute('data-theme') === 'dark' || html.classList.contains('dark')
-    ? 'dark'
-    : 'light'
-}
+type UserThemePreference = ThemeMode
 
 const router = useRouter()
 
@@ -133,7 +133,7 @@ const loadSettings = async (): Promise<void> => {
   loadErrorMessage.value = 'We could not load style settings.'
 
   try {
-    selectedPreference.value = getCurrentThemePreference()
+    selectedPreference.value = getCurrentThemeMode()
     viewState.value = 'ready'
   } catch (error) {
     loadErrorMessage.value =
@@ -148,8 +148,23 @@ const goToProfile = (): void => {
   void router.push('/customer/profile')
 }
 
+const handlePreferenceChange = (value: string | number | boolean): void => {
+  const nextPreference: UserThemePreference = value === 'dark' ? 'dark' : 'light'
+  selectedPreference.value = nextPreference
+  applyThemeMode(nextPreference)
+}
+
+const syncSelectedPreference = (): void => {
+  selectedPreference.value = getCurrentThemeMode()
+}
+
 onMounted(() => {
   void loadSettings()
+  window.addEventListener(THEME_MODE_EVENT_NAME, syncSelectedPreference)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(THEME_MODE_EVENT_NAME, syncSelectedPreference)
 })
 </script>
 
@@ -304,12 +319,24 @@ onMounted(() => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    transform var(--transition-base),
+    background-color var(--transition-base);
+}
+
+.style-option:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 6px 16px var(--color-shadow);
+  transform: translateY(-1px);
 }
 
 .style-option--selected {
-  border-color: var(--color-border-strong);
-  box-shadow: 0 4px 12px var(--color-shadow);
+  border-color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.18);
 }
 
 .style-option__title {
@@ -328,6 +355,9 @@ onMounted(() => {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   line-height: 1.6;
+  color: var(--color-text-secondary);
+  background: rgba(var(--color-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
 }
 
 .feedback-message--error {

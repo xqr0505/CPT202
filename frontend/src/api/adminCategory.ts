@@ -3,7 +3,7 @@ import request from './request'
 // Get category list
 export function getCategoryList() {
   return request({
-    url: '/api/v1/admin/categories',
+    url: '/v1/admin/categories',
     method: 'get'
   })
 }
@@ -11,7 +11,7 @@ export function getCategoryList() {
 // Create category
 export function createCategory(data: { categoryName: string }) {
   return request({
-    url: '/api/v1/admin/categories',
+    url: '/v1/admin/categories',
     method: 'post',
     data
   })
@@ -20,7 +20,7 @@ export function createCategory(data: { categoryName: string }) {
 // Update category
 export function updateCategory(id: number, data: { categoryName: string }) {
   return request({
-    url: `/api/v1/admin/categories/${id}`,
+    url: `/v1/admin/categories/${id}`,
     method: 'put',
     data
   })
@@ -29,7 +29,7 @@ export function updateCategory(id: number, data: { categoryName: string }) {
 // Delete category
 export function deleteCategory(id: number) {
   return request({
-    url: `/api/v1/admin/categories/${id}`,
+    url: `/v1/admin/categories/${id}`,
     method: 'delete'
   })
 }

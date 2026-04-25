@@ -1,35 +1,35 @@
 import request from './request'
 
-// 获取分类列表
+// Get category list
 export function getCategoryList() {
   return request({
-    url: '/admin/categories',
+    url: '/api/v1/admin/categories',
     method: 'get'
   })
 }
 
-// 创建分类
+// Create category
 export function createCategory(data: { categoryName: string }) {
   return request({
-    url: '/admin/categories',
+    url: '/api/v1/admin/categories',
     method: 'post',
     data
   })
 }
 
-// 更新分类
+// Update category
 export function updateCategory(id: number, data: { categoryName: string }) {
   return request({
-    url: `/admin/categories/${id}`,
+    url: `/api/v1/admin/categories/${id}`,
     method: 'put',
     data
   })
 }
 
-// 删除分类
+// Delete category
 export function deleteCategory(id: number) {
   return request({
-    url: `/admin/categories/${id}`,
+    url: `/api/v1/admin/categories/${id}`,
     method: 'delete'
   })
 }

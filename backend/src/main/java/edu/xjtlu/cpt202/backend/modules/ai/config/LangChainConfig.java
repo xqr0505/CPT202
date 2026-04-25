@@ -11,17 +11,20 @@ import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
+import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
-import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -97,8 +100,16 @@ public class LangChainConfig {
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
-            KnowledgeTools knowledgeTools
+            AiSpecialistAvailabilityTool aiSpecialistAvailabilityTool,
+            ObjectProvider<KnowledgeTools> knowledgeToolsProvider
     ) {
+        List<Object> tools = new ArrayList<>();
+        tools.add(aiBookingSearchTool);
+        tools.add(aiBookingFormTool);
+        tools.add(aiBookingSubmitTool);
+        tools.add(aiSpecialistAvailabilityTool);
+        knowledgeToolsProvider.ifAvailable(tools::add);
+
         return new ParallelToolAssistant(
                 chatLanguageModel,
                 streamingChatLanguageModel,
@@ -106,7 +117,7 @@ public class LangChainConfig {
                 aiChatMemoryProperties,
                 aiToolParallelProperties,
                 AiConstant.AI_SYSTEM_PROMPT,
-                List.of(aiBookingSearchTool, aiBookingFormTool, aiBookingSubmitTool, knowledgeTools)
+                tools
         );
     }
 }

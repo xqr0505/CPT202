@@ -73,7 +73,7 @@ public class AiRagDebugController {
         payload.put("minScore", ragProperties.getMinScore());
         payload.put("redisHost", redis.getHost());
         payload.put("redisPort", redis.getPort());
-        payload.put("redisDatabase", redis.getDatabase());
+        payload.put("redisDatabase", "not-configured");
         payload.put("redisIndexName", redis.getIndexName());
         payload.put("redisPrefix", redis.getPrefix());
         payload.put("segmentKeyCountByPrefix", keyCount);

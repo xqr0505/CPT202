@@ -162,6 +162,7 @@ const bookingSubmitting = ref(false)
 const bookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
 const bookingConfirmDialogVisible = ref(false)
 const lastPreviewKey = ref('')
+const dismissedPreviewKeys = new Set<string>()
 
 const isMobile = ref(window.innerWidth <= 640)
 
@@ -724,44 +725,15 @@ const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
   }
 
   const previewKey = buildPreviewKey(mergedPreview)
+  if (dismissedPreviewKeys.has(previewKey)) {
+    return
+  }
   if (previewKey === lastPreviewKey.value && bookingConfirmDialogVisible.value) {
     return
   }
   lastPreviewKey.value = previewKey
   bookingPreview.value = mergedPreview
   bookingConfirmDialogVisible.value = true
-}
-
-const BOOKING_PREVIEW_HINT_PATTERN = /(readyToSubmit|ready to submit|confirm booking|submit booking|slot\s*id|bookingid|\u9884\u7ea6|\u786e\u8ba4\u9884\u7ea6|\u786e\u8ba4\u63d0\u4ea4|\u4e0b\u5355)/i
-
-const buildFallbackPreviewFromPageContext = (): AiBookingSubmitPreviewPayload | null => {
-  const pageContext = readAiBookingPageContext()
-  const specialistId = normalizeNumericId(pageContext?.specialistId)
-  const slotDate = normalizeString(pageContext?.selectedDate)
-  const startTime = normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
-  const endTime = normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
-  const slotId =
-    normalizeNumericId(pageContext?.selectedSlotId) ||
-    resolveSlotIdByContext(pageContext, slotDate, startTime, endTime)
-  if (!specialistId || !slotId) {
-    return null
-  }
-  const slotAvailable = isSlotAvailableInContext(pageContext, slotId)
-  if (slotAvailable === false) {
-    return null
-  }
-
-  return {
-    specialistId,
-    slotId,
-    slotDate: slotDate || 'N/A',
-    startTime: startTime || '--:--:--',
-    endTime: endTime || '--:--:--',
-    specialistName: normalizeString(pageContext?.specialistName) || null,
-    consultationFee: normalizeNumber(pageContext?.consultationFee),
-    topic: normalizeString(pageContext?.selectedTopic) || '',
-    customerNotes: normalizeString(pageContext?.selectedCustomerNotes) || null,
-  }
 }
 
 const onAiBookingSubmitPreview = (event: Event): void => {
@@ -780,8 +752,12 @@ const dismissBookingPreview = () => {
   if (bookingSubmitting.value) {
     return
   }
+  if (bookingPreview.value) {
+    dismissedPreviewKeys.add(buildPreviewKey(bookingPreview.value))
+  }
   bookingConfirmDialogVisible.value = false
   bookingPreview.value = null
+  lastPreviewKey.value = ''
 }
 
 const formatFee = (fee?: number | null) => {
@@ -808,6 +784,7 @@ const confirmBookingFromPreview = async () => {
 
     bookingPreview.value = null
     bookingConfirmDialogVisible.value = false
+    lastPreviewKey.value = ''
     aiChatStore.closeDrawer()
     ElMessage.success(`Booking created successfully. Status: ${created.status}.`)
     void router.push({
@@ -848,14 +825,6 @@ watch(
     const parsedPreview = parsePreviewFromAssistantMessage(latestMessage.content || '')
     if (parsedPreview) {
       openBookingPreview(parsedPreview)
-      return
-    }
-
-    if (BOOKING_PREVIEW_HINT_PATTERN.test(latestMessage.content || '')) {
-      const fallbackPreview = buildFallbackPreviewFromPageContext()
-      if (fallbackPreview) {
-        openBookingPreview(fallbackPreview)
-      }
     }
   }
 )
@@ -866,6 +835,7 @@ onBeforeUnmount(() => {
   bookingConfirmDialogVisible.value = false
   bookingPreview.value = null
   bookingSubmitting.value = false
+  lastPreviewKey.value = ''
 })
 
 const drawerVisible = computed<boolean>({
@@ -879,6 +849,7 @@ const drawerVisible = computed<boolean>({
     aiChatStore.closeDrawer()
     bookingConfirmDialogVisible.value = false
     bookingPreview.value = null
+    lastPreviewKey.value = ''
   }
 })
 </script>
@@ -1021,4 +992,3 @@ const drawerVisible = computed<boolean>({
   }
 }
 </style>
-

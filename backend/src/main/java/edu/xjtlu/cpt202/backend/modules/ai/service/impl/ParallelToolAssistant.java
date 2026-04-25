@@ -16,6 +16,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.output.Response;
@@ -46,6 +47,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,7 +63,6 @@ public class ParallelToolAssistant implements Assistant {
 
     private static final Logger log = LoggerFactory.getLogger(ParallelToolAssistant.class);
     private static final int MAX_TOOL_ROUNDS = 8;
-    private static final int STREAM_CHUNK_SIZE = 24;
     private static final ObjectMapper TOOL_ARGUMENT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -165,6 +166,14 @@ public class ParallelToolAssistant implements Assistant {
         List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
         Response<AiMessage> response = chatLanguageModel.generate(sanitizedMessages, toolSpecifications);
         return ToolArgumentSanitizer.sanitizeResponse(response, toolSpecifications);
+    }
+
+    private void invokeStreamingModel(
+            List<ChatMessage> messages,
+            StreamingResponseHandler<AiMessage> handler
+    ) {
+        List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
+        streamingChatLanguageModel.generate(sanitizedMessages, handler);
     }
 
     private MessageWindowChatMemory chatMemory(Long memoryId) {
@@ -480,12 +489,59 @@ public class ParallelToolAssistant implements Assistant {
             CompletableFuture.runAsync(() -> {
                 try {
                     onRetrieved.accept(List.of());
-                    Response<AiMessage> response = runConversation(memoryId, userMessage, onToolExecuted);
-                    String reply = response.content() == null || response.content().text() == null
-                            ? AiConstant.EMPTY_CONTENT
-                            : response.content().text();
-                    emitChunks(reply);
-                    onComplete.accept(response);
+                    MessageWindowChatMemory chatMemory = chatMemory(memoryId);
+                    ensureSystemMessage(chatMemory);
+                    chatMemory.add(UserMessage.userMessage(userMessage));
+
+                    Response<AiMessage> probeResponse = invokeModel(chatMemory.messages());
+                    AiMessage probeAiMessage = probeResponse.content();
+
+                    int rounds = 0;
+                    while (probeAiMessage != null && probeAiMessage.hasToolExecutionRequests()) {
+                        chatMemory.add(probeAiMessage);
+                        rounds++;
+                        if (rounds > MAX_TOOL_ROUNDS) {
+                            throw new IllegalStateException("Too many tool execution rounds: " + rounds);
+                        }
+
+                        List<ToolExecutionResultMessage> results =
+                                executeToolRequests(probeAiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+                        for (ToolExecutionResultMessage result : results) {
+                            chatMemory.add(result);
+                        }
+
+                        probeResponse = invokeModel(chatMemory.messages());
+                        probeAiMessage = probeResponse.content();
+                    }
+
+                    AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
+                    CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+
+                    invokeStreamingModel(chatMemory.messages(), new StreamingResponseHandler<>() {
+                        @Override
+                        public void onNext(String token) {
+                            onNext.accept(token);
+                        }
+
+                        @Override
+                        public void onComplete(Response<AiMessage> response) {
+                            streamedResponseRef.set(response);
+                            streamedResponseFuture.complete(response);
+                        }
+
+                        @Override
+                        public void onError(Throwable error) {
+                            streamedResponseFuture.completeExceptionally(error);
+                        }
+                    });
+
+                    Response<AiMessage> streamedResponse = streamedResponseFuture.join();
+                    AiMessage streamedAiMessage = streamedResponse.content();
+                    if (streamedAiMessage != null) {
+                        chatMemory.add(streamedAiMessage);
+                    }
+                    Response<AiMessage> completedResponse = streamedResponseRef.get();
+                    onComplete.accept(completedResponse == null ? streamedResponse : completedResponse);
                 } catch (Throwable throwable) {
                     if (ignoreErrors) {
                         return;
@@ -493,16 +549,6 @@ public class ParallelToolAssistant implements Assistant {
                     onError.accept(throwable);
                 }
             });
-        }
-
-        private void emitChunks(String reply) {
-            if (reply.isEmpty()) {
-                return;
-            }
-            for (int index = 0; index < reply.length(); index += STREAM_CHUNK_SIZE) {
-                int endIndex = Math.min(index + STREAM_CHUNK_SIZE, reply.length());
-                onNext.accept(reply.substring(index, endIndex));
-            }
         }
     }
 }

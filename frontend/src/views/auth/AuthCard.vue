@@ -41,13 +41,6 @@
             <span v-if="loginErrors.password" class="error-text">{{ loginErrors.password }}</span>
           </div>
 
-          <div class="form-group remember-me">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="rememberEmail" />
-              <span>Remember my email</span>
-            </label>
-          </div>
-
           <button class="login-btn" :disabled="isLoginLoading" type="submit">
             {{ isLoginLoading ? 'Logging in...' : 'Login' }}
           </button>
@@ -178,8 +171,15 @@ import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { login, register, sendVerificationCode, type LoginPayload, type RegisterPayload } from '@/api/auth';
-import { saveAuthData, saveRememberedEmail, getRememberedEmail, dispatchSessionActivityEvent } from '@/api/request';
+import { saveAuthData, dispatchSessionActivityEvent } from '@/api/request';
 import { useUserStore } from '@/stores/user';
+import {
+  clearRememberedCredentials,
+  isRememberCredentialsAllowed,
+  hasValidRememberedCredentials,
+  loadRememberedCredentials,
+  saveRememberedCredentials
+} from '@/utils/rememberCredentials';
 
 defineOptions({ name: 'AuthCard' });
 
@@ -265,8 +265,7 @@ onBeforeUnmount(() => {
 });
 
 const isLoginLoading = ref(false);
-const rememberEmail = ref(false);
-const rememberSession = ref(false);
+const hasRememberedCredentials = ref(false);
 
 const roles = [
   { label: 'CUSTOMER', value: 'CUSTOMER' },
@@ -314,14 +313,14 @@ const mapRoleToUserRole = (role: string) => {
       return 'customer';
   }
 };
-const askRememberMeChoice = async (defaultChecked: boolean): Promise<boolean> => {
+const askRememberCredentialsChoice = async (): Promise<boolean> => {
   try {
     await ElMessageBox.confirm(
-      'Because Login successful, do you want to remember this account?',
+      'Remember account and password? (Valid for 7 days)',
       'Remember Me',
       {
-        confirmButtonText: 'Remember me',
-        cancelButtonText: 'Not remember',
+        confirmButtonText: 'Remember Me',
+        cancelButtonText: 'Don\'t Remember',
         closeOnClickModal: false,
         closeOnPressEscape: false,
         distinguishCancelAndClose: true,
@@ -353,8 +352,34 @@ async function handleLogin() {
     };
 
     const response = await login(payload);
-    const rememberChoice = await askRememberMeChoice(rememberSession.value);
-    const rememberMe = Boolean(rememberChoice);
+
+    const allowRememberCredentials = isRememberCredentialsAllowed();
+    let rememberMe = false;
+    let shouldPersistRememberedCredentials = false;
+
+    if (allowRememberCredentials) {
+      const alreadyRemembered =
+        hasRememberedCredentials.value ||
+        (await hasValidRememberedCredentials().catch(() => false));
+
+      if (alreadyRemembered) {
+        rememberMe = true;
+        hasRememberedCredentials.value = true;
+      } else {
+        rememberMe = await askRememberCredentialsChoice();
+        shouldPersistRememberedCredentials = rememberMe;
+      }
+    } else {
+      rememberMe = false;
+    }
+
+    if (rememberMe && allowRememberCredentials && shouldPersistRememberedCredentials) {
+      await saveRememberedCredentials(loginForm.email, loginForm.password);
+      hasRememberedCredentials.value = true;
+    } else if (!rememberMe) {
+      clearRememberedCredentials();
+      hasRememberedCredentials.value = false;
+    }
 
     saveAuthData(
       response.token,
@@ -368,8 +393,6 @@ async function handleLogin() {
       rememberMe
     );
 
-    rememberSession.value = rememberMe;
-
     userStore.token = response.token;
     userStore.userInfo = {
       id: response.userId,
@@ -378,12 +401,6 @@ async function handleLogin() {
       email: response.email
     };
     userStore.userRole = mapRoleToUserRole(response.role);
-
-    if (rememberEmail.value) {
-      saveRememberedEmail(loginForm.email);
-    } else {
-      saveRememberedEmail('');
-    }
 
     dispatchSessionActivityEvent();
     ElMessage.success('Login successful');
@@ -544,12 +561,25 @@ async function handleRegister() {
 }
 // onMounted 中处理记住邮箱
 onMounted(() => {
-  const remembered = getRememberedEmail();
-  if (remembered) {
-    loginForm.email = remembered;
-    rememberEmail.value = true;
+  if (isRememberCredentialsAllowed()) {
+    loadRememberedCredentials()
+      .then(payload => {
+        if (payload?.email && payload.password) {
+          loginForm.email = payload.email;
+          loginForm.password = payload.password;
+          hasRememberedCredentials.value = true;
+        } else {
+          hasRememberedCredentials.value = false;
+        }
+      })
+      .catch(() => {
+        clearRememberedCredentials();
+        hasRememberedCredentials.value = false;
+      });
+  } else {
+    clearRememberedCredentials();
+    hasRememberedCredentials.value = false;
   }
-  rememberSession.value = localStorage.getItem('rememberMe') === 'true';
 
   showGuestHintNow();
   scheduleNextBlink();

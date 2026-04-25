@@ -377,6 +377,22 @@
         </div>
 
         <div class="settings-card__body">
+          <div class="remember-credentials-panel">
+            <div class="remember-credentials-panel__info">
+              <strong class="remember-credentials-panel__title">Allow device to remember login credentials</strong>
+              <p class="remember-credentials-panel__text">
+                Off: instantly clears all saved passwords.<br>
+                On: only saves when you select "Remember me" on next login (valid for 7 days).
+              </p>
+            </div>
+            <el-switch
+              v-model="rememberCredentialsAllowed"
+              active-text="On"
+              inactive-text="Off"
+              @change="handleRememberCredentialsAllowedChange"
+            />
+          </div>
+
           <div
             v-if="passwordNotice"
             class="status-banner"
@@ -800,6 +816,7 @@ import {
   logout as clearAuthAndRedirect
 } from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { clearRememberedCredentials, isRememberCredentialsAllowed, setRememberCredentialsAllowed } from '@/utils/rememberCredentials'
 
 defineOptions({ name: 'AccountSettingsDashboard' })
 
@@ -940,6 +957,7 @@ const emailChangeNotice = ref<SectionNotice | null>(null)
 const passwordNotice = ref<SectionNotice | null>(null)
 const deactivationNotice = ref<SectionNotice | null>(null)
 const securityActivityNotice = ref<SectionNotice | null>(null)
+const rememberCredentialsAllowed = ref(isRememberCredentialsAllowed())
 
 const isUploadingAvatar = ref(false)
 const isSavingName = ref(false)
@@ -973,6 +991,16 @@ const shouldBypassUnsavedChangesPrompt = ref(false)
 
 const profileFormRef = ref<FormInstance>()
 const passwordFormRef = ref<FormInstance>()
+
+const handleRememberCredentialsAllowedChange = (value: boolean): void => {
+  const allowed = Boolean(value)
+  setRememberCredentialsAllowed(allowed)
+  rememberCredentialsAllowed.value = allowed
+
+  if (!allowed) {
+    ElMessage.success('Cleared saved login credentials on this device.')
+  }
+}
 const avatarInputRef = ref<HTMLInputElement>()
 
 const avatarSectionRef = ref<HTMLElement>()
@@ -2709,6 +2737,7 @@ const savePassword = async (): Promise<void> => {
         }
 
         await changeCurrentUserPassword(payload)
+        clearRememberedCredentials()
         lastPasswordUpdatedAt.value = new Date()
         ElMessage.success('Password updated successfully. Please log in again.')
         handleAuthenticationLoss()
@@ -3036,6 +3065,36 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
+}
+
+.remember-credentials-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-muted);
+}
+
+.remember-credentials-panel__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.remember-credentials-panel__title {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.remember-credentials-panel__text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  font-size: 0.9rem;
 }
 
 .field-grid {

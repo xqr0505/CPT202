@@ -106,6 +106,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { sendVerificationCode } from '@/api/auth';
 import request from '@/api/request';
+import { clearRememberedCredentials } from '@/utils/rememberCredentials';
 
 const router = useRouter();
 const loading = ref(false);
@@ -206,6 +207,7 @@ async function resetPassword() {
       newPassword: newPassword.value,
       confirmPassword: confirmPassword.value
     });
+    clearRememberedCredentials();
     ElMessage.success('Password reset successfully. Please login with your new password.');
     router.push('/auth');
   } catch (error: any) {

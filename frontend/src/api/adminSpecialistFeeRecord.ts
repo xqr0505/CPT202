@@ -16,7 +16,7 @@ export interface SpecialistFeeChangeRecord {
 
 export function getSpecialistFeeChangeRecords(id: number) {
   return request({
-    url: `/admin/specialists/${id}/fee-change-records`,
+    url: `/api/v1/admin/specialists/${id}/fee-change-records`,
     method: 'get'
   }) as Promise<SpecialistFeeChangeRecord[]>
 }

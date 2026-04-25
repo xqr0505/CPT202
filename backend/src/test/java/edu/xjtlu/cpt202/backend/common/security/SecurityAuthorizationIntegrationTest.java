@@ -105,6 +105,10 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/admin/categories")
                         .with(authentication(auth("CUSTOMER"))))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/categories")
+                        .with(authentication(auth("CUSTOMER"))))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -120,11 +124,19 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/admin/categories")
                         .with(authentication(auth("SPECIALIST"))))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/categories")
+                        .with(authentication(auth("SPECIALIST"))))
+                .andExpect(status().isForbidden());
     }
 
     @Test
     void adminCanAccessAdminApisButForbiddenForCustomerAndSpecialistApis() throws Exception {
         mockMvc.perform(get("/admin/categories")
+                        .with(authentication(auth("ADMIN"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/categories")
                         .with(authentication(auth("ADMIN"))))
                 .andExpect(status().isOk());
 
@@ -140,6 +152,9 @@ class SecurityAuthorizationIntegrationTest {
     @Test
     void unauthenticatedRequestsShouldReturn401() throws Exception {
         mockMvc.perform(get("/admin/categories"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/admin/categories"))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/specialist/schedule/slots/weekly"))

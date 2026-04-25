@@ -194,52 +194,52 @@ export interface SpecialistBookingDetailVO {
 }
 
 export const getUpcomingBookings = () => {
-  return request.get<UpcomingBookingResponse[]>('/api/v1/customer/dashboard/upcoming')
+  return request.get<UpcomingBookingResponse[]>('/v1/customer/dashboard/upcoming')
 }
 
 export const getCustomerDashboardSummary = (params?: CustomerDashboardSummaryQuery) => {
   return request
-    .get<CustomerDashboardSummary>('/api/v1/customer/dashboard/summary', { params })
+    .get<CustomerDashboardSummary>('/v1/customer/dashboard/summary', { params })
     .then(response => response as unknown as CustomerDashboardSummary)
 }
 
 export const getCustomerDashboardStatistics = (params?: DashboardStatisticsQuery) => {
   return request
-    .get<DashboardStatistics>('/api/v1/customer/dashboard/statistics', { params })
+    .get<DashboardStatistics>('/v1/customer/dashboard/statistics', { params })
     .then(response => response as unknown as DashboardStatistics)
 }
 
 export const getBookingTopics = (): Promise<string[]> => {
-  return request.get<any, string[]>('/api/v1/booking-topics')
+  return request.get<any, string[]>('/v1/booking-topics')
 }
 
 export const createBooking = (data: CreateBookingRequest, suppressErrorMessage = false) => {
   return request.post<any, CreateBookingResponse>(
-    '/api/v1/customer/bookings',
+    '/v1/customer/bookings',
     data,
     suppressErrorMessage ? ({ suppressErrorMessage: true } as any) : undefined
   )
 }
 
 export const getBookingList = (params: BookingListQuery) => {
-  return request.get<BookingListResponse>('/api/v1/customer/bookings/list', { params })
+  return request.get<BookingListResponse>('/v1/customer/bookings/list', { params })
 }
 
 export const getBookingDetail = (bookingId: number | string) => {
-  return request.get<BookingDetail>(`/api/v1/customer/bookings/${bookingId}`)
+  return request.get<BookingDetail>(`/v1/customer/bookings/${bookingId}`)
 }
 
 export const getBookingCancelQuote = (bookingId: number | string) => {
-  return request.post<any, BookingCancelQuote>(`/api/v1/customer/bookings/${bookingId}/cancel/quote`)
+  return request.post<any, BookingCancelQuote>(`/v1/customer/bookings/${bookingId}/cancel/quote`)
 }
 
 export const confirmBookingCancel = (bookingId: number | string) => {
-  return request.post<any, BookingCancelConfirm>(`/api/v1/customer/bookings/${bookingId}/cancel/confirm`)
+  return request.post<any, BookingCancelConfirm>(`/v1/customer/bookings/${bookingId}/cancel/confirm`)
 }
 
 export const getBookingRescheduleQuote = (bookingId: number | string, newSlotId: number | string) => {
   return request.post<any, BookingRescheduleQuote>(
-    `/api/v1/customer/bookings/${bookingId}/reschedule/quote`,
+    `/v1/customer/bookings/${bookingId}/reschedule/quote`,
     null,
     { params: { newSlotId } } as any
   )
@@ -247,30 +247,30 @@ export const getBookingRescheduleQuote = (bookingId: number | string, newSlotId:
 
 export const confirmBookingReschedule = (bookingId: number | string, newSlotId: number | string) => {
   return request.post<any, BookingRescheduleConfirm>(
-    `/api/v1/customer/bookings/${bookingId}/reschedule/confirm`,
+    `/v1/customer/bookings/${bookingId}/reschedule/confirm`,
     null,
     { params: { newSlotId } } as any
   )
 }
 
 export const getPendingBookingRequests = (): Promise<SpecialistPendingBookingVO[]> => {
-  return request.get('/api/v1/specialist/booking-requests/pending')
+  return request.get('/v1/specialist/booking-requests/pending')
 }
 
 export const getHandledBookingRequests = (): Promise<SpecialistHandledBookingVO[]> => {
-  return request.get('/api/v1/specialist/booking-requests/history')
+  return request.get('/v1/specialist/booking-requests/history')
 }
 
 export const getBookingRequestDetail = (id: number): Promise<SpecialistBookingDetailVO> => {
-  return request.get(`/api/v1/specialist/booking-requests/${id}`)
+  return request.get(`/v1/specialist/booking-requests/${id}`)
 }
 
 export const approveBookingRequest = (id: number): Promise<void> => {
-  return request.post(`/api/v1/specialist/booking-requests/${id}/approve`)
+  return request.post(`/v1/specialist/booking-requests/${id}/approve`)
 }
 
 export const rejectBookingRequest = (id: number, rejectionReason: string): Promise<void> => {
-  return request.post(`/api/v1/specialist/booking-requests/${id}/reject`, {
+  return request.post(`/v1/specialist/booking-requests/${id}/reject`, {
     rejectionReason
   })
 }
@@ -284,5 +284,5 @@ export const specialistForceCancelBooking = (
   id: number,
   data: SpecialistForceCancelBookingRequest
 ): Promise<void> => {
-  return request.post(`/api/v1/specialist/booking-requests/${id}/force-cancel`, data)
+  return request.post(`/v1/specialist/booking-requests/${id}/force-cancel`, data)
 }

@@ -6,6 +6,7 @@ import {
   AI_CHAT_STREAM_DONE_EVENT,
   AI_CHAT_STREAM_EVENT
 } from '@/constants/ai'
+import { apiBaseUrl } from '@/config/api'
 import request, { getAuthToken, logout } from './request'
 
 interface ChatRequestPayload {
@@ -73,8 +74,7 @@ const handleSseEvent = (block: string, callbacks: StreamCallbacks): void => {
 export const postChatMessage = async (message: string, callbacks: StreamCallbacks): Promise<void> => {
   const payload: ChatRequestPayload = { message }
   const token = getAuthToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081'
-  const response = await fetch(`${baseUrl}${AI_API_CHAT_PATH}`, {
+  const response = await fetch(`${apiBaseUrl}${AI_API_CHAT_PATH}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json;charset=UTF-8',

@@ -163,7 +163,7 @@ const toSafeSecurityActivityItem = (payload: unknown): SecurityActivityItem => {
 
 export const getCurrentUserProfile = async (): Promise<AccountProfile> => {
   const response = await request.get<unknown, unknown>(
-    `${getUserAccountApiPrefix()}/profile`,
+    '/user/profile',
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
   return toSafeAccountProfile(response)
@@ -171,7 +171,7 @@ export const getCurrentUserProfile = async (): Promise<AccountProfile> => {
 
 export const getCurrentUserSecurityActivities = async (): Promise<SecurityActivityItem[]> => {
   const response = await request.get<unknown, unknown>(
-    `${getUserAccountApiPrefix()}/security-activities`,
+    '/user/security-activity',
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
 
@@ -184,7 +184,7 @@ export const updateCurrentUserProfile = async (
   payload: UpdateUserProfilePayload
 ): Promise<void> => {
   return request.put<unknown, void>(
-    `${getUserAccountApiPrefix()}/profile`,
+    '/user/profile',
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
@@ -194,7 +194,7 @@ export const sendCurrentUserEmailChangeCode = async (
   payload: SendEmailChangeCodePayload
 ): Promise<void> => {
   return request.post<unknown, void>(
-    `${getUserAccountApiPrefix()}/email/send-code`,
+    '/user/email/send-code',
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
@@ -204,7 +204,7 @@ export const changeCurrentUserEmail = async (
   payload: ChangeCurrentUserEmailPayload
 ): Promise<AccountProfile> => {
   const response = await request.post<unknown, unknown>(
-    `${getUserAccountApiPrefix()}/email/change`,
+    '/user/email/change',
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
@@ -219,7 +219,7 @@ export const uploadCurrentUserAvatar = async (
   formData.append('file', file, file.name)
 
   const response = await request.post<unknown, unknown>(
-    `${getUserAccountApiPrefix()}/avatar`,
+    '/user/avatar',
     formData,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
@@ -233,7 +233,7 @@ export const changeCurrentUserPassword = async (
   payload: ChangePasswordPayload
 ): Promise<void> => {
   return request.post<unknown, void>(
-    `${getUserAccountApiPrefix()}/change-password`,
+    '/user/change-password',
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )
@@ -257,7 +257,7 @@ export const deactivateCurrentUserAccount = async (
   payload: DeactivateCurrentUserAccountPayload
 ): Promise<void> => {
   return request.post<unknown, void>(
-    `${getUserAccountApiPrefix()}/deactivate`,
+    '/user/deactivate',
     payload,
     silentAccountRequestConfig as unknown as Record<string, unknown>
   )

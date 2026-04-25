@@ -221,7 +221,7 @@ const scheduleNextBlink = () => {
   if (blinkTimer) {
     window.clearTimeout(blinkTimer);
   }
-  const delayMs = 2600 + Math.random() * 4200; // ~2.6s - 6.8s
+  const delayMs = 2600 + Math.random() * 4200;
   blinkTimer = window.setTimeout(() => {
     isEyeBlinking.value = true;
     if (blinkPhaseTimer) {
@@ -316,10 +316,10 @@ const mapRoleToUserRole = (role: string) => {
 const askRememberCredentialsChoice = async (): Promise<boolean> => {
   try {
     await ElMessageBox.confirm(
-      'Remember account and password? (Valid for 7 days)',
-      'Remember Me',
+      'Remember account? (Valid for 7 days)',
+      'Remember Account',
       {
-        confirmButtonText: 'Remember Me',
+        confirmButtonText: 'Remember Account',
         cancelButtonText: 'Don\'t Remember',
         closeOnClickModal: false,
         closeOnPressEscape: false,
@@ -374,7 +374,7 @@ async function handleLogin() {
     }
 
     if (rememberMe && allowRememberCredentials && shouldPersistRememberedCredentials) {
-      await saveRememberedCredentials(loginForm.email, loginForm.password);
+      await saveRememberedCredentials(loginForm.email);
       hasRememberedCredentials.value = true;
     } else if (!rememberMe) {
       clearRememberedCredentials();
@@ -559,14 +559,13 @@ async function handleRegister() {
     isRegisterLoading.value = false;
   }
 }
-// onMounted 中处理记住邮箱
+
 onMounted(() => {
   if (isRememberCredentialsAllowed()) {
     loadRememberedCredentials()
       .then(payload => {
-        if (payload?.email && payload.password) {
+        if (payload?.email) {
           loginForm.email = payload.email;
-          loginForm.password = payload.password;
           hasRememberedCredentials.value = true;
         } else {
           hasRememberedCredentials.value = false;

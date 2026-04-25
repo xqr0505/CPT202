@@ -381,8 +381,8 @@
             <div class="remember-credentials-panel__info">
               <strong class="remember-credentials-panel__title">Allow device to remember login credentials</strong>
               <p class="remember-credentials-panel__text">
-                Off: instantly clears all saved passwords.<br>
-                On: only saves when you select "Remember me" on next login (valid for 7 days).
+                Off: instantly clears saved login account.<br>
+                On: only saves your email when you select "Remember Account" on next login (valid for 7 days).
               </p>
             </div>
             <el-switch

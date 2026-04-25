@@ -73,11 +73,11 @@ const appointments = ref<UpcomingBookingResponse[]>([])
 const fetchAppointments = async () => {
   loading.value = true
   try {
-    const res = await getUpcomingBookings()
+    const res = await getUpcomingBookings() as unknown
     let data: UpcomingBookingResponse[]
     if (Array.isArray(res)) data = res
-    else if (res && Array.isArray(res.data)) data = res.data
-    else if (res && res.data && Array.isArray(res.data.data)) data = res.data.data
+    else if (isRecord(res) && Array.isArray(res.data)) data = res.data as UpcomingBookingResponse[]
+    else if (isRecord(res) && isRecord(res.data) && Array.isArray(res.data.data)) data = res.data.data as UpcomingBookingResponse[]
     else data = []
     appointments.value = data
   } catch {
@@ -86,6 +86,9 @@ const fetchAppointments = async () => {
     loading.value = false
   }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
 
 const displayedAppointments = computed(() => appointments.value.slice(0, 3))
 

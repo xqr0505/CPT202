@@ -2,6 +2,9 @@ package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
@@ -22,6 +25,7 @@ import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.VerifyPasswordVO;
 import edu.xjtlu.cpt202.backend.modules.user.service.UserAccountService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -37,6 +41,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -49,11 +55,12 @@ public class UserAccountServiceImpl implements UserAccountService {
     private static final Logger logger = LoggerFactory.getLogger(UserAccountServiceImpl.class);
     private static final String CURRENT_PASSWORD_REQUIRED_MESSAGE = "Current password is required";
     private static final String CURRENT_PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect";
-    private static final String EVENT_TYPE_PROFILE_UPDATED = "PROFILE_UPDATED";
-    private static final String EVENT_TYPE_EMAIL_CHANGED = "EMAIL_CHANGED";
-    private static final String EVENT_TYPE_PASSWORD_CHANGED = "PASSWORD_CHANGED";
-    private static final String EVENT_TYPE_AVATAR_UPDATED = "AVATAR_UPDATED";
-    private static final String EVENT_TYPE_ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+    private static final String ACTIVITY_TYPE_PROFILE_UPDATED = "PROFILE_UPDATED";
+    private static final String ACTIVITY_TYPE_EMAIL_CHANGED = "EMAIL_CHANGED";
+    private static final String ACTIVITY_TYPE_PHONE_CHANGED = "PHONE_CHANGED";
+    private static final String ACTIVITY_TYPE_PASSWORD_CHANGED = "PASSWORD_CHANGED";
+    private static final String ACTIVITY_TYPE_AVATAR_UPDATED = "AVATAR_UPDATED";
+    private static final String ACTIVITY_TYPE_ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
     private static final String EMAIL_CHANGE_REQUIRED_MESSAGE = "Use the email verification flow to change your email address.";
     private static final String CHANGE_EMAIL_VERIFICATION_TYPE = "CHANGE_EMAIL";
     private static final String CHANGE_EMAIL_EMAIL_SUBJECT = "Confirm your new email address";
@@ -69,12 +76,20 @@ public class UserAccountServiceImpl implements UserAccountService {
             "image/webp"
     );
     private static final long MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024L;
+    private static final String CHANGED_FIELD_FULL_NAME = "fullName";
+    private static final String CHANGED_FIELD_EMAIL = "email";
+    private static final String CHANGED_FIELD_PHONE_NUMBER = "phoneNumber";
+    private static final String CHANGED_FIELD_AVATAR_URL = "avatarUrl";
+    private static final String CHANGED_FIELD_PASSWORD = "password";
+    private static final String CHANGED_FIELD_STATUS = "status";
+    private static final String PHONE_NUMBER_PATTERN = "^\\+\\d{1,3}\\s\\d{4,14}$";
 
     private final UserMapper userMapper;
     private final UserSecurityActivityMapper userSecurityActivityMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
     private final VerificationCodeService verificationCodeService;
+    private final ObjectMapper objectMapper;
 
     @Override
     public UserProfileVO getCurrentUserProfile() {
@@ -82,7 +97,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     }
 
     @Override
-    public List<UserSecurityActivityVO> getCurrentUserSecurityActivity() {
+    public List<UserSecurityActivityVO> getCurrentUserSecurityActivities() {
         User user = getCurrentUserOrThrow();
 
         return userSecurityActivityMapper.selectList(
@@ -97,23 +112,54 @@ public class UserAccountServiceImpl implements UserAccountService {
     }
 
     @Override
+    public VerifyPasswordVO verifyCurrentUserPassword(String currentPassword) {
+        User user = getCurrentUserOrThrow();
+        assertCurrentPasswordMatches(user, currentPassword);
+        return new VerifyPasswordVO(true);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateCurrentUserProfile(UpdateUserProfileDTO request) {
         User user = getCurrentUserOrThrow();
-        String normalizedEmail = normalizeEmail(request.getEmail());
-        if (!normalizedEmail.equals(normalizeEmail(user.getEmail()))) {
+
+        if (request.getEmail() != null
+                && !normalizeEmail(request.getEmail()).equals(normalizeEmail(user.getEmail()))) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), EMAIL_CHANGE_REQUIRED_MESSAGE);
         }
 
-        user.setFullName(request.getFullName().trim());
-        user.setEmail(normalizedEmail);
-        user.setPhoneNumber(request.getPhoneNumber().trim());
+        List<String> changedFields = new ArrayList<>();
+        String nextFullName = normalizeNullableText(request.getFullName());
+        String nextPhoneNumber = normalizeNullableText(request.getPhoneNumber());
+
+        if (request.getPhoneNumber() != null && StringUtils.hasText(nextPhoneNumber) && !nextPhoneNumber.matches(PHONE_NUMBER_PATTERN)) {
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please enter a valid phone number.");
+        }
+
+        if (request.getFullName() != null && !safeEquals(user.getFullName(), nextFullName)) {
+            user.setFullName(nextFullName);
+            changedFields.add(CHANGED_FIELD_FULL_NAME);
+        }
+
+        if (request.getPhoneNumber() != null && !safeEquals(user.getPhoneNumber(), nextPhoneNumber)) {
+            user.setPhoneNumber(nextPhoneNumber);
+            changedFields.add(CHANGED_FIELD_PHONE_NUMBER);
+        }
+
+        if (changedFields.isEmpty()) {
+            return;
+        }
 
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to update profile");
         }
 
-        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PROFILE_UPDATED, "Updated account profile details.");
+        recordSecurityActivitySafely(
+                user.getId(),
+                resolveProfileActivityType(changedFields),
+                buildProfileActivityDescription(changedFields),
+                changedFields
+        );
     }
 
     @Override
@@ -136,6 +182,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         User user = getCurrentUserOrThrow();
         String normalizedNewEmail = normalizeEmail(request.getNewEmail());
 
+        assertCurrentPasswordMatches(user, request.getCurrentPassword());
         validateNewEmailForChange(user, normalizedNewEmail);
 
         VerificationCode codeRecord = verificationCodeService.requireLatestValidCode(
@@ -151,7 +198,12 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         verificationCodeService.markCodeUsed(codeRecord);
-        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_EMAIL_CHANGED, "Changed account email address.");
+        recordSecurityActivitySafely(
+                user.getId(),
+                ACTIVITY_TYPE_EMAIL_CHANGED,
+                "Email changed",
+                List.of(CHANGED_FIELD_EMAIL)
+        );
         return toUserProfileVO(user);
     }
 
@@ -168,7 +220,12 @@ public class UserAccountServiceImpl implements UserAccountService {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to save avatar");
         }
 
-        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_AVATAR_UPDATED, "Updated profile photo.");
+        recordSecurityActivitySafely(
+                user.getId(),
+                ACTIVITY_TYPE_AVATAR_UPDATED,
+                "Avatar updated",
+                List.of(CHANGED_FIELD_AVATAR_URL)
+        );
         return new UserAvatarUploadVO(avatarUrl);
     }
 
@@ -191,7 +248,12 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         revokeRefreshTokens(user.getId());
-        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_PASSWORD_CHANGED, "Changed account password.");
+        recordSecurityActivitySafely(
+                user.getId(),
+                ACTIVITY_TYPE_PASSWORD_CHANGED,
+                "Password changed",
+                List.of(CHANGED_FIELD_PASSWORD)
+        );
     }
 
     @Override
@@ -213,7 +275,12 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         revokeRefreshTokens(user.getId());
-        recordSecurityActivitySafely(user.getId(), EVENT_TYPE_ACCOUNT_DEACTIVATED, "Deactivated this account.");
+        recordSecurityActivitySafely(
+                user.getId(),
+                ACTIVITY_TYPE_ACCOUNT_DEACTIVATED,
+                "Account deactivated",
+                List.of(CHANGED_FIELD_STATUS)
+        );
     }
 
     @Override
@@ -341,18 +408,24 @@ public class UserAccountServiceImpl implements UserAccountService {
         refreshTokenMapper.delete(new QueryWrapper<RefreshToken>().eq("user_id", userId));
     }
 
-    private void recordSecurityActivitySafely(Long userId, String eventType, String summary) {
+    private void recordSecurityActivitySafely(
+            Long userId,
+            String activityType,
+            String description,
+            List<String> changedFields
+    ) {
         try {
             userSecurityActivityMapper.insert(UserSecurityActivity.builder()
                     .userId(userId)
-                    .eventType(eventType)
-                    .summary(summary)
+                    .activityType(activityType)
+                    .description(description)
+                    .changedFields(writeChangedFields(changedFields))
                     .build());
         } catch (Exception exception) {
             logger.warn(
                     "Failed to record security activity for user {} and event {}: {}",
                     userId,
-                    eventType,
+                    activityType,
                     exception.getMessage(),
                     exception
             );
@@ -397,9 +470,68 @@ public class UserAccountServiceImpl implements UserAccountService {
     private UserSecurityActivityVO toUserSecurityActivityVO(UserSecurityActivity activity) {
         UserSecurityActivityVO userSecurityActivityVO = new UserSecurityActivityVO();
         userSecurityActivityVO.setId(activity.getId());
-        userSecurityActivityVO.setEventType(activity.getEventType());
-        userSecurityActivityVO.setSummary(activity.getSummary());
+        userSecurityActivityVO.setActivityType(activity.getActivityType());
+        userSecurityActivityVO.setDescription(activity.getDescription());
+        userSecurityActivityVO.setChangedFields(readChangedFields(activity.getChangedFields()));
         userSecurityActivityVO.setCreatedAt(activity.getCreatedAt());
         return userSecurityActivityVO;
+    }
+
+    private String resolveProfileActivityType(List<String> changedFields) {
+        if (changedFields.size() == 1 && changedFields.contains(CHANGED_FIELD_PHONE_NUMBER)) {
+            return ACTIVITY_TYPE_PHONE_CHANGED;
+        }
+
+        return ACTIVITY_TYPE_PROFILE_UPDATED;
+    }
+
+    private String buildProfileActivityDescription(List<String> changedFields) {
+        if (changedFields.size() == 1 && changedFields.contains(CHANGED_FIELD_PHONE_NUMBER)) {
+            return "Profile updated (phone number)";
+        }
+
+        if (changedFields.size() == 1 && changedFields.contains(CHANGED_FIELD_FULL_NAME)) {
+            return "Profile updated (full name)";
+        }
+
+        return "Profile updated";
+    }
+
+    private String normalizeNullableText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmedValue = value.trim();
+        return trimmedValue.isEmpty() ? null : trimmedValue;
+    }
+
+    private boolean safeEquals(String left, String right) {
+        return normalizeNullableText(left) == null
+                ? normalizeNullableText(right) == null
+                : normalizeNullableText(left).equals(normalizeNullableText(right));
+    }
+
+    private String writeChangedFields(List<String> changedFields) {
+        try {
+            return objectMapper.writeValueAsString(changedFields == null ? Collections.emptyList() : changedFields);
+        } catch (JsonProcessingException exception) {
+            logger.warn("Failed to serialize changed fields: {}", exception.getMessage(), exception);
+            return "[]";
+        }
+    }
+
+    private List<String> readChangedFields(String changedFields) {
+        if (!StringUtils.hasText(changedFields)) {
+            return Collections.emptyList();
+        }
+
+        try {
+            return objectMapper.readValue(changedFields, new TypeReference<List<String>>() {
+            });
+        } catch (JsonProcessingException exception) {
+            logger.warn("Failed to parse changed fields JSON: {}", exception.getMessage(), exception);
+            return Collections.emptyList();
+        }
     }
 }

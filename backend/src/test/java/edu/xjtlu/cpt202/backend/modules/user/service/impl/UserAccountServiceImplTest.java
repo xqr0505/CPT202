@@ -151,20 +151,20 @@ class UserAccountServiceImplTest {
         UserSecurityActivity activity = UserSecurityActivity.builder()
                 .id(11L)
                 .userId(7L)
-                .eventType("PASSWORD_CHANGED")
-                .summary("Changed account password.")
+                .activityType("PASSWORD_CHANGED")
+                .description("Changed account password.")
                 .createdAt(createdAt)
                 .build();
 
         when(userMapper.selectById(7L)).thenReturn(currentUser);
         when(userSecurityActivityMapper.selectList(any())).thenReturn(List.of(activity));
 
-        List<UserSecurityActivityVO> activities = userAccountService.getCurrentUserSecurityActivity();
+        List<UserSecurityActivityVO> activities = userAccountService.getCurrentUserSecurityActivities();
 
         assertEquals(1, activities.size());
         assertEquals(11L, activities.get(0).getId());
-        assertEquals("PASSWORD_CHANGED", activities.get(0).getEventType());
-        assertEquals("Changed account password.", activities.get(0).getSummary());
+        assertEquals("PASSWORD_CHANGED", activities.get(0).getActivityType());
+        assertEquals("Changed account password.", activities.get(0).getDescription());
         assertEquals(createdAt, activities.get(0).getCreatedAt());
 
         verify(userMapper).selectById(7L);

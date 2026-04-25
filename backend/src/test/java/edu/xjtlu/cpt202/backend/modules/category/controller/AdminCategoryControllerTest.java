@@ -55,6 +55,21 @@ class AdminCategoryControllerTest {
     }
 
     @Test
+    void createCategory_rejectsSpecialCharacters_onApiPrefixedRoute() throws Exception {
+        CategoryRequest request = new CategoryRequest();
+        request.setCategoryName("Cardiology@123");
+
+        mockMvc.perform(post("/api/admin/categories")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("Category name can only contain letters and spaces"));
+
+        verifyNoInteractions(expertiseCategoryService);
+    }
+
+    @Test
     void createCategory_rejectsChineseCharacters() throws Exception {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("心脏科");

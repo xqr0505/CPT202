@@ -57,11 +57,15 @@ Defines the following services:
    cp .env.example .env
    ```
    Then fill in the real values for `DB_PASSWORD`, `MAIL_PASSWORD`, and `JWT_SECRET`.
+   Frontend API addresses are also read strictly from environment variables:
+   - Production-like compose uses `FRONTEND_VITE_API_BASE_URL` and defaults to `/api`
+   - Development compose uses `FRONTEND_VITE_API_BASE_URL_DEV` and defaults to `http://localhost:8081/api`
+   - The value must end with `/api` (for example `/api` or `http://localhost:8081/api`)
    If you already have Redis running locally, set `REDIS_HOST` to your host address.
 
 3. Start the services:
    ```bash
-   docker compose up -d
+   docker-compose up -d
    ```
 
 4. Access the services:
@@ -71,7 +75,7 @@ Defines the following services:
 
 5. Stop the services:
    ```bash
-   docker compose down
+   docker-compose down
    ```
 
 ## Development (`docker-compose.dev.yml`)

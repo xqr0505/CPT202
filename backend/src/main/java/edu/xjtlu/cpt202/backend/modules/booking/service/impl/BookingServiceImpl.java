@@ -942,7 +942,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             if (StringUtils.hasText(mailFromAddress)) {
-                message.setFrom(mailFromAddress);
+                message.setFrom(formatMailFromAddress());
             }
             message.setTo(customerEmail);
             message.setSubject(BOOKING_SUCCESS_EMAIL_SUBJECT);
@@ -1051,7 +1051,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             if (StringUtils.hasText(mailFromAddress)) {
-                message.setFrom(mailFromAddress);
+                message.setFrom(formatMailFromAddress());
             }
             message.setTo(to);
             message.setSubject(subject);
@@ -1060,6 +1060,10 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         } catch (Exception exception) {
             log.error("Failed to send email: to={}, subject={}, reason={}", to, subject, exception.getMessage());
         }
+    }
+
+    private String formatMailFromAddress() {
+        return "ExpertLink <" + mailFromAddress.trim() + ">";
     }
 
     private String resolveSpecialistEmail(Long specialistId) {

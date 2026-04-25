@@ -216,6 +216,8 @@ const bookingSubmitting = ref(false)
 const duplicateSubmitClickCount = ref(0)
 
 const DUPLICATE_SUBMIT_CLICK_WARNING_THRESHOLD = 3
+const BOOKING_MIN_LEAD_TIME_MS = 2 * 60 * 60 * 1000
+const BOOKING_MIN_LEAD_TIME_WARNING = 'You cannot book a slot within 2 hours from now. Please choose another time slot.'
 
 const bookingForm = ref({
   slotId: null as number | null,
@@ -422,7 +424,27 @@ const loadBookingTopics = async () => {
   bookingTopics.value = await getBookingTopics()
 }
 
-const isSlotUnavailable = (slot: SpecialistAvailabilitySlot) => slot.status !== 'AVAILABLE'
+const resolveSlotStartAt = (slot: SpecialistAvailabilitySlot): Date | null => {
+  const slotDate = (slot.slotDate || selectedDate.value || '').trim()
+  const slotTime = slot.startTime.trim()
+  if (!slotDate || !slotTime) {
+    return null
+  }
+  const normalizedTime = /^\d{2}:\d{2}$/.test(slotTime) ? `${slotTime}:00` : slotTime
+  const slotStartAt = new Date(`${slotDate}T${normalizedTime}`)
+  return Number.isNaN(slotStartAt.getTime()) ? null : slotStartAt
+}
+
+const isSlotWithinLeadTime = (slot: SpecialistAvailabilitySlot): boolean => {
+  const slotStartAt = resolveSlotStartAt(slot)
+  if (!slotStartAt) {
+    return false
+  }
+  return slotStartAt.getTime() - Date.now() < BOOKING_MIN_LEAD_TIME_MS
+}
+
+const isSlotUnavailable = (slot: SpecialistAvailabilitySlot) =>
+  slot.status !== 'AVAILABLE' || isSlotWithinLeadTime(slot)
 
 const getSlotStatusLabel = (slot: SpecialistAvailabilitySlot) => {
   if (slot.status === 'BOOKED') {
@@ -431,12 +453,19 @@ const getSlotStatusLabel = (slot: SpecialistAvailabilitySlot) => {
   if (slot.status === 'LOCKED') {
     return 'Unavailable'
   }
+  if (isSlotWithinLeadTime(slot)) {
+    return 'Unavailable'
+  }
   return 'Available'
 }
 
 const selectSlot = (slot: SpecialistAvailabilitySlot) => {
-  if (isSlotUnavailable(slot)) {
+  if (slot.status !== 'AVAILABLE') {
     ElMessage.warning('This time slot has already been booked. Please choose another time slot.')
+    return
+  }
+  if (isSlotWithinLeadTime(slot)) {
+    ElMessage.warning(BOOKING_MIN_LEAD_TIME_WARNING)
     return
   }
   bookingForm.value.slotId = slot.id
@@ -519,6 +548,10 @@ const submitBooking = async () => {
   }
   if (!bookingForm.value.slotId) {
     ElMessage.warning('Please choose a time slot first.')
+    return
+  }
+  if (selectedSlot.value && isSlotWithinLeadTime(selectedSlot.value)) {
+    ElMessage.warning(BOOKING_MIN_LEAD_TIME_WARNING)
     return
   }
   if (!bookingForm.value.topic.trim()) {

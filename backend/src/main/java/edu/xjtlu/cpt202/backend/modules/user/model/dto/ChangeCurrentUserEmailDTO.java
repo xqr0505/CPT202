@@ -8,6 +8,9 @@ import lombok.Data;
 @Data
 public class ChangeCurrentUserEmailDTO {
 
+    @NotBlank(message = "Current password is required")
+    private String currentPassword;
+
     @NotBlank(message = "New email is required.")
     @Email(message = "Please enter a valid email address.")
     private String newEmail;

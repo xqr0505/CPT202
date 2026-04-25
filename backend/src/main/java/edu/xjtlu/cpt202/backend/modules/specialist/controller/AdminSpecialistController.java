@@ -29,7 +29,7 @@ import java.util.Comparator;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/specialists")
+@RequestMapping("/api/v1/admin/specialists")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminSpecialistController {

@@ -61,7 +61,7 @@ export interface SpecialistLevelOption {
 
 export function getSpecialistList(params?: SpecialistListParams) {
   return request({
-    url: '/admin/specialists',
+    url: '/api/v1/admin/specialists',
     method: 'get',
     params
   }) as Promise<SpecialistListResponse>
@@ -69,21 +69,21 @@ export function getSpecialistList(params?: SpecialistListParams) {
 
 export function getSpecialistLevels() {
   return request({
-    url: '/admin/specialists/levels',
+    url: '/api/v1/admin/specialists/levels',
     method: 'get'
   }) as Promise<SpecialistLevelOption[]>
 }
 
 export function getSpecialistDetail(id: number) {
   return request({
-    url: `/admin/specialists/${id}`,
+    url: `/api/v1/admin/specialists/${id}`,
     method: 'get'
   }) as Promise<SpecialistItem>
 }
 
 export function createSpecialist(data: CreateSpecialistPayload) {
   return request({
-    url: '/admin/specialists',
+    url: '/api/v1/admin/specialists',
     method: 'post',
     data
   })
@@ -91,7 +91,7 @@ export function createSpecialist(data: CreateSpecialistPayload) {
 
 export function updateSpecialist(id: number, data: UpdateSpecialistPayload) {
   return request({
-    url: `/admin/specialists/${id}`,
+    url: `/api/v1/admin/specialists/${id}`,
     method: 'put',
     data
   })
@@ -99,7 +99,7 @@ export function updateSpecialist(id: number, data: UpdateSpecialistPayload) {
 
 export function updateSpecialistStatus(id: number, status: SpecialistStatus) {
   return request({
-    url: `/admin/specialists/${id}/status`,
+    url: `/api/v1/admin/specialists/${id}/status`,
     method: 'patch',
     data: { status }
   }) as Promise<number>

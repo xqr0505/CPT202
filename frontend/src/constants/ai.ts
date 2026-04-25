@@ -1,5 +1,5 @@
-export const AI_API_CHAT_PATH = '/api/v1/ai/chat'
-export const AI_API_CHAT_MEMORY_PATH = '/api/v1/ai/chat/memory'
+export const AI_API_CHAT_PATH = '/v1/ai/chat'
+export const AI_API_CHAT_MEMORY_PATH = '/v1/ai/chat/memory'
 export const AI_CHAT_STREAM_EVENT = 'chat'
 export const AI_CHAT_STREAM_DONE_EVENT = 'done'
 

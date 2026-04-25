@@ -25,8 +25,9 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="navigateToProfile">Profile</el-dropdown-item>
-              <el-dropdown-item @click="handleLogout">Logout</el-dropdown-item>
+              <el-dropdown-item v-if="userStore.isLoggedIn" @click="navigateToProfile">Profile</el-dropdown-item>
+              <el-dropdown-item v-if="userStore.isLoggedIn" @click="handleLogout">Logout</el-dropdown-item>
+              <el-dropdown-item v-else @click="handleLogin">Login</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -65,7 +66,7 @@ import { useUserStore } from '@/stores/user'
 import { USER_ROLES } from '@/constants/roles'
 import { useAiChatStore } from '@/stores/aiChat'
 import { AI_NAV_MENU_KEY, AI_NAV_MENU_LABEL } from '@/constants/ai'
-import { logout as clearAndRedirect } from '@/api/request'
+import { ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
@@ -156,8 +157,37 @@ const navigateToProfile = async (): Promise<void> => {
   }
 }
 
-const handleLogout = (): void => {
-  clearAndRedirect()
+const handleLogin = (): void => {
+  router.push({ path: '/auth', query: { redirect: route.fullPath } }).catch(() => null)
+}
+
+const handleLogout = async (): Promise<void> => {
+  try {
+    await ElMessageBox.confirm(
+      'After logging out, where do you want to go?',
+      'Logout',
+      {
+        confirmButtonText: 'Go to Login',
+        cancelButtonText: 'Browse as Guest',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        showCancelButton: true,
+        distinguishCancelAndClose: true,
+        type: 'warning'
+      }
+    )
+
+    await userStore.logout()
+    await router.push('/auth')
+  } catch (e: any) {
+    if (e === 'cancel' || e?.toString?.() === 'cancel') {
+      await userStore.logout()
+      await router.push('/customer/search')
+      return
+    }
+
+    // closed dialog -> do nothing
+  }
 }
 </script>
 

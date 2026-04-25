@@ -5,8 +5,8 @@
         <p class="page-tag">Account</p>
         <h1 class="page-title">Account Settings</h1>
         <p class="page-text">
-          Manage your personal details, contact information, password, and account controls from
-          one polished settings dashboard.
+          Manage your profile details, contact methods, password, and account controls from one
+          polished settings dashboard.
         </p>
       </div>
 
@@ -14,6 +14,16 @@
         <el-tag :type="completenessPercentage === 100 ? 'success' : 'warning'" effect="light">
           {{ completenessPercentage === 100 ? 'Profile Ready' : 'Needs Attention' }}
         </el-tag>
+
+        <div class="completeness-panel">
+          <div class="completeness-panel__header">
+            <strong>Profile completeness: {{ completenessPercentage }}%</strong>
+            <span>{{ completenessStatusText }}</span>
+          </div>
+          <el-progress :percentage="completenessPercentage" :show-text="false" :stroke-width="10" />
+          <p class="page-meta__text">{{ completenessHelperText }}</p>
+        </div>
+
         <span class="page-meta__text">{{ profileMetaText }}</span>
       </div>
     </div>
@@ -41,14 +51,18 @@
     </div>
 
     <div v-else class="dashboard">
-      <section class="settings-card settings-card--avatar">
+      <section
+        ref="avatarSectionRef"
+        class="settings-card settings-card--avatar"
+        :class="{ 'settings-card--highlighted': highlightedSection === 'avatar' }"
+      >
         <div class="settings-card__header">
           <div>
             <p class="settings-card__eyebrow">Avatar</p>
             <h2 class="settings-card__title">Profile photo</h2>
             <p class="settings-card__subtitle">
-              Keep a recognizable avatar at the top of your account settings so your profile feels
-              consistent across visits and devices.
+              Keep your account recognizable everywhere with a photo that is saved directly to your
+              profile.
             </p>
           </div>
           <el-tag effect="plain">{{ avatarTagText }}</el-tag>
@@ -76,7 +90,7 @@
               <div class="avatar-panel__details">
                 <strong class="avatar-panel__name">{{ avatarDisplayName }}</strong>
                 <span class="avatar-panel__status">{{ avatarSummaryText }}</span>
-                <span class="avatar-panel__meta">Source: {{ accountDataSourceLabel }}</span>
+                <span class="avatar-panel__meta">{{ profileMetaText }}</span>
               </div>
             </div>
 
@@ -121,14 +135,26 @@
               <p class="settings-card__eyebrow">Personal Information</p>
               <h2 class="settings-card__title">Identity details</h2>
               <p class="settings-card__subtitle">
-                Keep the name on your account accurate so bookings, support requests, and profile
-                records stay consistent.
+                Keep the name on your account current so your bookings and support records stay
+                consistent.
               </p>
             </div>
-            <el-tag effect="plain">{{ profileForm.fullName.trim() ? 'On file' : 'Missing' }}</el-tag>
+            <el-tag effect="plain">{{ savedProfile.fullName ? 'On file' : 'Missing' }}</el-tag>
           </div>
 
           <div class="settings-card__body">
+            <div
+              v-if="personalNotice"
+              class="status-banner"
+              :class="`status-banner--${personalNotice.tone}`"
+              aria-live="polite"
+            >
+              <div class="status-banner__body">
+                <strong class="status-banner__title">{{ personalNotice.title }}</strong>
+                <p class="status-banner__text">{{ personalNotice.message }}</p>
+              </div>
+            </div>
+
             <div class="field-grid field-grid--single">
               <el-form-item label="Full name" prop="fullName">
                 <el-input
@@ -140,9 +166,20 @@
             </div>
 
             <p class="section-note">
-              This name is used as your primary account identity within the shared account settings
-              flow.
+              This is the name shown across your account and recent profile activity.
             </p>
+
+            <div class="module-actions">
+              <span class="module-actions__hint">{{ personalActionHint }}</span>
+              <CustomButton
+                type="primary"
+                :loading="isSavingName"
+                :disabled="!canSaveName"
+                @click="saveName"
+              >
+                {{ nameSaveButtonText }}
+              </CustomButton>
+            </div>
           </div>
         </section>
 
@@ -156,15 +193,37 @@
               <p class="settings-card__eyebrow">Contact Information</p>
               <h2 class="settings-card__title">Communication details</h2>
               <p class="settings-card__subtitle">
-                Save the email address and phone number used for account notices and booking
-                follow-up.
+                Manage the email address and phone number used for sign-in, reminders, and account
+                notices.
               </p>
             </div>
-            <el-tag effect="plain">{{ profileForm.email.trim() && profileForm.localPhoneNumber.trim() ? 'Reachable' : 'Review needed' }}</el-tag>
+            <el-tag effect="plain">{{ contactTagText }}</el-tag>
           </div>
 
           <div class="settings-card__body">
-            <div class="field-grid">
+            <div
+              v-if="contactNotice"
+              class="status-banner"
+              :class="`status-banner--${contactNotice.tone}`"
+              aria-live="polite"
+            >
+              <div class="status-banner__body">
+                <strong class="status-banner__title">{{ contactNotice.title }}</strong>
+                <p class="status-banner__text">{{ contactNotice.message }}</p>
+              </div>
+            </div>
+
+            <div class="contact-block">
+              <div class="contact-block__header">
+                <div>
+                  <strong class="contact-block__title">Email address</strong>
+                  <p class="contact-block__text">
+                    Changing your email requires a verification code and one more password check for
+                    security.
+                  </p>
+                </div>
+              </div>
+
               <el-form-item label="Email address" prop="email">
                 <el-input
                   v-model="profileForm.email"
@@ -172,6 +231,74 @@
                   placeholder="Enter your email address"
                 />
               </el-form-item>
+
+              <div
+                v-if="emailChangeNotice"
+                class="status-banner"
+                :class="`status-banner--${emailChangeNotice.tone}`"
+                aria-live="polite"
+              >
+                <div class="status-banner__body">
+                  <strong class="status-banner__title">{{ emailChangeNotice.title }}</strong>
+                  <p class="status-banner__text">{{ emailChangeNotice.message }}</p>
+                </div>
+              </div>
+
+              <div class="email-verification-panel">
+                <div class="email-verification-panel__header">
+                  <div>
+                    <span class="email-verification-panel__label">Email verification</span>
+                    <p class="email-verification-panel__text">
+                      Enter your new email, send a 6-digit code, and confirm the change here.
+                    </p>
+                  </div>
+
+                  <CustomButton
+                    type="primary"
+                    :loading="isSendingEmailChangeCode"
+                    :disabled="!canSendEmailChangeCode"
+                    @click="sendEmailChangeCode"
+                  >
+                    {{ emailChangeSendButtonText }}
+                  </CustomButton>
+                </div>
+
+                <div class="email-verification-panel__body">
+                  <el-input
+                    v-model="emailChangeVerificationCode"
+                    maxlength="6"
+                    placeholder="Enter 6-digit verification code"
+                    inputmode="numeric"
+                    :disabled="!hasPendingEmailChange"
+                    @input="sanitizeEmailChangeCodeInput"
+                  />
+
+                  <p class="email-verification-panel__hint">{{ emailChangeHelperText }}</p>
+
+                  <div class="module-actions module-actions--inline">
+                    <span class="module-actions__hint">{{ emailChangeStatusText }}</span>
+                    <CustomButton
+                      type="primary"
+                      :loading="isSavingEmail"
+                      :disabled="!canConfirmEmailChange"
+                      @click="confirmEmailChange"
+                    >
+                      Confirm Email Change
+                    </CustomButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="contact-block">
+              <div class="contact-block__header">
+                <div>
+                  <strong class="contact-block__title">Phone number</strong>
+                  <p class="contact-block__text">
+                    Save a phone number you can receive reminders and follow-up notifications on.
+                  </p>
+                </div>
+              </div>
 
               <el-form-item label="Phone number" prop="localPhoneNumber">
                 <div class="phone-field">
@@ -198,67 +325,32 @@
                   />
                 </div>
               </el-form-item>
-            </div>
 
-            <div
-              v-if="emailChangeNotice"
-              class="status-banner"
-              :class="`status-banner--${emailChangeNotice.tone}`"
-              aria-live="polite"
-            >
-              <div class="status-banner__body">
-                <strong class="status-banner__title">{{ emailChangeNotice.title }}</strong>
-                <p class="status-banner__text">{{ emailChangeNotice.message }}</p>
-              </div>
-            </div>
-
-            <div class="email-verification-panel">
-              <div class="email-verification-panel__header">
-                <div>
-                  <span class="email-verification-panel__label">Email verification</span>
-                  <p class="email-verification-panel__text">
-                    Changing your email requires a 6-digit code sent to the new address before the
-                    save can be completed.
-                  </p>
+              <div class="contact-summary">
+                <div class="contact-summary__item">
+                  <span class="contact-summary__label">Saved phone format</span>
+                  <strong class="contact-summary__value">{{ savedPhoneDisplay }}</strong>
                 </div>
+                <div class="contact-summary__item">
+                  <span class="contact-summary__label">Email verification status</span>
+                  <strong class="contact-summary__value">{{ emailChangeStatusText }}</strong>
+                </div>
+                <div class="contact-summary__item">
+                  <span class="contact-summary__label">Profile status</span>
+                  <strong class="contact-summary__value">{{ profileMetaText }}</strong>
+                </div>
+              </div>
 
+              <div class="module-actions">
+                <span class="module-actions__hint">{{ phoneActionHint }}</span>
                 <CustomButton
                   type="primary"
-                  :loading="isSendingEmailChangeCode"
-                  :disabled="!canSendEmailChangeCode"
-                  @click="sendEmailChangeCode"
+                  :loading="isSavingPhone"
+                  :disabled="!canSavePhone"
+                  @click="savePhone"
                 >
-                  {{ emailChangeSendButtonText }}
+                  Save Phone
                 </CustomButton>
-              </div>
-
-              <div class="email-verification-panel__body">
-                <el-input
-                  v-model="emailChangeVerificationCode"
-                  maxlength="6"
-                  placeholder="Enter 6-digit verification code"
-                  inputmode="numeric"
-                  :disabled="!hasPendingEmailChange"
-                  @input="sanitizeEmailChangeCodeInput"
-                />
-                <p class="email-verification-panel__hint">
-                  {{ emailChangeHelperText }}
-                </p>
-              </div>
-            </div>
-
-            <div class="contact-summary">
-              <div class="contact-summary__item">
-                <span class="contact-summary__label">Saved phone format</span>
-                <strong class="contact-summary__value">{{ composedPhonePreview || 'Not provided' }}</strong>
-              </div>
-              <div class="contact-summary__item">
-                <span class="contact-summary__label">Email verification status</span>
-                <strong class="contact-summary__value">{{ emailChangeStatusText }}</strong>
-              </div>
-              <div class="contact-summary__item">
-                <span class="contact-summary__label">Profile data source</span>
-                <strong class="contact-summary__value">{{ accountDataSourceLabel }}</strong>
               </div>
             </div>
           </div>
@@ -275,8 +367,8 @@
             <p class="settings-card__eyebrow">Security</p>
             <h2 class="settings-card__title">Password protection</h2>
             <p class="settings-card__subtitle">
-              Change your password with clear requirements, instant strength guidance, and
-              compatibility with the existing password endpoint.
+              Update your password with clear requirements and a confirmation step before the
+              backend applies it.
             </p>
           </div>
           <el-tag :type="passwordStrength.tagType" effect="light">
@@ -285,6 +377,22 @@
         </div>
 
         <div class="settings-card__body">
+          <div class="remember-credentials-panel">
+            <div class="remember-credentials-panel__info">
+              <strong class="remember-credentials-panel__title">Allow device to remember login credentials</strong>
+              <p class="remember-credentials-panel__text">
+                Off: instantly clears saved login account.<br>
+                On: only saves your email when you select "Remember Account" on next login (valid for 7 days).
+              </p>
+            </div>
+            <el-switch
+              v-model="rememberCredentialsAllowed"
+              active-text="On"
+              inactive-text="Off"
+              @change="handleRememberCredentialsAllowedChange"
+            />
+          </div>
+
           <div
             v-if="passwordNotice"
             class="status-banner"
@@ -369,19 +477,10 @@
             </li>
           </ul>
 
-          <div class="form-footer form-footer--stacked">
-            <div class="form-footer__meta">
-              <strong>{{ passwordMetaText }}</strong>
-              <span>
-                Your current password is required before a new one can be applied.
-              </span>
-            </div>
-
-            <div class="form-footer__actions">
-              <CustomButton
-                :disabled="!hasPasswordInput || isSavingPassword"
-                @click="resetPasswordForm"
-              >
+          <div class="module-actions">
+            <span class="module-actions__hint">{{ passwordMetaText }}</span>
+            <div class="module-actions__buttons">
+              <CustomButton :disabled="!hasPasswordInput || isSavingPassword" @click="resetPasswordForm()">
                 Clear
               </CustomButton>
               <CustomButton
@@ -403,57 +502,58 @@
             <p class="settings-card__eyebrow">Recent Security Activity</p>
             <h2 class="settings-card__title">Recent account timeline</h2>
             <p class="settings-card__subtitle">
-              Review recent profile and account security actions recorded by the backend so you can
-              quickly confirm what changed.
+              Review your latest account updates recorded by the backend activity log.
             </p>
           </div>
           <el-tag effect="plain">{{ securityActivityStatusText }}</el-tag>
         </div>
 
         <div class="settings-card__body">
-          <div
-            v-if="securityActivityNotice"
-            class="status-banner"
-            :class="`status-banner--${securityActivityNotice.tone}`"
-            aria-live="polite"
-          >
-            <div class="status-banner__body">
-              <strong class="status-banner__title">{{ securityActivityNotice.title }}</strong>
-              <p class="status-banner__text">{{ securityActivityNotice.message }}</p>
-            </div>
-          </div>
-
-          <div v-if="isLoadingSecurityActivity && !securityActivityTimelineItems.length" class="activity-loading">
+          <div v-if="isLoadingSecurityActivity && !securityActivityTimelineGroups.length" class="activity-loading">
             <el-skeleton animated :rows="3" />
           </div>
 
-          <div v-else-if="securityActivityTimelineItems.length" class="activity-timeline">
-            <article
-              v-for="item in securityActivityTimelineItems"
-              :key="item.id"
-              class="activity-timeline__item"
+          <div v-else-if="securityActivityNotice" class="activity-error">
+            <strong class="activity-empty__title">{{ securityActivityNotice.title }}</strong>
+            <p class="activity-empty__text">{{ securityActivityNotice.message }}</p>
+            <div class="activity-actions">
+              <CustomButton @click="loadSecurityActivity()">Retry</CustomButton>
+            </div>
+          </div>
+
+          <div v-else-if="securityActivityTimelineGroups.length" class="activity-groups">
+            <section
+              v-for="group in securityActivityTimelineGroups"
+              :key="group.label"
+              class="activity-group"
             >
-              <span class="activity-timeline__marker" />
-              <div class="activity-timeline__content">
-                <div class="activity-timeline__header">
-                  <strong class="activity-timeline__title">{{ item.label }}</strong>
-                  <span class="activity-timeline__time">{{ item.timestamp }}</span>
-                </div>
-                <p class="activity-timeline__summary">{{ item.summary }}</p>
+              <h3 class="activity-group__title">{{ group.label }}</h3>
+
+              <div class="activity-timeline">
+                <article
+                  v-for="item in group.items"
+                  :key="item.id"
+                  class="activity-timeline__item"
+                >
+                  <span class="activity-timeline__marker" />
+                  <div class="activity-timeline__content">
+                    <div class="activity-timeline__header">
+                      <strong class="activity-timeline__title">{{ item.title }}</strong>
+                      <span class="activity-timeline__time">{{ item.time }}</span>
+                    </div>
+                    <p v-if="item.detail" class="activity-timeline__summary">{{ item.detail }}</p>
+                  </div>
+                </article>
               </div>
-            </article>
+            </section>
           </div>
 
           <div v-else class="activity-empty">
             <strong class="activity-empty__title">No recent security activity yet</strong>
             <p class="activity-empty__text">
-              Completed profile, password, avatar, and account-status actions will appear here once
-              the backend records them.
+              Profile, password, avatar, and account-status updates will appear here as soon as
+              they are recorded.
             </p>
-          </div>
-
-          <div v-if="securityActivityNotice" class="activity-actions">
-            <CustomButton @click="loadSecurityActivity()">Retry Activity Feed</CustomButton>
           </div>
         </div>
       </section>
@@ -462,24 +562,23 @@
         <div class="settings-card__header">
           <div>
             <p class="settings-card__eyebrow">Appearance</p>
-            <h2 class="settings-card__title">Light mode and style settings</h2>
+            <h2 class="settings-card__title">Style settings</h2>
             <p class="settings-card__subtitle">
-              Keep your appearance preferences accessible from the same account settings flow while
-              continuing to use the existing style settings behavior.
+              Open your style preferences without mixing them into your saved account profile.
             </p>
           </div>
           <el-tag effect="plain">{{ currentPageStyleText }}</el-tag>
         </div>
 
         <div class="settings-card__body">
-            <div class="appearance-panel">
-              <span class="appearance-panel__label">Current appearance</span>
-              <strong class="appearance-panel__value">{{ currentPageStyleText }}</strong>
-              <p class="appearance-panel__text">
-                Appearance preferences are separate from the live account profile APIs. This section
-                only reflects the current interface theme without mixing it into profile data.
-              </p>
-            </div>
+          <div class="appearance-panel">
+            <span class="appearance-panel__label">Current appearance</span>
+            <strong class="appearance-panel__value">{{ currentPageStyleText }}</strong>
+            <p class="appearance-panel__text">
+              Your account details are saved separately. Appearance changes only affect how the
+              interface looks for you.
+            </p>
+          </div>
 
           <div class="appearance-actions">
             <CustomButton @click="goToStyleSettings">Open Style Settings</CustomButton>
@@ -487,233 +586,121 @@
         </div>
       </section>
 
-      <section class="settings-card settings-card--actions">
-        <div class="settings-card__header">
-          <div>
-            <p class="settings-card__eyebrow">Save Changes</p>
-            <h2 class="settings-card__title">Unsaved changes and save controls</h2>
-            <p class="settings-card__subtitle">
-              Review the current edit state, restore the last saved values, or save profile changes
-              when you are ready.
-            </p>
-          </div>
-          <el-tag :type="hasUnsavedProfileChanges ? 'warning' : 'success'" effect="light">
-            {{ hasUnsavedProfileChanges ? 'Unsaved edits' : 'Up to date' }}
-          </el-tag>
-        </div>
-
-        <div class="settings-card__body">
-          <div
-            v-if="profileNotice"
-            class="status-banner"
-            :class="`status-banner--${profileNotice.tone}`"
-            aria-live="polite"
-          >
-            <div class="status-banner__body">
-              <strong class="status-banner__title">{{ profileNotice.title }}</strong>
-              <p class="status-banner__text">{{ profileNotice.message }}</p>
-            </div>
-          </div>
-
-          <div
-            v-if="hasUnsavedProfileChanges"
-            class="status-banner status-banner--warning"
-            aria-live="polite"
-          >
-            <div class="status-banner__body">
-              <strong class="status-banner__title">You have unsaved changes</strong>
-              <p class="status-banner__text">
-                Review the edited fields above, then save or reset the profile before leaving this
-                page.
-              </p>
-            </div>
-          </div>
-
-          <div class="form-footer">
-            <div class="form-footer__meta">
-              <strong>{{ profileMetaText }}</strong>
-              <span>{{ hasUnsavedProfileChanges ? 'Changes are pending until you save them to the backend.' : 'Your saved details are currently in sync with the backend.' }}</span>
-            </div>
-
-            <div class="form-footer__actions">
-              <CustomButton
-                :disabled="!hasUnsavedProfileChanges || isSavingProfile"
-                @click="resetProfileForm"
-              >
-                Reset
-              </CustomButton>
-              <CustomButton
-                type="primary"
-                :loading="isSavingProfile"
-                :disabled="!hasUnsavedProfileChanges"
-                @click="saveProfile"
-              >
-                Save Changes
-              </CustomButton>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <el-dialog
-        v-model="isProfileSaveDialogOpen"
-        title="Review profile changes"
+        v-model="isDiffDialogOpen"
+        :title="pendingAction?.title || 'Confirm changes'"
         width="min(640px, calc(100vw - 32px))"
         destroy-on-close
-        :close-on-click-modal="!isSavingProfile"
-        :close-on-press-escape="!isSavingProfile"
-        @closed="resetProfileSaveDialogState"
+        :close-on-click-modal="!isPendingActionBusy"
+        :close-on-press-escape="!isPendingActionBusy"
+        @closed="handleDiffDialogClosed"
       >
         <div class="change-summary-dialog">
-          <p class="change-summary-dialog__text">
-            Confirm the updated profile details below before saving them to the backend.
-          </p>
+          <p class="change-summary-dialog__text">You are about to update:</p>
 
-          <div class="change-summary">
-            <article
-              v-for="item in profileChangeSummaryItems"
+          <div class="diff-list">
+            <div
+              v-for="item in pendingActionDiffItems"
               :key="item.key"
-              class="change-summary__item"
+              class="diff-list__item"
             >
-              <div class="change-summary__header">
-                <strong class="change-summary__label">{{ item.label }}</strong>
-                <el-tag
-                  v-if="item.isSensitive"
-                  class="change-summary__tag"
-                  type="warning"
-                  effect="light"
-                  size="small"
-                >
-                  Sensitive
-                </el-tag>
+              <span class="diff-list__bullet">•</span>
+              <div class="diff-list__content">
+                <strong>{{ item.label }}</strong>
+                <span>
+                  {{ item.previousDisplayValue }}
+                  <span class="diff-list__arrow">-></span>
+                  {{ item.nextDisplayValue }}
+                </span>
               </div>
-
-              <div class="change-summary__values">
-                <div class="change-summary__value-group">
-                  <span class="change-summary__caption">Current</span>
-                  <p
-                    class="change-summary__value"
-                    :class="{ 'change-summary__value--empty': !item.previousValue }"
-                  >
-                    {{ item.previousDisplayValue }}
-                  </p>
-                </div>
-
-                <div class="change-summary__value-group">
-                  <span class="change-summary__caption">New</span>
-                  <p
-                    class="change-summary__value"
-                    :class="{ 'change-summary__value--empty': !item.nextValue }"
-                  >
-                    {{ item.nextDisplayValue }}
-                  </p>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div
-            v-if="hasPendingEmailChange"
-            class="status-banner status-banner--warning"
-            aria-live="polite"
-          >
-            <div class="status-banner__body">
-              <strong class="status-banner__title">Verification code required</strong>
-              <p class="status-banner__text">
-                Send a code to {{ trimmedProfileDraft.email || 'the new email address' }}, enter it
-                in the contact section, and then confirm this save.
-              </p>
             </div>
           </div>
 
+          <p class="change-summary-dialog__text">Confirm changes?</p>
+
           <div
-            v-if="profileSaveDialogError"
+            v-if="pendingActionDialogError"
             class="status-banner status-banner--error"
             aria-live="polite"
           >
             <div class="status-banner__body">
-              <strong class="status-banner__title">Unable to confirm profile changes</strong>
-              <p class="status-banner__text">{{ profileSaveDialogError }}</p>
+              <strong class="status-banner__title">Unable to continue</strong>
+              <p class="status-banner__text">{{ pendingActionDialogError }}</p>
             </div>
           </div>
         </div>
 
         <template #footer>
           <div class="change-summary-dialog__actions">
-            <CustomButton :disabled="isSavingProfile" @click="isProfileSaveDialogOpen = false">
+            <CustomButton :disabled="isPendingActionBusy" @click="closePendingActionDialogs">
               Cancel
             </CustomButton>
             <CustomButton
               type="primary"
-              :loading="isSavingProfile"
-              @click="confirmProfileSave"
+              :loading="isPendingActionBusy"
+              @click="continuePendingAction"
             >
-              Confirm Save
+              {{ pendingAction?.confirmButtonText || 'Confirm changes' }}
             </CustomButton>
           </div>
         </template>
       </el-dialog>
 
       <el-dialog
-        v-model="isDeactivationDialogOpen"
-        title="Confirm account deactivation"
-        width="min(640px, calc(100vw - 32px))"
+        v-model="isReauthDialogOpen"
+        :title="pendingAction?.passwordTitle || 'Re-enter current password'"
+        width="min(520px, calc(100vw - 32px))"
         destroy-on-close
-        :close-on-click-modal="!isDeactivatingAccount"
-        :close-on-press-escape="!isDeactivatingAccount"
-        @closed="resetDeactivationDialogState"
+        :close-on-click-modal="!isPendingActionBusy"
+        :close-on-press-escape="!isPendingActionBusy"
+        @closed="handleReauthDialogClosed"
       >
         <div class="change-summary-dialog">
-          <div class="status-banner status-banner--warning" aria-live="polite">
-            <div class="status-banner__body">
-              <strong class="status-banner__title">Deactivate and sign out</strong>
-              <p class="status-banner__text">
-                This is a real soft-deactivation. Your data stays in the database, but normal
-                account access should stop and you will be signed out immediately.
-              </p>
-            </div>
-          </div>
+          <p class="change-summary-dialog__text">
+            {{
+              pendingAction?.passwordDescription ||
+              'For security, please enter your current password before continuing.'
+            }}
+          </p>
 
           <div class="dialog-field">
-            <label class="dialog-field__label" for="deactivation-current-password">
+            <label class="dialog-field__label" for="reauth-current-password">
               Current password
             </label>
             <el-input
-              id="deactivation-current-password"
-              v-model="deactivationCurrentPassword"
+              id="reauth-current-password"
+              v-model="reauthCurrentPassword"
               type="password"
               show-password
               autocomplete="current-password"
               placeholder="Enter your current password"
+              @keyup.enter="verifyAndRunPendingAction"
             />
-            <p class="dialog-field__hint">
-              Current password confirmation is required before this account can be deactivated.
-            </p>
           </div>
 
           <div
-            v-if="deactivationDialogError"
+            v-if="reauthDialogError"
             class="status-banner status-banner--error"
             aria-live="polite"
           >
             <div class="status-banner__body">
-              <strong class="status-banner__title">Unable to confirm deactivation</strong>
-              <p class="status-banner__text">{{ deactivationDialogError }}</p>
+              <strong class="status-banner__title">Unable to continue</strong>
+              <p class="status-banner__text">{{ reauthDialogError }}</p>
             </div>
           </div>
         </div>
 
         <template #footer>
           <div class="change-summary-dialog__actions">
-            <CustomButton :disabled="isDeactivatingAccount" @click="isDeactivationDialogOpen = false">
+            <CustomButton :disabled="isPendingActionBusy" @click="closePendingActionDialogs">
               Cancel
             </CustomButton>
             <CustomButton
-              type="danger"
-              :loading="isDeactivatingAccount"
-              @click="confirmDeactivation"
+              type="primary"
+              :loading="isPendingActionBusy"
+              @click="verifyAndRunPendingAction"
             >
-              Deactivate Account
+              Verify and Continue
             </CustomButton>
           </div>
         </template>
@@ -729,8 +716,8 @@
             <p class="settings-card__eyebrow">Danger Zone</p>
             <h2 class="settings-card__title">Danger Zone</h2>
             <p class="settings-card__subtitle">
-              Deactivate your account as a soft status change. Your data stays in the database, but
-              normal account access should stop after confirmation.
+              Deactivating your account is a soft change to account status. Your data stays in the
+              database, but normal access should stop after confirmation.
             </p>
           </div>
           <el-tag :type="accountStatusTagType" effect="light">{{ accountStatusLabel }}</el-tag>
@@ -768,11 +755,10 @@
             <div class="danger-item__copy">
               <div class="danger-item__title-row">
                 <h3 class="danger-item__title">Deactivate Account</h3>
-                <span class="danger-item__tag">Real action</span>
+                <span class="danger-item__tag">Sensitive action</span>
               </div>
               <p class="danger-item__text">
-                This does not physically delete your data. It updates your account status to
-                deactivated and should prevent normal future use of the account.
+                Your account will be marked as deactivated and you will be signed out immediately.
               </p>
             </div>
 
@@ -786,9 +772,7 @@
             </CustomButton>
           </div>
 
-          <p class="danger-note">
-            {{ dangerZoneHelperText }}
-          </p>
+          <p class="danger-note">{{ dangerZoneHelperText }}</p>
         </div>
       </section>
     </div>
@@ -813,16 +797,17 @@ import {
   changeCurrentUserPassword,
   deactivateCurrentUserAccount,
   getCurrentUserProfile,
-  getCurrentUserSecurityActivity,
+  getCurrentUserSecurityActivities,
   sendCurrentUserEmailChangeCode,
-  uploadCurrentUserAvatar,
   updateCurrentUserProfile,
+  uploadCurrentUserAvatar,
+  verifyCurrentUserPassword,
   type AccountProfile,
   type AvatarUploadResponse,
   type ChangeCurrentUserEmailPayload,
   type ChangePasswordPayload,
-  type SendEmailChangeCodePayload,
   type SecurityActivityItem,
+  type SendEmailChangeCodePayload,
   type UpdateUserProfilePayload
 } from '@/api/user'
 import {
@@ -831,13 +816,15 @@ import {
   logout as clearAuthAndRedirect
 } from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { clearRememberedCredentials, isRememberCredentialsAllowed, setRememberCredentialsAllowed } from '@/utils/rememberCredentials'
 
 defineOptions({ name: 'AccountSettingsDashboard' })
 
 type ViewState = 'loading' | 'ready' | 'error'
 type StatusTone = 'success' | 'error' | 'info' | 'warning'
-type SectionKey = 'personal' | 'contact' | 'security' | 'status'
-type ProfileChangeFieldKey = 'fullName' | 'email' | 'phoneNumber'
+type SectionKey = 'avatar' | 'personal' | 'contact' | 'security' | 'status'
+type PendingActionKind = 'avatar' | 'name' | 'phone' | 'email' | 'password' | 'deactivate'
+type SyncFieldKey = 'fullName' | 'email' | 'phoneNumber'
 
 interface Props {
   initialSection?: SectionKey | 'overview'
@@ -868,27 +855,40 @@ interface SectionNotice {
 }
 
 interface CompletionItem {
-  label: string
+  key: string
   missingLabel: string
   complete: boolean
-  section: SectionKey
 }
 
-interface ProfileChangeSummaryItem {
-  key: ProfileChangeFieldKey
+interface DiffItem {
+  key: string
   label: string
-  previousValue: string
-  nextValue: string
   previousDisplayValue: string
   nextDisplayValue: string
-  isSensitive: boolean
+}
+
+interface PendingAction {
+  kind: PendingActionKind
+  title: string
+  confirmButtonText: string
+  requiresPassword: boolean
+  fallbackErrorMessage: string
+  passwordTitle?: string
+  passwordDescription?: string
+  diffItems: DiffItem[]
+  execute: (currentPassword?: string) => Promise<void>
 }
 
 interface SecurityActivityTimelineItem {
   id: string
+  title: string
+  detail: string
+  time: string
+}
+
+interface SecurityActivityTimelineGroup {
   label: string
-  summary: string
-  timestamp: string
+  items: SecurityActivityTimelineItem[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -896,6 +896,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const DEFAULT_COUNTRY_CODE = '+86'
+const CURRENT_PASSWORD_INCORRECT_MESSAGE = 'Current password is incorrect.'
 const MAX_AVATAR_FILE_SIZE_BYTES = 2 * 1024 * 1024
 const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const EMPTY_PROFILE: AccountProfile = {
@@ -950,22 +951,32 @@ const userStore = useUserStore()
 const viewState = ref<ViewState>('loading')
 const loadErrorMessage = ref('We could not load your account settings.')
 const avatarNotice = ref<SectionNotice | null>(null)
-const profileNotice = ref<SectionNotice | null>(null)
+const personalNotice = ref<SectionNotice | null>(null)
+const contactNotice = ref<SectionNotice | null>(null)
+const emailChangeNotice = ref<SectionNotice | null>(null)
 const passwordNotice = ref<SectionNotice | null>(null)
 const deactivationNotice = ref<SectionNotice | null>(null)
 const securityActivityNotice = ref<SectionNotice | null>(null)
-const emailChangeNotice = ref<SectionNotice | null>(null)
+const rememberCredentialsAllowed = ref(isRememberCredentialsAllowed())
+
 const isUploadingAvatar = ref(false)
-const isSavingProfile = ref(false)
+const isSavingName = ref(false)
+const isSavingPhone = ref(false)
+const isSavingEmail = ref(false)
 const isSavingPassword = ref(false)
 const isDeactivatingAccount = ref(false)
 const isLoadingSecurityActivity = ref(false)
 const isSendingEmailChangeCode = ref(false)
-const isProfileSaveDialogOpen = ref(false)
-const isDeactivationDialogOpen = ref(false)
-const profileSaveDialogError = ref('')
-const deactivationCurrentPassword = ref('')
-const deactivationDialogError = ref('')
+const isVerifyingCurrentPassword = ref(false)
+
+const isDiffDialogOpen = ref(false)
+const isReauthDialogOpen = ref(false)
+const pendingAction = ref<PendingAction | null>(null)
+const pendingActionDialogError = ref('')
+const reauthDialogError = ref('')
+const reauthCurrentPassword = ref('')
+const pendingAvatarFile = ref<File | null>(null)
+
 const emailChangeVerificationCode = ref('')
 const emailChangeTargetEmail = ref('')
 const emailChangeCountdown = ref(0)
@@ -980,8 +991,19 @@ const shouldBypassUnsavedChangesPrompt = ref(false)
 
 const profileFormRef = ref<FormInstance>()
 const passwordFormRef = ref<FormInstance>()
+
+const handleRememberCredentialsAllowedChange = (value: boolean): void => {
+  const allowed = Boolean(value)
+  setRememberCredentialsAllowed(allowed)
+  rememberCredentialsAllowed.value = allowed
+
+  if (!allowed) {
+    ElMessage.success('Cleared saved login credentials on this device.')
+  }
+}
 const avatarInputRef = ref<HTMLInputElement>()
 
+const avatarSectionRef = ref<HTMLElement>()
 const personalSectionRef = ref<HTMLElement>()
 const contactSectionRef = ref<HTMLElement>()
 const securitySectionRef = ref<HTMLElement>()
@@ -1001,39 +1023,9 @@ const passwordForm = reactive<PasswordFormModel>({
 })
 
 const hasApiSession = computed(() => Boolean(getAuthToken()))
-const accountDataSourceLabel = computed(() => 'Live account data')
-const currentAccountStatus = computed(() => originalProfile.value?.status ?? EMPTY_PROFILE.status)
-const currentAvatarUrl = computed(() => originalProfile.value?.avatarUrl?.trim() || '')
-const avatarTagText = computed(() => (currentAvatarUrl.value ? 'Custom avatar' : 'Default avatar'))
-const avatarDisplayName = computed(() => {
-  return (
-    profileForm.fullName.trim() ||
-    originalProfile.value?.fullName?.trim() ||
-    userStore.userInfo?.nickname?.trim() ||
-    userStore.userInfo?.username?.trim() ||
-    'Account profile'
-  )
-})
-const avatarInitials = computed(() => buildAvatarInitials(avatarDisplayName.value))
-const avatarSummaryText = computed(() => {
-  return currentAvatarUrl.value
-    ? 'Your saved avatar is ready and will load again the next time you open this page.'
-    : 'No avatar is saved yet, so a clean default placeholder is shown for now.'
-})
-const canUploadAvatar = computed(() => {
-  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && !isUploadingAvatar.value
-})
-const avatarHelperText = computed(() => {
-  if (!hasApiSession.value) {
-    return 'An authenticated session is required to upload and save an avatar to your profile.'
-  }
-
-  if (currentAccountStatus.value !== 'ACTIVE') {
-    return 'Only active accounts can upload a new avatar.'
-  }
-
-  return 'JPG, PNG, or WEBP up to 2 MB. Uploading replaces the current profile photo immediately.'
-})
+const savedProfile = computed<AccountProfile>(() => originalProfile.value ?? EMPTY_PROFILE)
+const currentAccountStatus = computed(() => savedProfile.value.status)
+const currentAvatarUrl = computed(() => savedProfile.value.avatarUrl?.trim() || '')
 
 const accountStatusLabel = computed(() => {
   switch (currentAccountStatus.value) {
@@ -1059,20 +1051,35 @@ const accountStatusTagType = computed(() => {
   }
 })
 
-const canDeactivateAccount = computed(() => {
-  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && !isDeactivatingAccount.value
+const avatarTagText = computed(() => (currentAvatarUrl.value ? 'Custom avatar' : 'Default avatar'))
+const avatarDisplayName = computed(() => {
+  return (
+    profileForm.fullName.trim() ||
+    savedProfile.value.fullName.trim() ||
+    userStore.userInfo?.nickname?.trim() ||
+    userStore.userInfo?.username?.trim() ||
+    'Account profile'
+  )
 })
-
-const dangerZoneHelperText = computed(() => {
+const avatarInitials = computed(() => buildAvatarInitials(avatarDisplayName.value))
+const avatarSummaryText = computed(() => {
+  return currentAvatarUrl.value
+    ? 'Your saved avatar is ready across your account.'
+    : 'Upload a photo to complete your profile and make your account easier to recognize.'
+})
+const canUploadAvatar = computed(() => {
+  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && !isUploadingAvatar.value
+})
+const avatarHelperText = computed(() => {
   if (!hasApiSession.value) {
-    return 'An authenticated session is required to deactivate this account.'
+    return 'An authenticated session is required to upload a profile photo.'
   }
 
-  if (currentAccountStatus.value === 'DEACTIVATED') {
-    return 'This account is already marked as deactivated.'
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    return 'Only active accounts can upload a new profile photo.'
   }
 
-  return 'After confirmation, the backend updates the existing account status field to deactivated and the frontend signs you out immediately.'
+  return 'JPG, PNG, or WEBP up to 2 MB. Uploading saves the new photo to your profile.'
 })
 
 const countryCodeOptions = computed<CountryCodeOption[]>(() => {
@@ -1092,37 +1099,22 @@ const countryCodeOptions = computed<CountryCodeOption[]>(() => {
   ]
 })
 
-const composedPhonePreview = computed(() => {
-  return buildPhoneNumber(profileForm.countryCode, profileForm.localPhoneNumber)
-})
+const trimmedFullName = computed(() => profileForm.fullName.trim())
+const trimmedDraftEmail = computed(() => profileForm.email.trim())
+const composedPhonePreview = computed(() => buildPhoneNumber(profileForm.countryCode, profileForm.localPhoneNumber))
+const savedPhoneDisplay = computed(() => savedProfile.value.phoneNumber || 'Not provided')
 
-const trimmedProfileDraft = computed<UpdateUserProfilePayload>(() => {
-  return {
-    fullName: profileForm.fullName.trim(),
-    email: profileForm.email.trim(),
-    phoneNumber: buildPhoneNumber(profileForm.countryCode, profileForm.localPhoneNumber)
-  }
-})
-
-const normalizedSavedEmail = computed(() => normalizeEmail(originalProfile.value?.email))
-const normalizedDraftEmail = computed(() => normalizeEmail(trimmedProfileDraft.value.email))
-const hasPendingEmailChange = computed(() => {
-  return Boolean(originalProfile.value) && normalizedDraftEmail.value !== normalizedSavedEmail.value
-})
-
-const hasNonEmailProfileChanges = computed(() => {
-  if (!originalProfile.value) {
-    return false
-  }
-
-  return (
-    trimmedProfileDraft.value.fullName !== originalProfile.value.fullName ||
-    trimmedProfileDraft.value.phoneNumber !== originalProfile.value.phoneNumber
-  )
+const normalizedSavedEmail = computed(() => normalizeEmail(savedProfile.value.email))
+const normalizedDraftEmail = computed(() => normalizeEmail(trimmedDraftEmail.value))
+const isNameDirty = computed(() => trimmedFullName.value !== savedProfile.value.fullName)
+const isPhoneDirty = computed(() => composedPhonePreview.value !== savedProfile.value.phoneNumber)
+const hasPendingEmailChange = computed(() => normalizedDraftEmail.value !== normalizedSavedEmail.value)
+const hasUnsavedProfileChanges = computed(() => {
+  return isNameDirty.value || isPhoneDirty.value || hasPendingEmailChange.value
 })
 
 const isPendingEmailDraftValid = computed(() => {
-  return hasPendingEmailChange.value && EMAIL_PATTERN.test(trimmedProfileDraft.value.email)
+  return hasPendingEmailChange.value && EMAIL_PATTERN.test(trimmedDraftEmail.value)
 })
 
 const isEmailChangeCodeBoundToCurrentDraft = computed(() => {
@@ -1137,39 +1129,199 @@ const isEmailChangeCodeReady = computed(() => {
   )
 })
 
+const canSaveName = computed(() => {
+  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && isNameDirty.value && !isSavingName.value
+})
+const canSavePhone = computed(() => {
+  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && isPhoneDirty.value && !isSavingPhone.value
+})
+const canSendEmailChangeCode = computed(() => {
+  return (
+    hasApiSession.value &&
+    currentAccountStatus.value === 'ACTIVE' &&
+    !isSendingEmailChangeCode.value &&
+    isPendingEmailDraftValid.value &&
+    emailChangeCountdown.value === 0
+  )
+})
+const canConfirmEmailChange = computed(() => {
+  return (
+    hasApiSession.value &&
+    currentAccountStatus.value === 'ACTIVE' &&
+    !isSavingEmail.value &&
+    isEmailChangeCodeReady.value
+  )
+})
+const canDeactivateAccount = computed(() => {
+  return hasApiSession.value && currentAccountStatus.value === 'ACTIVE' && !isDeactivatingAccount.value
+})
+
+const nameSaveButtonText = computed(() => {
+  return savedProfile.value.fullName ? 'Confirm Name Change' : 'Save Name'
+})
+const personalActionHint = computed(() => {
+  return isNameDirty.value
+    ? 'Review your updated name, then confirm the change.'
+    : 'Your saved name is already in sync.'
+})
+const phoneActionHint = computed(() => {
+  return isPhoneDirty.value
+    ? 'Review the updated phone number before saving it.'
+    : 'Save a phone number here when you are ready.'
+})
+
 const profileCompletionItems = computed<CompletionItem[]>(() => {
   return [
     {
-      label: 'Full name',
-      missingLabel: 'Complete personal info',
-      complete: Boolean(profileForm.fullName.trim()),
-      section: 'personal'
+      key: 'fullName',
+      missingLabel: 'full name',
+      complete: Boolean(savedProfile.value.fullName.trim())
     },
     {
-      label: 'Email address',
-      missingLabel: 'Add contact email',
-      complete: Boolean(profileForm.email.trim()),
-      section: 'contact'
+      key: 'email',
+      missingLabel: 'email',
+      complete: Boolean(savedProfile.value.email.trim())
     },
     {
-      label: 'Phone number',
-      missingLabel: 'Add phone number',
-      complete: Boolean(profileForm.localPhoneNumber.trim()),
-      section: 'contact'
+      key: 'phoneNumber',
+      missingLabel: 'phone number',
+      complete: Boolean(savedProfile.value.phoneNumber.trim())
+    },
+    {
+      key: 'avatarUrl',
+      missingLabel: 'avatar',
+      complete: Boolean(savedProfile.value.avatarUrl.trim())
     }
   ]
 })
 
 const completenessPercentage = computed(() => {
-  if (!profileCompletionItems.value.length) {
-    return 0
+  return profileCompletionItems.value.filter(item => item.complete).length * 25
+})
+const completenessStatusText = computed(() => `${completenessPercentage.value}% Complete`)
+const completenessHelperText = computed(() => {
+  if (completenessPercentage.value === 100) {
+    return 'All key profile fields are complete.'
   }
 
-  return Math.round(
-    (profileCompletionItems.value.filter(item => item.complete).length /
-      profileCompletionItems.value.length) *
-      100
-  )
+  const missingItems = profileCompletionItems.value
+    .filter(item => !item.complete)
+    .map(item => item.missingLabel)
+
+  return `Complete your profile by adding ${joinLabels(missingItems)}.`
+})
+
+const profileMetaText = computed(() => {
+  if (currentAccountStatus.value === 'DEACTIVATED') {
+    return 'Your account is currently deactivated.'
+  }
+
+  if (hasPendingEmailChange.value) {
+    return 'A new email is waiting for verification.'
+  }
+
+  if (hasUnsavedProfileChanges.value) {
+    return 'You have unsaved changes in your account settings.'
+  }
+
+  if (lastProfileSavedAt.value) {
+    return 'Saved successfully.'
+  }
+
+  return 'Your profile is up to date.'
+})
+
+const contactTagText = computed(() => {
+  return savedProfile.value.email && savedProfile.value.phoneNumber ? 'Reachable' : 'Review needed'
+})
+
+const passwordMetaText = computed(() => {
+  if (lastPasswordUpdatedAt.value) {
+    return `Password updated ${formatTimestamp(lastPasswordUpdatedAt.value)}`
+  }
+
+  return 'Your current password is required before a new one can be applied.'
+})
+
+const emailChangeSendButtonText = computed(() => {
+  if (emailChangeCountdown.value > 0 && isEmailChangeCodeBoundToCurrentDraft.value) {
+    return `${emailChangeCountdown.value}s to resend`
+  }
+
+  return 'Send Code'
+})
+
+const emailChangeStatusText = computed(() => {
+  if (!hasPendingEmailChange.value) {
+    return 'No verification pending'
+  }
+
+  if (isEmailChangeCodeReady.value) {
+    return 'Code ready for confirmation'
+  }
+
+  if (isEmailChangeCodeBoundToCurrentDraft.value) {
+    return 'Code sent, waiting for confirmation'
+  }
+
+  return 'Code not sent'
+})
+
+const emailChangeHelperText = computed(() => {
+  if (!hasPendingEmailChange.value) {
+    return 'Enter a different email address, send a code, and confirm the change here.'
+  }
+
+  if (!EMAIL_PATTERN.test(trimmedDraftEmail.value)) {
+    return 'Enter a valid email address before requesting a verification code.'
+  }
+
+  if (isEmailChangeCodeReady.value) {
+    return `A valid code is ready for ${trimmedDraftEmail.value}. Confirm the email change to save it.`
+  }
+
+  if (isEmailChangeCodeBoundToCurrentDraft.value && emailChangeCountdown.value > 0) {
+    return `A verification code was sent to ${trimmedDraftEmail.value}. Enter it here, then confirm the change.`
+  }
+
+  return `Send a verification code to ${trimmedDraftEmail.value}, enter it here, and then confirm the email change.`
+})
+
+const securityActivityStatusText = computed(() => {
+  if (isLoadingSecurityActivity.value && !securityActivityItems.value.length) {
+    return 'Loading'
+  }
+
+  if (securityActivityNotice.value) {
+    return 'Retry available'
+  }
+
+  if (!securityActivityItems.value.length) {
+    return 'No recent activity'
+  }
+
+  return `${securityActivityItems.value.length} recent record${securityActivityItems.value.length === 1 ? '' : 's'}`
+})
+
+const securityActivityTimelineGroups = computed<SecurityActivityTimelineGroup[]>(() => {
+  const groupMap = new Map<string, SecurityActivityTimelineItem[]>()
+
+  securityActivityItems.value.forEach(item => {
+    const label = formatRelativeDayLabel(item.createdAt)
+    const existingItems = groupMap.get(label) ?? []
+    existingItems.push({
+      id: `${item.id}-${item.createdAt}`,
+      title: item.description || getSecurityActivityFallbackLabel(item.activityType),
+      detail: buildSecurityActivityDetail(item),
+      time: formatActivityTime(item.createdAt)
+    })
+    groupMap.set(label, existingItems)
+  })
+
+  return Array.from(groupMap.entries()).map(([label, items]) => ({
+    label,
+    items
+  }))
 })
 
 const currentPageStyleText = computed(() => {
@@ -1182,165 +1334,6 @@ const currentPageStyleText = computed(() => {
     html.getAttribute('data-theme') === 'dark' || html.classList.contains('dark')
 
   return isDarkMode ? 'Dark Mode' : 'Light Mode'
-})
-
-const hasUnsavedProfileChanges = computed(() => {
-  return hasNonEmailProfileChanges.value || hasPendingEmailChange.value
-})
-
-const profileChangeSummaryItems = computed<ProfileChangeSummaryItem[]>(() => {
-  if (!originalProfile.value) {
-    return []
-  }
-
-  const fieldDefinitions: ReadonlyArray<{
-    key: ProfileChangeFieldKey
-    label: string
-    isSensitive: boolean
-  }> = [
-    {
-      key: 'fullName',
-      label: 'Full name',
-      isSensitive: false
-    },
-    {
-      key: 'email',
-      label: 'Email address',
-      isSensitive: true
-    },
-    {
-      key: 'phoneNumber',
-      label: 'Phone number',
-      isSensitive: true
-    }
-  ]
-
-  return fieldDefinitions
-    .map(field => {
-      const previousValue = String(originalProfile.value?.[field.key] ?? '').trim()
-      const nextValue = trimmedProfileDraft.value[field.key]
-
-      if (previousValue === nextValue) {
-        return null
-      }
-
-      return {
-        key: field.key,
-        label: field.label,
-        previousValue,
-        nextValue,
-        previousDisplayValue: formatProfileSummaryValue(previousValue),
-        nextDisplayValue: formatProfileSummaryValue(nextValue),
-        isSensitive: field.isSensitive
-      }
-    })
-    .filter((item): item is ProfileChangeSummaryItem => item !== null)
-})
-
-const profileMetaText = computed(() => {
-  if (currentAccountStatus.value === 'DEACTIVATED') {
-    return 'Account is currently deactivated'
-  }
-
-  if (hasPendingEmailChange.value) {
-    return 'Email verification is required before the new email can be saved'
-  }
-
-  if (hasUnsavedProfileChanges.value) {
-    return 'Unsaved profile edits in progress'
-  }
-
-  if (lastProfileSavedAt.value) {
-    return `Saved ${formatTimestamp(lastProfileSavedAt.value)}`
-  }
-
-  return 'Profile synced with current account data'
-})
-
-const passwordMetaText = computed(() => {
-  if (lastPasswordUpdatedAt.value) {
-    return `Password updated ${formatTimestamp(lastPasswordUpdatedAt.value)}`
-  }
-
-  return 'Ready for a secure password update'
-})
-
-const canSendEmailChangeCode = computed(() => {
-  return (
-    hasApiSession.value &&
-    currentAccountStatus.value === 'ACTIVE' &&
-    !isSendingEmailChangeCode.value &&
-    isPendingEmailDraftValid.value &&
-    emailChangeCountdown.value === 0
-  )
-})
-
-const emailChangeSendButtonText = computed(() => {
-  if (
-    emailChangeCountdown.value > 0 &&
-    isEmailChangeCodeBoundToCurrentDraft.value
-  ) {
-    return `${emailChangeCountdown.value} seconds to resend`
-  }
-
-  return 'Send Code'
-})
-
-const emailChangeStatusText = computed(() => {
-  if (!hasPendingEmailChange.value) {
-    return 'No verification pending'
-  }
-
-  if (isEmailChangeCodeReady.value) {
-    return 'Code ready for save'
-  }
-
-  if (isEmailChangeCodeBoundToCurrentDraft.value) {
-    return 'Code sent, awaiting confirmation'
-  }
-
-  return 'Code not sent'
-})
-
-const emailChangeHelperText = computed(() => {
-  if (!hasPendingEmailChange.value) {
-    return 'Enter a different email address first, then send a verification code before saving.'
-  }
-
-  if (!EMAIL_PATTERN.test(trimmedProfileDraft.value.email)) {
-    return 'Enter a valid email address before requesting a verification code.'
-  }
-
-  if (isEmailChangeCodeReady.value) {
-    return `A valid code is ready for ${trimmedProfileDraft.value.email}. Save your profile to confirm the new email.`
-  }
-
-  if (isEmailChangeCodeBoundToCurrentDraft.value && emailChangeCountdown.value > 0) {
-    return `A verification code was sent to ${trimmedProfileDraft.value.email}. Enter it here and save when ready.`
-  }
-
-  return `Send a verification code to ${trimmedProfileDraft.value.email}, enter it here, and then save your profile.`
-})
-
-const securityActivityStatusText = computed(() => {
-  if (isLoadingSecurityActivity.value && !securityActivityItems.value.length) {
-    return 'Loading'
-  }
-
-  if (!securityActivityItems.value.length) {
-    return 'No recent activity'
-  }
-
-  return `${securityActivityItems.value.length} recent event${securityActivityItems.value.length === 1 ? '' : 's'}`
-})
-
-const securityActivityTimelineItems = computed<SecurityActivityTimelineItem[]>(() => {
-  return securityActivityItems.value.map(item => ({
-    id: `${item.id || item.eventType}-${item.createdAt || item.summary}`,
-    label: getSecurityActivityLabel(item.eventType),
-    summary: item.summary || 'Completed an account security action.',
-    timestamp: formatTimestamp(item.createdAt)
-  }))
 })
 
 const passwordChecklist = computed(() => {
@@ -1426,9 +1419,44 @@ const hasPasswordInput = computed(() => {
       passwordForm.confirmationPassword.trim()
   )
 })
-
 const canAttemptPasswordSave = computed(() => {
   return hasPasswordInput.value && !isSavingPassword.value
+})
+
+const pendingActionDiffItems = computed<DiffItem[]>(() => pendingAction.value?.diffItems ?? [])
+const isPendingActionBusy = computed(() => {
+  if (isVerifyingCurrentPassword.value) {
+    return true
+  }
+
+  switch (pendingAction.value?.kind) {
+    case 'avatar':
+      return isUploadingAvatar.value
+    case 'name':
+      return isSavingName.value
+    case 'phone':
+      return isSavingPhone.value
+    case 'email':
+      return isSavingEmail.value
+    case 'password':
+      return isSavingPassword.value
+    case 'deactivate':
+      return isDeactivatingAccount.value
+    default:
+      return false
+  }
+})
+
+const dangerZoneHelperText = computed(() => {
+  if (!hasApiSession.value) {
+    return 'An authenticated session is required to deactivate this account.'
+  }
+
+  if (currentAccountStatus.value === 'DEACTIVATED') {
+    return 'This account is already marked as deactivated.'
+  }
+
+  return 'A password check is required before your account status can be changed to deactivated.'
 })
 
 const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
@@ -1530,7 +1558,7 @@ const formatTimestamp = (value: Date | string): string => {
   const parsedDate = toDisplayDate(value)
 
   if (!parsedDate) {
-    return 'Unknown time'
+    return 'just now'
   }
 
   return new Intl.DateTimeFormat(undefined, {
@@ -1541,16 +1569,106 @@ const formatTimestamp = (value: Date | string): string => {
   }).format(parsedDate)
 }
 
-const formatProfileSummaryValue = (value: string): string => {
-  return value ? value : 'Not provided'
+const formatActivityTime = (value: Date | string): string => {
+  const parsedDate = toDisplayDate(value)
+
+  if (!parsedDate) {
+    return 'Unknown time'
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(parsedDate)
 }
 
-const getSecurityActivityLabel = (eventType: string): string => {
-  switch (eventType.trim().toUpperCase()) {
+const formatRelativeDayLabel = (value: Date | string): string => {
+  const parsedDate = toDisplayDate(value)
+
+  if (!parsedDate) {
+    return 'Earlier'
+  }
+
+  const today = new Date()
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const startOfTarget = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate())
+  const diffDays = Math.round((startOfToday.getTime() - startOfTarget.getTime()) / (24 * 60 * 60 * 1000))
+
+  if (diffDays <= 0) {
+    return 'Today'
+  }
+
+  if (diffDays === 1) {
+    return 'Yesterday'
+  }
+
+  if (diffDays < 7) {
+    return `${diffDays} days ago`
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: parsedDate.getFullYear() === today.getFullYear() ? undefined : 'numeric'
+  }).format(parsedDate)
+}
+
+const formatDiffValue = (value: string): string => {
+  return value.trim() ? value.trim() : 'Not provided'
+}
+
+const buildDiffItem = (key: string, label: string, previousValue: string, nextValue: string): DiffItem => {
+  return {
+    key,
+    label,
+    previousDisplayValue: formatDiffValue(previousValue),
+    nextDisplayValue: formatDiffValue(nextValue)
+  }
+}
+
+const joinLabels = (items: string[]): string => {
+  if (!items.length) {
+    return 'the remaining details'
+  }
+
+  if (items.length === 1) {
+    return items[0] ?? 'the remaining details'
+  }
+
+  if (items.length === 2) {
+    return `${items[0] ?? ''} and ${items[1] ?? ''}`
+  }
+
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1] ?? ''}`
+}
+
+const mapChangedFieldLabel = (value: string): string => {
+  switch (value.trim()) {
+    case 'fullName':
+      return 'full name'
+    case 'email':
+      return 'email'
+    case 'phoneNumber':
+      return 'phone number'
+    case 'avatarUrl':
+      return 'avatar'
+    case 'password':
+      return 'password'
+    case 'status':
+      return 'account status'
+    default:
+      return value
+  }
+}
+
+const getSecurityActivityFallbackLabel = (activityType: string): string => {
+  switch (activityType.trim().toUpperCase()) {
     case 'PROFILE_UPDATED':
       return 'Profile updated'
     case 'EMAIL_CHANGED':
       return 'Email changed'
+    case 'PHONE_CHANGED':
+      return 'Phone number updated'
     case 'PASSWORD_CHANGED':
       return 'Password changed'
     case 'AVATAR_UPDATED':
@@ -1560,6 +1678,14 @@ const getSecurityActivityLabel = (eventType: string): string => {
     default:
       return 'Account activity'
   }
+}
+
+const buildSecurityActivityDetail = (item: SecurityActivityItem): string => {
+  if (!item.changedFields.length) {
+    return ''
+  }
+
+  return `Changed: ${joinLabels(item.changedFields.map(mapChangedFieldLabel))}.`
 }
 
 const buildAvatarInitials = (value: string): string => {
@@ -1608,22 +1734,55 @@ const syncUserStoreProfile = (profile: AccountProfile): void => {
   )
 }
 
-const populateProfileForm = (
-  profile: AccountProfile,
-  options: {
-    emailOverride?: string
-  } = {}
-): void => {
+const populateProfileForm = (profile: AccountProfile): void => {
   const phoneParts = splitPhoneNumber(profile.phoneNumber)
 
   profileForm.fullName = profile.fullName
-  profileForm.email = options.emailOverride ?? profile.email
+  profileForm.email = profile.email
   profileForm.countryCode =
     phoneParts.countryCode && (isCountryCode(phoneParts.countryCode) || COUNTRY_CODE_PATTERN.test(phoneParts.countryCode))
       ? phoneParts.countryCode
       : DEFAULT_COUNTRY_CODE
   profileForm.localPhoneNumber = phoneParts.localPhoneNumber
   profileFormRef.value?.clearValidate()
+}
+
+const syncFormFieldFromProfile = (field: SyncFieldKey, profile: AccountProfile): void => {
+  if (field === 'fullName') {
+    profileForm.fullName = profile.fullName
+    void profileFormRef.value?.clearValidate('fullName')
+    return
+  }
+
+  if (field === 'email') {
+    profileForm.email = profile.email
+    void profileFormRef.value?.clearValidate('email')
+    return
+  }
+
+  const phoneParts = splitPhoneNumber(profile.phoneNumber)
+  profileForm.countryCode =
+    phoneParts.countryCode && (isCountryCode(phoneParts.countryCode) || COUNTRY_CODE_PATTERN.test(phoneParts.countryCode))
+      ? phoneParts.countryCode
+      : DEFAULT_COUNTRY_CODE
+  profileForm.localPhoneNumber = phoneParts.localPhoneNumber
+  void profileFormRef.value?.clearValidate('localPhoneNumber')
+}
+
+const applySavedProfilePatch = (
+  patch: Partial<AccountProfile>,
+  fieldsToSync: SyncFieldKey[] = []
+): AccountProfile => {
+  const updatedProfile = normalizeProfile({
+    ...savedProfile.value,
+    ...patch
+  })
+
+  originalProfile.value = updatedProfile
+  fieldsToSync.forEach(field => syncFormFieldFromProfile(field, updatedProfile))
+  syncUserStoreProfile(updatedProfile)
+  lastProfileSavedAt.value = new Date()
+  return updatedProfile
 }
 
 const resetPasswordForm = (clearNotice = true): void => {
@@ -1677,13 +1836,34 @@ const startEmailChangeCountdown = (): void => {
   }, 1000)
 }
 
-const resetProfileSaveDialogState = (): void => {
-  profileSaveDialogError.value = ''
+const resetPendingActionState = (): void => {
+  pendingAction.value = null
+  pendingActionDialogError.value = ''
+  reauthDialogError.value = ''
+  reauthCurrentPassword.value = ''
+  pendingAvatarFile.value = null
 }
 
-const resetDeactivationDialogState = (): void => {
-  deactivationCurrentPassword.value = ''
-  deactivationDialogError.value = ''
+const closePendingActionDialogs = (): void => {
+  if (isPendingActionBusy.value) {
+    return
+  }
+
+  isDiffDialogOpen.value = false
+  isReauthDialogOpen.value = false
+  resetPendingActionState()
+}
+
+const handleDiffDialogClosed = (): void => {
+  if (!isReauthDialogOpen.value && !isPendingActionBusy.value) {
+    resetPendingActionState()
+  }
+}
+
+const handleReauthDialogClosed = (): void => {
+  if (!isDiffDialogOpen.value && !isPendingActionBusy.value) {
+    resetPendingActionState()
+  }
 }
 
 const resetSecurityActivityState = (): void => {
@@ -1699,15 +1879,15 @@ const clearSensitiveAccountState = (): void => {
   lastPasswordUpdatedAt.value = null
   highlightedSection.value = null
   avatarNotice.value = null
-  profileNotice.value = null
+  personalNotice.value = null
+  contactNotice.value = null
+  emailChangeNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
-  emailChangeNotice.value = null
-  isProfileSaveDialogOpen.value = false
-  isDeactivationDialogOpen.value = false
   isSendingEmailChangeCode.value = false
-  resetProfileSaveDialogState()
-  resetDeactivationDialogState()
+  isDiffDialogOpen.value = false
+  isReauthDialogOpen.value = false
+  resetPendingActionState()
   resetEmailChangeFlow(false)
   resetProfileFormState()
   resetPasswordForm(false)
@@ -1723,42 +1903,55 @@ const handleAuthenticationLoss = (): void => {
   clearAuthAndRedirect()
 }
 
-const validateRequiredText = (label: string) => {
-  return (
-    rule: unknown,
-    value: unknown,
-    callback: (error?: Error) => void
-  ): void => {
-    const trimmedValue = typeof value === 'string' ? value.trim() : ''
+const validateOptionalFullName = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void
+): void => {
+  const trimmedValue = typeof value === 'string' ? value.trim() : ''
 
-    if (!trimmedValue) {
-      callback(new Error(`${label} is required.`))
-      return
-    }
-
-    callback()
+  if (trimmedValue.length > 60) {
+    callback(new Error('Full name must be 60 characters or fewer.'))
+    return
   }
+
+  callback()
 }
 
-const validatePhoneNumber = (
+const validateEmail = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void
+): void => {
+  const trimmedValue = typeof value === 'string' ? value.trim() : ''
+
+  if (!trimmedValue) {
+    callback(new Error('Email address is required.'))
+    return
+  }
+
+  if (!EMAIL_PATTERN.test(trimmedValue)) {
+    callback(new Error('Please enter a valid email address.'))
+    return
+  }
+
+  callback()
+}
+
+const validateOptionalPhoneNumber = (
   rule: unknown,
   value: unknown,
   callback: (error?: Error) => void
 ): void => {
   const localPhoneNumber = typeof value === 'string' ? value.trim() : ''
 
-  if (!profileForm.countryCode.trim()) {
-    callback(new Error('Phone number is required.'))
+  if (!localPhoneNumber) {
+    callback()
     return
   }
 
   if (!COUNTRY_CODE_PATTERN.test(profileForm.countryCode)) {
     callback(new Error('Please enter a valid phone number.'))
-    return
-  }
-
-  if (!localPhoneNumber) {
-    callback(new Error('Phone number is required.'))
     return
   }
 
@@ -1782,6 +1975,23 @@ const validatePhoneNumber = (
   callback()
 }
 
+const validateRequiredText = (label: string) => {
+  return (
+    rule: unknown,
+    value: unknown,
+    callback: (error?: Error) => void
+  ): void => {
+    const trimmedValue = typeof value === 'string' ? value.trim() : ''
+
+    if (!trimmedValue) {
+      callback(new Error(`${label} is required.`))
+      return
+    }
+
+    callback()
+  }
+}
+
 const validateNewPassword = (
   rule: unknown,
   value: unknown,
@@ -1789,7 +1999,7 @@ const validateNewPassword = (
 ): void => {
   const newPassword = typeof value === 'string' ? value.trim() : ''
 
-  if (!newPassword.trim()) {
+  if (!newPassword) {
     callback(new Error('New password is required.'))
     return
   }
@@ -1829,24 +2039,19 @@ const validateConfirmationPassword = (
 const profileRules: FormRules<ProfileFormModel> = {
   fullName: [
     {
-      validator: validateRequiredText('Full name'),
+      validator: validateOptionalFullName,
       trigger: 'blur'
     }
   ],
   email: [
     {
-      validator: validateRequiredText('Email address'),
-      trigger: 'blur'
-    },
-    {
-      pattern: EMAIL_PATTERN,
-      message: 'Please enter a valid email address.',
+      validator: validateEmail,
       trigger: 'blur'
     }
   ],
   localPhoneNumber: [
     {
-      validator: validatePhoneNumber,
+      validator: validateOptionalPhoneNumber,
       trigger: ['blur', 'change']
     }
   ]
@@ -1887,6 +2092,7 @@ const highlightSectionCard = (section: SectionKey): void => {
 
 const getSectionElement = (section: SectionKey): HTMLElement | undefined => {
   const sectionMap: Record<SectionKey, HTMLElement | undefined> = {
+    avatar: avatarSectionRef.value,
     personal: personalSectionRef.value,
     contact: contactSectionRef.value,
     security: securitySectionRef.value,
@@ -1934,6 +2140,106 @@ const resetAvatarInput = (): void => {
   }
 }
 
+const openPendingAction = (action: PendingAction): void => {
+  pendingAction.value = action
+  pendingActionDialogError.value = ''
+  reauthDialogError.value = ''
+  reauthCurrentPassword.value = ''
+  isDiffDialogOpen.value = true
+}
+
+const executePendingAction = async (currentPassword?: string): Promise<void> => {
+  if (!pendingAction.value) {
+    return
+  }
+
+  const activeAction = pendingAction.value
+
+  try {
+    await activeAction.execute(currentPassword)
+    isDiffDialogOpen.value = false
+    isReauthDialogOpen.value = false
+    resetPendingActionState()
+  } catch (error) {
+    if (isAuthFailureError(error)) {
+      isDiffDialogOpen.value = false
+      isReauthDialogOpen.value = false
+      resetPendingActionState()
+      handleAuthenticationLoss()
+      return
+    }
+
+    const message = getErrorMessage(error, activeAction.fallbackErrorMessage)
+
+    if (isReauthDialogOpen.value) {
+      reauthDialogError.value = message
+      return
+    }
+
+    pendingActionDialogError.value = message
+  }
+}
+
+const continuePendingAction = async (): Promise<void> => {
+  pendingActionDialogError.value = ''
+
+  if (!pendingAction.value) {
+    return
+  }
+
+  if (pendingAction.value.requiresPassword) {
+    isReauthDialogOpen.value = true
+    isDiffDialogOpen.value = false
+    reauthDialogError.value = ''
+    reauthCurrentPassword.value = ''
+    return
+  }
+
+  await executePendingAction()
+}
+
+const verifyAndRunPendingAction = async (): Promise<void> => {
+  if (!pendingAction.value) {
+    return
+  }
+
+  const currentPassword = reauthCurrentPassword.value.trim()
+
+  if (!currentPassword) {
+    reauthDialogError.value = 'Current password is required.'
+    return
+  }
+
+  reauthDialogError.value = ''
+  isVerifyingCurrentPassword.value = true
+
+  try {
+    const response = await verifyCurrentUserPassword({
+      currentPassword
+    })
+
+    if (!response.valid) {
+      throw new Error(CURRENT_PASSWORD_INCORRECT_MESSAGE)
+    }
+  } catch (error) {
+    if (isAuthFailureError(error)) {
+      isVerifyingCurrentPassword.value = false
+      isDiffDialogOpen.value = false
+      isReauthDialogOpen.value = false
+      resetPendingActionState()
+      handleAuthenticationLoss()
+      return
+    }
+
+    reauthDialogError.value = getErrorMessage(error, CURRENT_PASSWORD_INCORRECT_MESSAGE)
+    isVerifyingCurrentPassword.value = false
+    return
+  }
+
+  isVerifyingCurrentPassword.value = false
+  await executePendingAction(currentPassword)
+}
+
 const sendEmailChangeCode = async (): Promise<void> => {
   emailChangeNotice.value = null
 
@@ -1949,6 +2255,7 @@ const sendEmailChangeCode = async (): Promise<void> => {
   const isEmailValid = profileFormRef.value
     ? await profileFormRef.value.validateField('email').then(() => true).catch(() => false)
     : false
+
   if (isEmailValid !== true) {
     emailChangeNotice.value = {
       tone: 'error',
@@ -1976,7 +2283,7 @@ const sendEmailChangeCode = async (): Promise<void> => {
 
   try {
     const payload: SendEmailChangeCodePayload = {
-      newEmail: trimmedProfileDraft.value.email
+      newEmail: trimmedDraftEmail.value
     }
 
     await sendCurrentUserEmailChangeCode(payload)
@@ -1986,7 +2293,7 @@ const sendEmailChangeCode = async (): Promise<void> => {
     emailChangeNotice.value = {
       tone: 'success',
       title: 'Verification code sent',
-      message: `A 6-digit verification code was sent to ${trimmedProfileDraft.value.email}. Enter it below, then save your profile.`
+      message: `A 6-digit verification code was sent to ${trimmedDraftEmail.value}. Enter it below, then confirm the email change.`
     }
   } catch (error) {
     if (isAuthFailureError(error)) {
@@ -2002,6 +2309,203 @@ const sendEmailChangeCode = async (): Promise<void> => {
   } finally {
     isSendingEmailChangeCode.value = false
   }
+}
+
+const confirmEmailChange = async (): Promise<void> => {
+  contactNotice.value = null
+  emailChangeNotice.value = null
+
+  if (!hasPendingEmailChange.value) {
+    emailChangeNotice.value = {
+      tone: 'info',
+      title: 'No email change to confirm',
+      message: 'Enter a different email address first, then send and enter a verification code.'
+    }
+    return
+  }
+
+  const isEmailValid = profileFormRef.value
+    ? await profileFormRef.value.validateField('email').then(() => true).catch(() => false)
+    : false
+
+  if (isEmailValid !== true) {
+    emailChangeNotice.value = {
+      tone: 'error',
+      title: 'Invalid email address',
+      message: 'Enter a valid email address before confirming the change.'
+    }
+    return
+  }
+
+  if (!isEmailChangeCodeBoundToCurrentDraft.value) {
+    emailChangeNotice.value = {
+      tone: 'warning',
+      title: 'Verification code required',
+      message: 'Send a verification code to this email address before confirming the change.'
+    }
+    return
+  }
+
+  if (emailChangeVerificationCode.value.trim().length !== 6) {
+    emailChangeNotice.value = {
+      tone: 'warning',
+      title: 'Enter the verification code',
+      message: 'A 6-digit verification code is required before the email change can be confirmed.'
+    }
+    return
+  }
+
+  openPendingAction({
+    kind: 'email',
+    title: 'Confirm Email Change',
+    confirmButtonText: 'Confirm changes',
+    requiresPassword: true,
+    fallbackErrorMessage: 'Unable to change your email right now.',
+    passwordTitle: 'Re-enter current password',
+    passwordDescription: 'For security, enter your current password to finish updating your email address.',
+    diffItems: [
+      buildDiffItem('email', 'Email', savedProfile.value.email, trimmedDraftEmail.value)
+    ],
+    execute: async (currentPassword?: string) => {
+      if (!hasApiSession.value) {
+        handleAuthenticationLoss()
+        return
+      }
+
+      isSavingEmail.value = true
+
+      try {
+        const payload: ChangeCurrentUserEmailPayload = {
+          currentPassword: currentPassword?.trim() || '',
+          newEmail: trimmedDraftEmail.value,
+          code: emailChangeVerificationCode.value.trim()
+        }
+
+        const updatedProfile = normalizeProfile(await changeCurrentUserEmail(payload))
+        applySavedProfilePatch(updatedProfile, ['email'])
+        resetEmailChangeFlow()
+        emailChangeNotice.value = {
+          tone: 'success',
+          title: 'Email updated successfully',
+          message: 'Your new email address was verified and saved.'
+        }
+        void loadSecurityActivity(true)
+      } finally {
+        isSavingEmail.value = false
+      }
+    }
+  })
+}
+
+const saveName = (): void => {
+  personalNotice.value = null
+
+  if (!isNameDirty.value) {
+    personalNotice.value = {
+      tone: 'info',
+      title: 'No name changes to save',
+      message: 'Update your full name first, then confirm the change.'
+    }
+    return
+  }
+
+  openPendingAction({
+    kind: 'name',
+    title: nameSaveButtonText.value,
+    confirmButtonText: nameSaveButtonText.value,
+    requiresPassword: false,
+    fallbackErrorMessage: 'Unable to save your name right now.',
+    diffItems: [
+      buildDiffItem('fullName', 'Full name', savedProfile.value.fullName, trimmedFullName.value)
+    ],
+    execute: async () => {
+      if (!hasApiSession.value) {
+        handleAuthenticationLoss()
+        return
+      }
+
+      isSavingName.value = true
+
+      try {
+        const payload: UpdateUserProfilePayload = {
+          fullName: trimmedFullName.value
+        }
+
+        await updateCurrentUserProfile(payload)
+        applySavedProfilePatch({ fullName: trimmedFullName.value }, ['fullName'])
+        personalNotice.value = {
+          tone: 'success',
+          title: 'Name updated successfully',
+          message: 'Your full name was saved to your profile.'
+        }
+        void loadSecurityActivity(true)
+      } finally {
+        isSavingName.value = false
+      }
+    }
+  })
+}
+
+const savePhone = async (): Promise<void> => {
+  contactNotice.value = null
+
+  if (!isPhoneDirty.value) {
+    contactNotice.value = {
+      tone: 'info',
+      title: 'No phone changes to save',
+      message: 'Update your phone number first, then save it here.'
+    }
+    return
+  }
+
+  const isPhoneValid = profileFormRef.value
+    ? await profileFormRef.value.validateField('localPhoneNumber').then(() => true).catch(() => false)
+    : false
+
+  if (isPhoneValid !== true) {
+    contactNotice.value = {
+      tone: 'error',
+      title: 'Please review your phone number',
+      message: 'Correct the highlighted phone field before saving.'
+    }
+    return
+  }
+
+  openPendingAction({
+    kind: 'phone',
+    title: 'Save Phone',
+    confirmButtonText: 'Save Phone',
+    requiresPassword: false,
+    fallbackErrorMessage: 'Unable to save your phone number right now.',
+    diffItems: [
+      buildDiffItem('phoneNumber', 'Phone', savedProfile.value.phoneNumber, composedPhonePreview.value)
+    ],
+    execute: async () => {
+      if (!hasApiSession.value) {
+        handleAuthenticationLoss()
+        return
+      }
+
+      isSavingPhone.value = true
+
+      try {
+        const payload: UpdateUserProfilePayload = {
+          phoneNumber: composedPhonePreview.value
+        }
+
+        await updateCurrentUserProfile(payload)
+        applySavedProfilePatch({ phoneNumber: composedPhonePreview.value }, ['phoneNumber'])
+        contactNotice.value = {
+          tone: 'success',
+          title: 'Phone updated successfully',
+          message: 'Your phone number was saved to your profile.'
+        }
+        void loadSecurityActivity(true)
+      } finally {
+        isSavingPhone.value = false
+      }
+    }
+  })
 }
 
 const triggerAvatarSelection = (): void => {
@@ -2060,45 +2564,48 @@ const handleAvatarFileChange = async (event: Event): Promise<void> => {
     return
   }
 
-  isUploadingAvatar.value = true
+  pendingAvatarFile.value = selectedFile
+  openPendingAction({
+    kind: 'avatar',
+    title: 'Confirm Avatar Update',
+    confirmButtonText: 'Upload Avatar',
+    requiresPassword: false,
+    fallbackErrorMessage: 'Unable to upload your avatar right now.',
+    diffItems: [
+      buildDiffItem(
+        'avatar',
+        'Profile photo',
+        currentAvatarUrl.value ? 'Current photo saved' : '',
+        `New image selected (${selectedFile.name})`
+      )
+    ],
+    execute: async () => {
+      if (!pendingAvatarFile.value) {
+        throw new Error('Please select an image to upload.')
+      }
 
-  try {
-    const response: AvatarUploadResponse = await uploadCurrentUserAvatar(selectedFile)
+      isUploadingAvatar.value = true
 
-    if (!response.avatarUrl) {
-      throw new Error('Avatar upload completed without a usable image URL.')
+      try {
+        const response: AvatarUploadResponse = await uploadCurrentUserAvatar(pendingAvatarFile.value)
+
+        if (!response.avatarUrl) {
+          throw new Error('Avatar upload completed without a usable image URL.')
+        }
+
+        applySavedProfilePatch({ avatarUrl: response.avatarUrl })
+        avatarNotice.value = {
+          tone: 'success',
+          title: 'Avatar updated successfully',
+          message: 'Your new profile photo was uploaded and saved.'
+        }
+        void loadSecurityActivity(true)
+      } finally {
+        isUploadingAvatar.value = false
+        resetAvatarInput()
+      }
     }
-
-    const updatedProfile = normalizeProfile({
-      ...(originalProfile.value ?? EMPTY_PROFILE),
-      avatarUrl: response.avatarUrl
-    })
-
-    originalProfile.value = updatedProfile
-    syncUserStoreProfile(updatedProfile)
-    lastProfileSavedAt.value = new Date()
-
-    avatarNotice.value = {
-      tone: 'success',
-      title: 'Avatar updated successfully',
-      message: 'Your new avatar was uploaded and saved to your profile.'
-    }
-    void loadSecurityActivity(true)
-  } catch (error) {
-    if (isAuthFailureError(error)) {
-      handleAuthenticationLoss()
-      return
-    }
-
-    avatarNotice.value = {
-      tone: 'error',
-      title: 'Unable to upload avatar',
-      message: getErrorMessage(error, 'Unable to upload your avatar right now.')
-    }
-  } finally {
-    isUploadingAvatar.value = false
-    resetAvatarInput()
-  }
+  })
 }
 
 const loadSecurityActivity = async (preserveExisting = false): Promise<void> => {
@@ -2116,7 +2623,7 @@ const loadSecurityActivity = async (preserveExisting = false): Promise<void> => 
   isLoadingSecurityActivity.value = true
 
   try {
-    securityActivityItems.value = await getCurrentUserSecurityActivity()
+    securityActivityItems.value = await getCurrentUserSecurityActivities()
   } catch (error) {
     if (isAuthFailureError(error)) {
       handleAuthenticationLoss()
@@ -2141,9 +2648,12 @@ const loadDashboard = async (): Promise<void> => {
   viewState.value = 'loading'
   loadErrorMessage.value = 'We could not load your account settings.'
   avatarNotice.value = null
-  profileNotice.value = null
+  personalNotice.value = null
+  contactNotice.value = null
+  emailChangeNotice.value = null
   passwordNotice.value = null
   deactivationNotice.value = null
+  resetPendingActionState()
   resetEmailChangeFlow()
   resetSecurityActivityState()
 
@@ -2179,269 +2689,6 @@ const loadDashboard = async (): Promise<void> => {
   }
 }
 
-const saveProfile = async (): Promise<void> => {
-  profileNotice.value = null
-  emailChangeNotice.value = null
-
-  if (!profileFormRef.value || !originalProfile.value) {
-    return
-  }
-
-  if (!hasUnsavedProfileChanges.value) {
-    profileNotice.value = {
-      tone: 'info',
-      title: 'No changes to save',
-      message: 'Edit a profile field before saving, or keep the current values as they are.'
-    }
-    return
-  }
-
-  const isValid = await profileFormRef.value.validate().catch(() => false)
-
-  if (isValid !== true) {
-    profileNotice.value = {
-      tone: 'error',
-      title: 'Please review the highlighted fields',
-      message: 'Correct the validation issues in your personal or contact information and try again.'
-    }
-    return
-  }
-
-  if (!profileChangeSummaryItems.value.length) {
-    profileNotice.value = {
-      tone: 'info',
-      title: 'No changes to save',
-      message: 'Edit a profile field before saving, or keep the current values as they are.'
-    }
-    return
-  }
-
-  resetProfileSaveDialogState()
-  isProfileSaveDialogOpen.value = true
-}
-
-const confirmProfileSave = async (): Promise<void> => {
-  if (!originalProfile.value || !profileChangeSummaryItems.value.length) {
-    isProfileSaveDialogOpen.value = false
-    return
-  }
-
-  profileSaveDialogError.value = ''
-
-  const emailWillChange = hasPendingEmailChange.value
-  const profileFieldsWillChange = hasNonEmailProfileChanges.value
-  const draftEmail = trimmedProfileDraft.value.email
-  let savedProfileSnapshot = normalizeProfile(originalProfile.value)
-  let savedNonEmailChanges = false
-
-  if (emailWillChange) {
-    if (!isEmailChangeCodeBoundToCurrentDraft.value) {
-      profileSaveDialogError.value = 'Send a verification code to the new email address before saving.'
-      return
-    }
-
-    if (emailChangeVerificationCode.value.trim().length !== 6) {
-      profileSaveDialogError.value = 'Enter the 6-digit verification code before saving your new email.'
-      return
-    }
-  }
-
-  if (!hasApiSession.value) {
-    isProfileSaveDialogOpen.value = false
-    handleAuthenticationLoss()
-    return
-  }
-
-  isSavingProfile.value = true
-
-  try {
-    if (profileFieldsWillChange) {
-      const profilePayload: UpdateUserProfilePayload = {
-        fullName: trimmedProfileDraft.value.fullName,
-        email: originalProfile.value.email,
-        phoneNumber: trimmedProfileDraft.value.phoneNumber
-      }
-
-      await updateCurrentUserProfile(profilePayload)
-      savedProfileSnapshot = normalizeProfile({
-        ...savedProfileSnapshot,
-        ...profilePayload
-      })
-      savedNonEmailChanges = true
-    }
-
-    if (emailWillChange) {
-      const emailPayload: ChangeCurrentUserEmailPayload = {
-        newEmail: draftEmail,
-        code: emailChangeVerificationCode.value.trim()
-      }
-
-      savedProfileSnapshot = normalizeProfile(await changeCurrentUserEmail(emailPayload))
-    }
-
-    originalProfile.value = savedProfileSnapshot
-    populateProfileForm(savedProfileSnapshot)
-    resetEmailChangeFlow()
-    syncUserStoreProfile(savedProfileSnapshot)
-    lastProfileSavedAt.value = new Date()
-    isProfileSaveDialogOpen.value = false
-
-    profileNotice.value = {
-      tone: 'success',
-      title: 'Profile saved successfully',
-      message:
-        emailWillChange && profileFieldsWillChange
-          ? 'Your profile details were updated and the new email address was verified successfully.'
-          : emailWillChange
-            ? 'Your new email address was verified and saved successfully.'
-            : 'Your personal and contact details were updated successfully.'
-    }
-    void loadSecurityActivity(true)
-  } catch (error) {
-    if (isAuthFailureError(error)) {
-      handleAuthenticationLoss()
-      return
-    }
-
-    profileSaveDialogError.value = getErrorMessage(error, 'Unable to save your profile right now.')
-
-    if (savedNonEmailChanges) {
-      originalProfile.value = savedProfileSnapshot
-      populateProfileForm(savedProfileSnapshot, {
-        emailOverride: draftEmail
-      })
-      syncUserStoreProfile(savedProfileSnapshot)
-      lastProfileSavedAt.value = new Date()
-      profileNotice.value = {
-        tone: 'warning',
-        title: 'Profile details saved, email still pending',
-        message: `${profileSaveDialogError.value} Your other profile details were saved, but the email change still needs a valid verification code.`
-      }
-      return
-    }
-
-    profileNotice.value = {
-      tone: 'error',
-      title: 'Unable to save profile changes',
-      message: profileSaveDialogError.value
-    }
-  } finally {
-    isSavingProfile.value = false
-  }
-}
-
-const resetProfileForm = (): void => {
-  if (!originalProfile.value) {
-    return
-  }
-
-  resetEmailChangeFlow()
-  populateProfileForm(originalProfile.value)
-  profileNotice.value = {
-    tone: 'info',
-    title: 'Changes discarded',
-    message: 'The form has been restored to the last saved profile data.'
-  }
-}
-
-const deactivateAccount = async (): Promise<void> => {
-  deactivationNotice.value = null
-
-  if (!hasApiSession.value) {
-    handleAuthenticationLoss()
-    return
-  }
-
-  if (currentAccountStatus.value !== 'ACTIVE') {
-    deactivationNotice.value = {
-      tone: 'warning',
-      title: 'Account cannot be deactivated again',
-      message: 'This account is no longer in an active state.'
-    }
-    return
-  }
-
-  resetDeactivationDialogState()
-  isDeactivationDialogOpen.value = true
-}
-
-const confirmDeactivation = async (): Promise<void> => {
-  deactivationNotice.value = null
-
-  if (!hasApiSession.value) {
-    isDeactivationDialogOpen.value = false
-    handleAuthenticationLoss()
-    return
-  }
-
-  if (currentAccountStatus.value !== 'ACTIVE') {
-    isDeactivationDialogOpen.value = false
-    deactivationNotice.value = {
-      tone: 'warning',
-      title: 'Account cannot be deactivated again',
-      message: 'This account is no longer in an active state.'
-    }
-    return
-  }
-
-  if (!deactivationCurrentPassword.value.trim()) {
-    deactivationDialogError.value = 'Current password is required to deactivate this account.'
-    return
-  }
-
-  isDeactivatingAccount.value = true
-  deactivationDialogError.value = ''
-
-  try {
-    await deactivateCurrentUserAccount({
-      currentPassword: deactivationCurrentPassword.value.trim()
-    })
-
-    const deactivatedProfile = normalizeProfile({
-      ...(originalProfile.value ?? EMPTY_PROFILE),
-      status: 'DEACTIVATED'
-    })
-
-    originalProfile.value = deactivatedProfile
-    isDeactivationDialogOpen.value = false
-
-    ElMessage.success('Account deactivated successfully. Redirecting to login.')
-    shouldBypassUnsavedChangesPrompt.value = true
-    clearAuthAndRedirect()
-  } catch (error) {
-    if (isAuthFailureError(error)) {
-      isDeactivationDialogOpen.value = false
-      handleAuthenticationLoss()
-      return
-    }
-
-    const message = getErrorMessage(error, 'Unable to deactivate your account right now.')
-
-    if (message === 'Account is already deactivated') {
-      originalProfile.value = normalizeProfile({
-        ...(originalProfile.value ?? EMPTY_PROFILE),
-        status: 'DEACTIVATED'
-      })
-      isDeactivationDialogOpen.value = false
-      deactivationNotice.value = {
-        tone: 'warning',
-        title: 'Account cannot be deactivated again',
-        message: 'This account is no longer in an active state.'
-      }
-      return
-    }
-
-    deactivationDialogError.value = message
-    deactivationNotice.value = {
-      tone: 'error',
-      title: 'Unable to deactivate account',
-      message
-    }
-  } finally {
-    isDeactivatingAccount.value = false
-  }
-}
-
 const savePassword = async (): Promise<void> => {
   passwordNotice.value = null
 
@@ -2460,39 +2707,92 @@ const savePassword = async (): Promise<void> => {
     return
   }
 
-  isSavingPassword.value = true
+  openPendingAction({
+    kind: 'password',
+    title: 'Confirm Password Update',
+    confirmButtonText: 'Update Password',
+    requiresPassword: false,
+    fallbackErrorMessage: 'Unable to update your password right now.',
+    diffItems: [
+      buildDiffItem(
+        'password',
+        'Password',
+        'Current password verified',
+        'New password will replace the current password'
+      )
+    ],
+    execute: async () => {
+      if (!hasApiSession.value) {
+        handleAuthenticationLoss()
+        return
+      }
 
-  try {
-    const payload: ChangePasswordPayload = {
-      currentPassword: passwordForm.currentPassword.trim(),
-      newPassword: passwordForm.newPassword.trim(),
-      confirmationPassword: passwordForm.confirmationPassword.trim()
+      isSavingPassword.value = true
+
+      try {
+        const payload: ChangePasswordPayload = {
+          currentPassword: passwordForm.currentPassword.trim(),
+          newPassword: passwordForm.newPassword.trim(),
+          confirmationPassword: passwordForm.confirmationPassword.trim()
+        }
+
+        await changeCurrentUserPassword(payload)
+        clearRememberedCredentials()
+        lastPasswordUpdatedAt.value = new Date()
+        ElMessage.success('Password updated successfully. Please log in again.')
+        handleAuthenticationLoss()
+      } finally {
+        isSavingPassword.value = false
+      }
     }
+  })
+}
 
-    if (!hasApiSession.value) {
-      handleAuthenticationLoss()
-      return
-    }
+const deactivateAccount = (): void => {
+  deactivationNotice.value = null
 
-    await changeCurrentUserPassword(payload)
-    lastPasswordUpdatedAt.value = new Date()
-    ElMessage.success('Password updated successfully. Please log in again.')
+  if (!hasApiSession.value) {
     handleAuthenticationLoss()
     return
-  } catch (error) {
-    if (isAuthFailureError(error)) {
-      handleAuthenticationLoss()
-      return
-    }
-
-    passwordNotice.value = {
-      tone: 'error',
-      title: 'Unable to update password',
-      message: getErrorMessage(error, 'Unable to update your password right now.')
-    }
-  } finally {
-    isSavingPassword.value = false
   }
+
+  if (currentAccountStatus.value !== 'ACTIVE') {
+    deactivationNotice.value = {
+      tone: 'warning',
+      title: 'Account cannot be deactivated again',
+      message: 'This account is no longer in an active state.'
+    }
+    return
+  }
+
+  openPendingAction({
+    kind: 'deactivate',
+    title: 'Confirm Account Deactivation',
+    confirmButtonText: 'Continue',
+    requiresPassword: true,
+    fallbackErrorMessage: 'Unable to deactivate your account right now.',
+    passwordTitle: 'Re-enter current password',
+    passwordDescription: 'Current password confirmation is required before this account can be deactivated.',
+    diffItems: [
+      buildDiffItem('status', 'Account status', accountStatusLabel.value, 'Deactivated')
+    ],
+    execute: async (currentPassword?: string) => {
+      isDeactivatingAccount.value = true
+
+      try {
+        await deactivateCurrentUserAccount({
+          currentPassword: currentPassword?.trim() || ''
+        })
+
+        applySavedProfilePatch({ status: 'DEACTIVATED' })
+        ElMessage.success('Account deactivated successfully. Redirecting to login.')
+        shouldBypassUnsavedChangesPrompt.value = true
+        clearAuthAndRedirect()
+      } finally {
+        isDeactivatingAccount.value = false
+      }
+    }
+  })
 }
 
 const goToStyleSettings = (): void => {
@@ -2590,7 +2890,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: var(--space-4);
   width: 100%;
   max-width: 980px;
   margin: 0 auto;
@@ -2621,14 +2921,39 @@ onBeforeUnmount(() => {
 .page-meta {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  width: min(100%, 420px);
 }
 
 .page-meta__text {
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.95rem;
-  text-align: left;
+  line-height: 1.6;
+}
+
+.completeness-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.16);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.08), rgba(var(--color-bg-surface-rgb), 0.98)),
+    var(--color-bg-page);
+}
+
+.completeness-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.completeness-panel__header strong {
+  color: var(--color-text-primary);
 }
 
 .dashboard,
@@ -2642,6 +2967,7 @@ onBeforeUnmount(() => {
 }
 
 .loading-card {
+  padding: var(--space-5);
   border: 1px solid rgba(var(--color-primary-rgb), 0.18);
   border-radius: var(--radius-lg);
   background:
@@ -2650,13 +2976,22 @@ onBeforeUnmount(() => {
   box-shadow: 0 12px 30px rgba(var(--color-shadow-rgb), 0.07);
 }
 
-.settings-card__eyebrow {
-  margin: 0;
-  color: var(--color-primary);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skeleton-card__title {
+  width: 40%;
+}
+
+.skeleton-card__text {
+  width: 100%;
+}
+
+.skeleton-card__text--short {
+  width: 70%;
 }
 
 .settings-form {
@@ -2695,12 +3030,6 @@ onBeforeUnmount(() => {
     var(--color-bg-surface);
 }
 
-.settings-card--actions {
-  background:
-    linear-gradient(180deg, rgba(var(--color-warning-rgb), 0.06), transparent 48%),
-    var(--color-bg-surface);
-}
-
 .settings-card__header {
   display: flex;
   align-items: flex-start;
@@ -2708,6 +3037,15 @@ onBeforeUnmount(() => {
   gap: var(--space-4);
   padding: var(--space-5) var(--space-5) var(--space-4);
   border-bottom: 1px solid rgba(var(--color-border-rgb), 0.85);
+}
+
+.settings-card__eyebrow {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .settings-card__title {
@@ -2729,9 +3067,38 @@ onBeforeUnmount(() => {
   padding: var(--space-5);
 }
 
+.remember-credentials-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-muted);
+}
+
+.remember-credentials-panel__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.remember-credentials-panel__title {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.remember-credentials-panel__text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
 .field-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
@@ -2799,15 +3166,37 @@ onBeforeUnmount(() => {
   line-height: 1.7;
 }
 
-.phone-field {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+.contact-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.contact-block__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-3);
 }
 
-.contact-summary {
+.contact-block__title {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.contact-block__text {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.phone-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -2852,87 +3241,38 @@ onBeforeUnmount(() => {
   gap: var(--space-3);
 }
 
-.status-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-3);
-}
-
-.activity-timeline {
+.module-actions {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.activity-timeline__item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
   padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
 
-.activity-timeline__marker {
-  width: 12px;
-  height: 12px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 6px rgba(51, 144, 251, 0.12);
+.module-actions--inline {
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
-.activity-timeline__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.activity-timeline__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.activity-timeline__title {
-  color: var(--color-text-primary);
-}
-
-.activity-timeline__time {
-  color: var(--color-text-secondary);
-  font-size: 0.92rem;
-  white-space: nowrap;
-}
-
-.activity-timeline__summary {
-  margin: 0;
+.module-actions__hint {
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
-.activity-empty,
-.activity-loading {
-  padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-page);
-}
-
-.activity-empty__title {
-  color: var(--color-text-primary);
-}
-
-.activity-empty__text {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-secondary);
-  line-height: 1.7;
-}
-
-.activity-actions {
+.module-actions__buttons {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.contact-summary,
+.status-overview {
+  display: grid;
+  gap: var(--space-3);
 }
 
 .contact-summary__item,
@@ -2940,7 +3280,7 @@ onBeforeUnmount(() => {
   padding: var(--space-4);
   border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
-  background: var(--color-bg-page);
+  background: var(--color-bg-surface);
 }
 
 .contact-summary__label,
@@ -2958,137 +3298,7 @@ onBeforeUnmount(() => {
 .status-overview__value {
   color: var(--color-text-primary);
   font-size: 1rem;
-}
-
-.appearance-panel {
-  padding: var(--space-4);
-  border: 1px solid rgba(var(--color-border-rgb), 0.9);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-page);
-}
-
-.appearance-panel__label {
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.appearance-panel__value {
-  display: block;
-  color: var(--color-text-primary);
-  font-size: 1rem;
-}
-
-.appearance-panel__text {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-secondary);
-  line-height: 1.7;
-}
-
-.appearance-actions {
-  display: flex;
-}
-
-.change-summary-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.change-summary-dialog__text {
-  margin: 0;
-  color: var(--color-text-secondary);
-  line-height: 1.7;
-}
-
-.change-summary-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-}
-
-.change-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.change-summary__item {
-  padding: var(--space-4);
-  border: 1px solid rgba(216, 218, 215, 0.9);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-page);
-}
-
-.change-summary__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-
-.change-summary__label {
-  color: var(--color-text-primary);
-  font-size: 1rem;
-}
-
-.change-summary__tag {
-  flex-shrink: 0;
-}
-
-.change-summary__values {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.change-summary__value-group {
-  min-width: 0;
-}
-
-.change-summary__caption {
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.change-summary__value {
-  margin: 0;
-  color: var(--color-text-primary);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.change-summary__value--empty {
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.dialog-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.dialog-field__label {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
-.dialog-field__hint {
-  margin: 0;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .strength-panel {
@@ -3188,44 +3398,207 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 4px rgba(var(--color-success-rgb), 0.14);
 }
 
-.form-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+.activity-loading,
+.activity-empty,
+.activity-error {
+  padding: var(--space-4);
   border: 1px solid rgba(var(--color-border-rgb), 0.9);
   border-radius: var(--radius-md);
   background: var(--color-bg-page);
 }
 
-.form-footer--stacked {
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-
-.form-footer__meta {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  color: var(--color-text-secondary);
-}
-
-.form-footer__meta strong {
+.activity-empty__title {
   color: var(--color-text-primary);
 }
 
-.form-footer__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
+.activity-empty__text {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
 }
 
-.danger-list {
+.activity-actions {
+  display: flex;
+  margin-top: var(--space-4);
+}
+
+.activity-groups {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.activity-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.activity-group__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.activity-timeline__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.activity-timeline__marker {
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 0 6px rgba(var(--color-success-rgb), 0.12);
+}
+
+.activity-timeline__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.activity-timeline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.activity-timeline__title {
+  color: var(--color-text-primary);
+}
+
+.activity-timeline__time {
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.activity-timeline__summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.appearance-panel {
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.appearance-panel__label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.appearance-panel__value {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.appearance-panel__text {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.appearance-actions {
+  display: flex;
+}
+
+.change-summary-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.change-summary-dialog__text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.change-summary-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.diff-list__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(var(--color-border-rgb), 0.9);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-page);
+}
+
+.diff-list__bullet {
+  color: var(--color-primary);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.diff-list__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.diff-list__content strong {
+  color: var(--color-text-primary);
+}
+
+.diff-list__arrow {
+  margin: 0 6px;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dialog-field__label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.status-overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .danger-item {
@@ -3350,32 +3723,6 @@ onBeforeUnmount(() => {
   margin-top: var(--space-5);
 }
 
-.loading-card {
-  padding: var(--space-5);
-}
-
-.skeleton-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.skeleton-text {
-  width: 100%;
-}
-
-.skeleton-card__title {
-  width: 180px;
-}
-
-.skeleton-card__text {
-  width: 100%;
-}
-
-.skeleton-card__text--short {
-  width: 72%;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -3388,81 +3735,48 @@ onBeforeUnmount(() => {
   border: 0;
 }
 
-:deep(.el-progress-bar__outer) {
-  background: rgba(var(--color-bg-surface-rgb), 0.58);
-}
+@media (min-width: 900px) {
+  .page-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
 
-:deep(.el-progress-bar__inner) {
-  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-soft));
-}
-
-:deep(.el-input__wrapper),
-:deep(.el-select__wrapper) {
-  border-radius: 12px;
-  min-height: 44px;
-  box-shadow: 0 0 0 1px rgba(var(--color-border-rgb), 0.95) inset;
-}
-
-:deep(.el-form-item__label) {
-  color: var(--color-text-primary);
-  font-weight: 600;
+  .contact-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
   .page-card {
-    padding: var(--space-5);
-  }
-
-  .page-title {
-    font-size: 1.75rem;
+    padding: var(--space-4);
   }
 
   .settings-card__header,
-  .avatar-panel,
   .email-verification-panel__header,
-  .form-footer,
+  .module-actions,
+  .danger-item,
   .strength-panel__header,
-  .danger-item {
+  .activity-timeline__header,
+  .change-summary-dialog__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .avatar-panel,
+  .avatar-panel__preview,
+  .phone-field {
+    grid-template-columns: minmax(0, 1fr);
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .field-grid,
-  .contact-summary,
   .status-overview {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .phone-field {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .activity-timeline__header {
-    flex-direction: column;
-  }
-
-  .change-summary__values {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .form-footer__actions,
-  .state-actions,
-  .appearance-actions,
-  .activity-actions {
+  .module-actions__buttons {
     width: 100%;
-  }
-
-  .avatar-panel__preview,
-  .avatar-panel__actions {
-    width: 100%;
-  }
-
-  .avatar-panel__actions {
-    max-width: none;
-  }
-
-  .danger-item {
-    align-items: stretch;
   }
 }
 </style>

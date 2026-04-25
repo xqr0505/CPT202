@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDown, Rank, Expand, Fold, Sunny, Moon } from '@element-plus/icons-vue'
+import { applyThemeMode, getCurrentThemeMode, THEME_MODE_EVENT_NAME } from '@/utils/theme'
 
 const router = useRouter()
 
@@ -12,9 +13,17 @@ const isDragging = ref(false)
 const dragStart = { x: 0, y: 0 }
 const initialPosition = { x: 0, y: 0 }
 
+const syncThemeState = () => {
+  isDark.value = getCurrentThemeMode() === 'dark'
+}
+
 onMounted(() => {
-  const theme = document.documentElement.getAttribute('data-theme')
-  isDark.value = theme === 'dark' || document.documentElement.classList.contains('dark')
+  syncThemeState()
+  window.addEventListener(THEME_MODE_EVENT_NAME, syncThemeState)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(THEME_MODE_EVENT_NAME, syncThemeState)
 })
 
 const toggleCollapse = () => {
@@ -59,17 +68,8 @@ const handleCommand = (command: string) => {
 }
 
 const toggleTheme = () => {
-  const html = document.documentElement
   isDark.value = !isDark.value
-  const theme = isDark.value ? 'dark' : 'light'
-
-  html.setAttribute('data-theme', theme)
-
-  if (isDark.value) {
-    html.classList.add('dark')
-  } else {
-    html.classList.remove('dark')
-  }
+  applyThemeMode(isDark.value ? 'dark' : 'light')
 }
 </script>
 

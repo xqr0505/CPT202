@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 import router from '@/router';
+import { apiBaseUrl } from '@/config/api';
 
 /**
  * Default API response structure
@@ -150,9 +151,20 @@ export const dispatchSessionActivityEvent = () => {
   setTimeout(() => localStorage.removeItem(ACTIVITY_EVENT_KEY), 100);
 };
 
-export const logout = () => {
+export const logout = (options?: { redirectTo?: string | null }) => {
   clearAuthData();
   triggerLogoutEvent();
+
+  const redirectTo = options?.redirectTo;
+  if (redirectTo === null) {
+    return;
+  }
+
+  if (redirectTo) {
+    router.push({ path: redirectTo }).catch(() => null);
+    return;
+  }
+
   router.push({ name: 'Login' }).catch(() => null);
 };
 
@@ -236,7 +248,7 @@ export const isTokenExpired = (token: string | null): boolean => {
 };
 
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8081',
+  baseURL: apiBaseUrl,
   timeout: 10000
 });
 

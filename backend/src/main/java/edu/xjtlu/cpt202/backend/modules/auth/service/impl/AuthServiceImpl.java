@@ -81,11 +81,11 @@ public class AuthServiceImpl implements AuthService {
         if ("REGISTER".equals(type)) {
             String role = request.getRole();
             if (StrUtil.isBlank(role)) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role");
+                role = "CUSTOMER";
             }
             role = role.trim().toUpperCase(Locale.ROOT);
             if (!"CUSTOMER".equals(role)) {
-                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role first");
+                throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER role is allowed");
             }
 
             // 注册模式：邮箱必须未被注册
@@ -140,7 +140,7 @@ public class AuthServiceImpl implements AuthService {
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String role = request.getRole();
         if (StrUtil.isBlank(role)) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please select a role");
+            role = "CUSTOMER";
         }
         role = role.trim().toUpperCase(Locale.ROOT);
         if (!"CUSTOMER".equals(role)) {

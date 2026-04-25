@@ -87,6 +87,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: expertlink-frontend-dev
     restart: always
+    environment:
+      - VITE_API_BASE_URL=${FRONTEND_VITE_API_BASE_URL_DEV:-http://localhost:8081/api}
     ports:
       - "5331:5331"
     command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5331"]

@@ -61,11 +61,17 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/swagger-ui.html",        
+                                "/api/auth/refresh-token",
                                 "/auth/refresh-token",
+                                "/api/auth/login",
                                 "/auth/login",
+                                "/api/auth/register",
                                 "/auth/register",
+                                "/api/auth/verify-email",
                                 "/auth/verify-email",
+                                "/api/auth/logout",
                                 "/auth/logout",           
+                                "/api/auth/reset-password/**",
                                 "/auth/reset-password/**",
                                 "/api/v1/categories",
                                 "/api/v1/specialists", 
@@ -77,7 +83,7 @@ public class SecurityConfig {
                                 "/error/**"
                         ).permitAll()
 
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/specialist/**").hasRole("SPECIALIST")
                         .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/user/**").hasAnyRole("ADMIN", "SPECIALIST", "CUSTOMER")

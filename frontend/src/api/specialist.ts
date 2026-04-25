@@ -47,7 +47,7 @@ const buildSearchParams = (params: SpecialistSearchParams): Record<string, strin
 }
 
 export const fetchSpecialistCategories = async (): Promise<SpecialistCategory[]> => {
-  const categories = (await request.get('/api/v1/categories')) as Array<
+  const categories = (await request.get('/v1/categories')) as Array<
     SpecialistCategory & { id: unknown }
   >
 
@@ -60,20 +60,20 @@ export const fetchSpecialistCategories = async (): Promise<SpecialistCategory[]>
 export const fetchSpecialists = (
   params: SpecialistSearchParams,
 ): Promise<SpecialistSearchResult> => {
-  return request.get('/api/v1/specialists', {
+  return request.get('/v1/specialists', {
     params: buildSearchParams(params),
   })
 }
 
 export const fetchSpecialistDetail = (id: number): Promise<SpecialistDetail> => {
-  return request.get(`/api/v1/specialists/${id}`)
+  return request.get(`/v1/specialists/${id}`)
 }
 
 export const fetchSpecialistAvailability = (
   id: number,
   date: string,
 ): Promise<SpecialistAvailabilitySlot[]> => {
-  return request.get(`/api/v1/specialists/${id}/availability`, {
+  return request.get(`/v1/specialists/${id}/availability`, {
     params: { date },
   })
 }

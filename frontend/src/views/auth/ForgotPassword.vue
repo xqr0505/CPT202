@@ -35,7 +35,7 @@
           {{ loading ? 'Sending...' : 'Send Verification Code' }}
         </button>
         <div class="back-link">
-          <router-link to="/auth/login">Back to Login</router-link>
+          <router-link to="/auth">Back to Login</router-link>
         </div>
       </div>
 
@@ -106,6 +106,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { sendVerificationCode } from '@/api/auth';
 import request from '@/api/request';
+import { clearRememberedCredentials } from '@/utils/rememberCredentials';
 
 const router = useRouter();
 const loading = ref(false);
@@ -206,8 +207,9 @@ async function resetPassword() {
       newPassword: newPassword.value,
       confirmPassword: confirmPassword.value
     });
+    clearRememberedCredentials();
     ElMessage.success('Password reset successfully. Please login with your new password.');
-    router.push('/auth/login');
+    router.push('/auth');
   } catch (error: any) {
     ElMessage.error(error.message || 'Failed to reset password');
   } finally {

@@ -1,6 +1,5 @@
 type RememberedCredentialsPayload = {
   email: string
-  password: string
 }
 
 type RememberedCredentialsRecordV1 = {
@@ -150,15 +149,14 @@ const parseStoredRecord = (raw: string | null): RememberedCredentialsRecordV1 | 
   }
 }
 
-export const saveRememberedCredentials = async (email: string, password: string): Promise<void> => {
+export const saveRememberedCredentials = async (email: string): Promise<void> => {
   if (!isRememberCredentialsAllowed()) {
     return
   }
 
   const normalizedEmail = String(email || '').trim()
-  const rawPassword = String(password || '')
 
-  if (!normalizedEmail || !rawPassword) {
+  if (!normalizedEmail) {
     clearRememberedCredentials()
     return
   }
@@ -166,8 +164,7 @@ export const saveRememberedCredentials = async (email: string, password: string)
   const now = Date.now()
   const exp = now + SEVEN_DAYS_MS
   const payload: RememberedCredentialsPayload = {
-    email: normalizedEmail,
-    password: rawPassword
+    email: normalizedEmail
   }
 
   const encrypted = await encryptString(JSON.stringify(payload))
@@ -193,14 +190,13 @@ export const loadRememberedCredentials = async (): Promise<RememberedCredentials
     const decrypted = await decryptString(record)
     const payload = JSON.parse(decrypted) as Partial<RememberedCredentialsPayload>
     const email = typeof payload.email === 'string' ? payload.email.trim() : ''
-    const password = typeof payload.password === 'string' ? payload.password : ''
 
-    if (!email || !password) {
+    if (!email) {
       clearRememberedCredentials()
       return null
     }
 
-    return { email, password }
+    return { email }
   } catch {
     clearRememberedCredentials()
     return null
@@ -212,6 +208,5 @@ export const hasValidRememberedCredentials = async (): Promise<boolean> => {
     return false
   }
   const payload = await loadRememberedCredentials()
-  return Boolean(payload?.email && payload?.password)
+  return Boolean(payload?.email)
 }
-

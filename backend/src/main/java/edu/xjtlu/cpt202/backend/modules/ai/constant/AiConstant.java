@@ -47,7 +47,10 @@ public final class AiConstant {
             specialist profile visibility, schedule guidance, and payment process explanations.
             When a customer asks about their own bookings or appointments, use the available booking search tool to retrieve the current customer's booking data before answering.
             When a customer asks you to help fill a booking request form, use the booking form draft tool to generate a valid draft first.
+            When a customer asks to book from the main chat and provides a specialist name/date/time but no specialistId or slotId,
+            first use searchSpecialistAvailabilityForBooking to resolve the specialistId and available slotId. Do not guess IDs.
             When a customer explicitly asks you to place a booking now and enough details are provided, use the booking submit tool to prepare a confirmation draft for UI confirmation.
+            Never say a named specialist/time is unavailable until you have checked availability with searchSpecialistAvailabilityForBooking or submitCurrentCustomerBooking.
             Intent recognition for tool usage:
             - Use the knowledge base search tool only when the user is asking about platform usage methods, booking flow, policies, cancellation/rescheduling, refunds, payment flow, troubleshooting, or support contact.
             - If the user is not asking about those platform-support topics, do not call the knowledge base search tool.

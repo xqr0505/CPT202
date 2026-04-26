@@ -11,6 +11,7 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,6 +42,7 @@ public class AiRagDebugController {
 
     private final RagProperties ragProperties;
     private final DashScopeEmbeddingProperties embeddingProperties;
+    private final Environment environment;
     private final RedisTemplate<String, String> redisTemplate;
     private final EmbeddingStore<TextSegment> embeddingStore;
     private final EmbeddingModel embeddingModel;
@@ -48,12 +50,14 @@ public class AiRagDebugController {
     public AiRagDebugController(
             RagProperties ragProperties,
             DashScopeEmbeddingProperties embeddingProperties,
+            Environment environment,
             RedisTemplate<String, String> redisTemplate,
             EmbeddingStore<TextSegment> embeddingStore,
             EmbeddingModel embeddingModel
     ) {
         this.ragProperties = ragProperties;
         this.embeddingProperties = embeddingProperties;
+        this.environment = environment;
         this.redisTemplate = redisTemplate;
         this.embeddingStore = embeddingStore;
         this.embeddingModel = embeddingModel;
@@ -77,8 +81,13 @@ public class AiRagDebugController {
         payload.put("redisIndexName", redis.getIndexName());
         payload.put("redisPrefix", redis.getPrefix());
         payload.put("segmentKeyCountByPrefix", keyCount);
-        payload.put("embeddingModelName", embeddingProperties.getModelName());
-        payload.put("embeddingDimension", embeddingProperties.getDimension());
+        payload.put("embeddingModelImpl", embeddingModel.getClass().getName());
+        payload.put("embeddingModelNameConfigured", embeddingProperties.getModelName());
+        payload.put("embeddingDimensionConfigured", embeddingProperties.getDimension());
+        payload.put("springProp_ai_embedding_dashscope_model_name", environment.getProperty("ai.embedding.dashscope.model-name"));
+        payload.put("springProp_ai_embedding_dashscope_dimension", environment.getProperty("ai.embedding.dashscope.dimension"));
+        payload.put("env_DASHSCOPE_EMBEDDING_MODEL_NAME", System.getenv("DASHSCOPE_EMBEDDING_MODEL_NAME"));
+        payload.put("env_DASHSCOPE_EMBEDDING_DIMENSION", System.getenv("DASHSCOPE_EMBEDDING_DIMENSION"));
         return Result.success(payload);
     }
 
@@ -95,6 +104,15 @@ public class AiRagDebugController {
         }
 
         Embedding embedding = embeddingModel.embed(normalized).content();
+        // Report runtime embedding dimension instead of only config values.
+        payload.put("embeddingModelImpl", embeddingModel.getClass().getName());
+        payload.put("embeddingModelNameConfigured", embeddingProperties.getModelName());
+        payload.put("embeddingDimensionConfigured", embeddingProperties.getDimension());
+        payload.put("embeddingDimensionActual", embedding.vector() == null ? null : embedding.vector().length);
+        payload.put("springProp_ai_embedding_dashscope_model_name", environment.getProperty("ai.embedding.dashscope.model-name"));
+        payload.put("springProp_ai_embedding_dashscope_dimension", environment.getProperty("ai.embedding.dashscope.dimension"));
+        payload.put("env_DASHSCOPE_EMBEDDING_MODEL_NAME", System.getenv("DASHSCOPE_EMBEDDING_MODEL_NAME"));
+        payload.put("env_DASHSCOPE_EMBEDDING_DIMENSION", System.getenv("DASHSCOPE_EMBEDDING_DIMENSION"));
         payload.put("configuredMinScore", ragProperties.getMinScore());
 
         EmbeddingSearchResult<TextSegment> configuredResult =

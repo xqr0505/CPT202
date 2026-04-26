@@ -183,6 +183,9 @@ import {
 
 defineOptions({ name: 'AuthCard' });
 
+const BOOKING_FORM_DRAFT_STORAGE_KEY = 'customer.booking.form.draft';
+const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context';
+
 const router = useRouter();
 const userStore = useUserStore();
 
@@ -313,6 +316,21 @@ const mapRoleToUserRole = (role: string) => {
       return 'customer';
   }
 };
+
+const clearBookingSessionState = (userId?: number | string | null) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const scopedUserId = userId === null || userId === undefined ? '' : String(userId);
+  [BOOKING_FORM_DRAFT_STORAGE_KEY, AI_BOOKING_CONTEXT_STORAGE_KEY].forEach((key) => {
+    window.sessionStorage.removeItem(key);
+    if (scopedUserId) {
+      window.sessionStorage.removeItem(`${key}:${scopedUserId}`);
+    }
+  });
+};
+
 const askRememberCredentialsChoice = async (): Promise<boolean> => {
   try {
     await ElMessageBox.confirm(
@@ -403,6 +421,7 @@ async function handleLogin() {
     userStore.userRole = mapRoleToUserRole(response.role);
 
     dispatchSessionActivityEvent();
+    clearBookingSessionState(response.userId);
     ElMessage.success('Login successful');
 
     const targetRoute = loginForm.role === 'CUSTOMER' ? '/customer/search' :
@@ -549,6 +568,7 @@ async function handleRegister() {
     };
     userStore.userRole = response.role.toLowerCase() as any;
     dispatchSessionActivityEvent();
+    clearBookingSessionState(response.userId);
     ElMessage.success('Registration successful, logging in...');
 
     const target = response.role === 'SPECIALIST' ? '/specialist/schedule' : '/customer/search';

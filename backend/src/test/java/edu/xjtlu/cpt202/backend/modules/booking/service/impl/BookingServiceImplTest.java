@@ -644,6 +644,8 @@ public class BookingServiceImplTest {
         newSlot.setId(77L);
         newSlot.setSpecialistId(5L);
         newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
@@ -700,6 +702,8 @@ public class BookingServiceImplTest {
         newSlot.setId(newSlotId);
         newSlot.setSpecialistId(5L);
         newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
@@ -726,6 +730,14 @@ public class BookingServiceImplTest {
                 eq(new BigDecimal("100.00")),
                 eq(new BigDecimal("120.00"))))
                 .thenReturn(quoted);
+        when(bookingMapper.updateCustomerRescheduleIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(newSlotId),
+                eq(BookingStatusEnum.PENDING.name()),
+                eq("RESCHEDULE"),
+                any(LocalDateTime.class)))
+                .thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
         when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:detail:401"));
 
@@ -736,11 +748,14 @@ public class BookingServiceImplTest {
         assertEquals(BookingStatusEnum.PENDING.name(), result.getBookingStatus());
         assertEquals("FULL_REFUND", result.getPolicyType());
         assertEquals(new BigDecimal("20.00"), result.getPayableAmount());
-        verify(bookingMapper).updateById(argThat(updated ->
-                newSlotId.equals(updated.getSlotId())
-                        && "RESCHEDULE".equals(updated.getChangeType())
-                        && BookingStatusEnum.PENDING.name().equals(updated.getStatus())
-        ));
+        verify(bookingMapper).updateCustomerRescheduleIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(newSlotId),
+                eq(BookingStatusEnum.PENDING.name()),
+                eq("RESCHEDULE"),
+                any(LocalDateTime.class)
+        );
         verify(jsonRedisTemplate).delete(Set.of("booking:customer:1:detail:401"));
     }
 
@@ -766,6 +781,8 @@ public class BookingServiceImplTest {
         newSlot.setId(newSlotId);
         newSlot.setSpecialistId(5L);
         newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
@@ -799,6 +816,14 @@ public class BookingServiceImplTest {
                 .thenReturn(quoted);
         when(bookingMapper.selectOne(any())).thenReturn(cancelledBookingOnNewSlot);
         when(bookingMapper.deleteById(9001L)).thenReturn(1);
+        when(bookingMapper.updateCustomerRescheduleIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(newSlotId),
+                eq(BookingStatusEnum.PENDING.name()),
+                eq("RESCHEDULE"),
+                any(LocalDateTime.class)))
+                .thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
         when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:detail:1401"));
 
@@ -808,11 +833,14 @@ public class BookingServiceImplTest {
         assertEquals(bookingId, result.getBookingId());
         assertEquals(BookingStatusEnum.PENDING.name(), result.getBookingStatus());
         verify(bookingMapper).deleteById(9001L);
-        verify(bookingMapper).updateById(argThat(updated ->
-                newSlotId.equals(updated.getSlotId())
-                        && "RESCHEDULE".equals(updated.getChangeType())
-                        && BookingStatusEnum.PENDING.name().equals(updated.getStatus())
-        ));
+        verify(bookingMapper).updateCustomerRescheduleIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(newSlotId),
+                eq(BookingStatusEnum.PENDING.name()),
+                eq("RESCHEDULE"),
+                any(LocalDateTime.class)
+        );
     }
 
     @Test
@@ -837,6 +865,8 @@ public class BookingServiceImplTest {
         newSlot.setId(newSlotId);
         newSlot.setSpecialistId(5L);
         newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("120.00"));
@@ -860,6 +890,87 @@ public class BookingServiceImplTest {
                 () -> bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L));
         assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), ex.getCode());
         assertEquals("Time slot is not available", ex.getMessage());
+    }
+
+    @Test
+    void customerRescheduleQuote_NewSlotWithinTwoHours_NotAllowed() {
+        Long bookingId = 480L;
+        Long newSlotId = 180L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(58L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(58L);
+        currentSlot.setSpecialistId(5L);
+        currentSlot.setSlotDate(LocalDate.now().plusDays(1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        LocalDateTime tooSoon = LocalDateTime.now().plusMinutes(90);
+        newSlot.setSlotDate(tooSoon.toLocalDate());
+        newSlot.setStartTime(tooSoon.toLocalTime());
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(58L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerRescheduleQuote(bookingId, newSlotId, 1L));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        assertEquals("New slot must be more than 2 hours from now", ex.getMessage());
+        verify(customerBookingChangePolicyService, never()).customerRescheduleQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class), any(BigDecimal.class));
+    }
+
+    @Test
+    void customerRescheduleConfirm_NewSlotWithinTwoHours_NotAllowed() {
+        Long bookingId = 481L;
+        Long newSlotId = 181L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(59L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(59L);
+        currentSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        currentSlot.setSlotDate(LocalDate.now().plusDays(1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        LocalDateTime tooSoon = LocalDateTime.now().plusMinutes(90);
+        newSlot.setSlotDate(tooSoon.toLocalDate());
+        newSlot.setStartTime(tooSoon.toLocalTime());
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(59L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L));
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        assertEquals("New slot must be more than 2 hours from now", ex.getMessage());
+        verify(customerBookingChangePolicyService, never()).customerRescheduleQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class), any(BigDecimal.class));
     }
 
     @Test
@@ -893,6 +1004,14 @@ public class BookingServiceImplTest {
                 eq(LocalDateTime.of(2026, 5, 1, 14, 0)),
                 any(LocalDateTime.class),
                 eq(new BigDecimal("120.00")))).thenReturn(quoted);
+        when(bookingMapper.updateCustomerCancelIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("CUSTOMER_MANUAL"),
+                eq("CANCEL"),
+                any(LocalDateTime.class)))
+                .thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
         when(jsonRedisTemplate.keys(anyString())).thenReturn(Set.of("booking:customer:1:list:1"));
 
@@ -902,11 +1021,14 @@ public class BookingServiceImplTest {
         assertEquals(BookingStatusEnum.CANCELLED.name(), result.getBookingStatus());
         assertEquals(new BigDecimal("120.00"), result.getRefundAmount());
         assertEquals(new BigDecimal("0.00"), result.getPenaltyAmount());
-        verify(bookingMapper).updateById(argThat(updated ->
-                BookingStatusEnum.CANCELLED.name().equals(updated.getStatus())
-                        && "CUSTOMER".equals(updated.getCancelledBy())
-                        && "CANCEL".equals(updated.getChangeType())
-        ));
+        verify(bookingMapper).updateCustomerCancelIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("CUSTOMER_MANUAL"),
+                eq("CANCEL"),
+                any(LocalDateTime.class)
+        );
         verify(jsonRedisTemplate).delete(Set.of("booking:customer:1:list:1"));
     }
 
@@ -939,7 +1061,8 @@ public class BookingServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> bookingService.customerCancellationConfirm(bookingId, 1L));
         assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
-        verify(bookingMapper, times(0)).updateById(any(Booking.class));
+        verify(bookingMapper, never()).updateCustomerCancelIfCancellable(
+                anyLong(), anyLong(), anyString(), anyString(), anyString(), any(LocalDateTime.class));
 
     }
 
@@ -951,6 +1074,7 @@ public class BookingServiceImplTest {
         Booking booking = new Booking();
         booking.setId(bookingId);
         booking.setCustomerId(9L);
+        booking.setSpecialistId(20L);
         booking.setSlotId(99L);
         booking.setStatus(BookingStatusEnum.CONFIRMED.name());
 
@@ -967,16 +1091,30 @@ public class BookingServiceImplTest {
         when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
         when(bookingMapper.selectById(bookingId)).thenReturn(booking);
         when(timeSlotMapper.selectById(99L)).thenReturn(slot);
+        when(bookingMapper.updateSpecialistForceCancelIfCancellable(
+                eq(bookingId),
+                anyLong(),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("SPECIALIST_MANUAL"),
+                eq("Emergency issue"),
+                eq("Emergency issue"),
+                eq("SPECIALIST_FORCE_CANCEL"),
+                any(LocalDateTime.class)))
+                .thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
 
         bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO);
 
-        verify(bookingMapper).updateById(argThat(updated ->
-                BookingStatusEnum.CANCELLED.name().equals(updated.getStatus())
-                        && "SPECIALIST".equals(updated.getCancelledBy())
-                        && "SPECIALIST_FORCE_CANCEL".equals(updated.getChangeType())
-                        && "Emergency issue".equals(updated.getCancelReason())
-        ));
+        verify(bookingMapper).updateSpecialistForceCancelIfCancellable(
+                eq(bookingId),
+                anyLong(),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("SPECIALIST_MANUAL"),
+                eq("Emergency issue"),
+                eq("Emergency issue"),
+                eq("SPECIALIST_FORCE_CANCEL"),
+                any(LocalDateTime.class)
+        );
         verify(timeSlotMapper).update(argThat(updated ->
                 TimeSlotStatusEnum.AVAILABLE.name().equals(updated.getStatus())
         ), any());
@@ -990,6 +1128,7 @@ public class BookingServiceImplTest {
         Booking booking = new Booking();
         booking.setId(bookingId);
         booking.setCustomerId(9L);
+        booking.setSpecialistId(21L);
         booking.setSlotId(100L);
         booking.setStatus(BookingStatusEnum.PENDING.name());
 
@@ -1006,6 +1145,16 @@ public class BookingServiceImplTest {
         when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
         when(bookingMapper.selectById(bookingId)).thenReturn(booking);
         when(timeSlotMapper.selectById(100L)).thenReturn(slot);
+        when(bookingMapper.updateSpecialistForceCancelIfCancellable(
+                eq(bookingId),
+                anyLong(),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("SPECIALIST_MANUAL"),
+                eq("Clinic unavailable"),
+                eq("Clinic unavailable"),
+                eq("SPECIALIST_FORCE_CANCEL"),
+                any(LocalDateTime.class)))
+                .thenReturn(1);
         when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
 
         bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO);
@@ -1044,7 +1193,153 @@ public class BookingServiceImplTest {
                 () -> bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
         assertEquals("Cannot cancel within 2 hours before start time", ex.getMessage());
-        verify(bookingMapper, never()).updateById(any(Booking.class));
+        verify(bookingMapper, never()).updateSpecialistForceCancelIfCancellable(
+                anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString(), any(LocalDateTime.class));
+    }
+
+    @Test
+    void customerCancellationConfirm_ConcurrentBookingUpdateConflict() {
+        Long bookingId = 1300L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(188L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(188L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .message("More than 24 hours to start, full refund")
+                .refundAmount(new BigDecimal("120.00"))
+                .penaltyAmount(new BigDecimal("0.00"))
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(188L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+        when(bookingMapper.updateCustomerCancelIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("CUSTOMER_MANUAL"),
+                eq("CANCEL"),
+                any(LocalDateTime.class)))
+                .thenReturn(0);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationConfirm(bookingId, 1L));
+        assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), ex.getCode());
+        assertEquals("Booking status changed, please refresh and try again", ex.getMessage());
+        verify(timeSlotMapper, never()).update(any(TimeSlot.class), any());
+    }
+
+    @Test
+    void customerRescheduleConfirm_ConcurrentBookingUpdateConflict() {
+        Long bookingId = 1402L;
+        Long newSlotId = 179L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(156L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(156L);
+        currentSlot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(156L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1, 1);
+        when(bookingMapper.updateCustomerRescheduleIfCancellable(
+                eq(bookingId),
+                eq(1L),
+                eq(newSlotId),
+                eq(BookingStatusEnum.PENDING.name()),
+                eq("RESCHEDULE"),
+                any(LocalDateTime.class)))
+                .thenReturn(0);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerRescheduleConfirm(bookingId, newSlotId, 1L));
+        assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), ex.getCode());
+        assertEquals("Booking status changed, please refresh and try again", ex.getMessage());
+    }
+
+    @Test
+    void specialistForceCancelBooking_ConcurrentBookingUpdateConflict() {
+        Long bookingId = 1501L;
+        Long specialistUserId = 2L;
+
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(9L);
+        booking.setSpecialistId(12L);
+        booking.setSlotId(199L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(199L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        slot.setSlotDate(LocalDate.now().plusDays(2));
+        slot.setStartTime(LocalTime.now());
+
+        SpecialistForceCancelBookingRequestDTO requestDTO = new SpecialistForceCancelBookingRequestDTO();
+        requestDTO.setCancelReason("Emergency issue");
+        requestDTO.setReleaseSlot(true);
+
+        when(bookingMapper.countBookingOwnedBySpecialist(bookingId, specialistUserId)).thenReturn(1L);
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(199L)).thenReturn(slot);
+        when(bookingMapper.updateSpecialistForceCancelIfCancellable(
+                eq(bookingId),
+                eq(12L),
+                eq(BookingStatusEnum.CANCELLED.name()),
+                eq("SPECIALIST_MANUAL"),
+                eq("Emergency issue"),
+                eq("Emergency issue"),
+                eq("SPECIALIST_FORCE_CANCEL"),
+                any(LocalDateTime.class)))
+                .thenReturn(0);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.specialistForceCancelBooking(bookingId, specialistUserId, requestDTO));
+        assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), ex.getCode());
+        assertEquals("Booking status changed, please refresh and try again", ex.getMessage());
+        verify(timeSlotMapper, never()).update(any(TimeSlot.class), any());
     }
 
     @Test

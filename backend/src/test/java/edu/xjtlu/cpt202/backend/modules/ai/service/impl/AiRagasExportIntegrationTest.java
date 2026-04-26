@@ -52,7 +52,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 2) OPENAI_API_KEY + OPENAI_MODEL_NAME
  * 3) DASHSCOPE_API_KEY
  */
-@SpringBootTest(classes = AiRagasExportIntegrationTest.TestApplication.class)
+@SpringBootTest(
+        classes = AiRagasExportIntegrationTest.TestApplication.class,
+        properties = {
+                "ai.tools.parallel.enabled=false",
+                "ai.tools.parallel.timeout-ms=60000"
+        }
+)
 @ActiveProfiles("dev")
 class AiRagasExportIntegrationTest {
 

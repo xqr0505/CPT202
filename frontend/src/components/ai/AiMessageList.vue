@@ -46,6 +46,7 @@ const markdownRenderer = new MarkdownIt({
   linkify: true,
   typographer: true
 })
+const AI_BOOKING_PREVIEW_MARKER_PATTERN = /\n{0,2}AI_BOOKING_PREVIEW:\{[\s\S]*\}\s*$/m
 
 const defaultLinkOpenRenderer =
   markdownRenderer.renderer.rules.link_open ??
@@ -109,7 +110,7 @@ const messageContent = (message: AiChatMessage): string => {
     return AI_CHAT_THINKING_TEXT
   }
 
-  return message.content
+  return message.content.replace(AI_BOOKING_PREVIEW_MARKER_PATTERN, '').trim()
 }
 
 const renderMessageContent = (message: AiChatMessage): string => {

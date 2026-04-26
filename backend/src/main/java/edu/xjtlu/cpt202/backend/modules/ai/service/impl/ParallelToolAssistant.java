@@ -15,7 +15,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.output.Response;
@@ -36,6 +36,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -46,6 +47,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -62,6 +64,8 @@ public class ParallelToolAssistant implements Assistant {
     private static final Logger log = LoggerFactory.getLogger(ParallelToolAssistant.class);
     private static final int MAX_TOOL_ROUNDS = 8;
     private static final int STREAM_CHUNK_SIZE = 24;
+    private static final String BOOKING_SUBMIT_TOOL_NAME = "submitCurrentCustomerBooking";
+    private static final String BOOKING_PREVIEW_MARKER = "AI_BOOKING_PREVIEW:";
     private static final ObjectMapper TOOL_ARGUMENT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -127,16 +131,17 @@ public class ParallelToolAssistant implements Assistant {
             String userMessage,
             Consumer<ToolExecution> onToolExecuted
     ) {
-        MessageWindowChatMemory chatMemory = chatMemory(memoryId);
-        ensureSystemMessage(chatMemory);
-        chatMemory.add(UserMessage.userMessage(userMessage));
+        List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
+        ensureSystemMessage(messages);
+        addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
-        Response<AiMessage> response = invokeModel(chatMemory.messages());
+        Response<AiMessage> response = invokeModel(messages);
         AiMessage aiMessage = response.content();
         if (aiMessage == null) {
+            chatMemoryStore.updateMessages(memoryId, messages);
             return response;
         }
-        chatMemory.add(aiMessage);
+        addMessageToWindow(messages, aiMessage);
 
         int rounds = 0;
         while (aiMessage.hasToolExecutionRequests()) {
@@ -147,18 +152,66 @@ public class ParallelToolAssistant implements Assistant {
 
             List<ToolExecutionResultMessage> results = executeToolRequests(aiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
             for (ToolExecutionResultMessage result : results) {
-                chatMemory.add(result);
+                addMessageToWindow(messages, result);
             }
 
-            response = invokeModel(chatMemory.messages());
+            try {
+                response = invokeModel(messages);
+            } catch (RuntimeException exception) {
+                AiMessage fallbackMessage = bookingSubmitFallbackMessage(results);
+                if (fallbackMessage == null) {
+                    throw exception;
+                }
+                addMessageToWindow(messages, fallbackMessage);
+                chatMemoryStore.updateMessages(memoryId, messages);
+                log.warn("AI final response failed after booking submit tool; returned structured tool result", exception);
+                return Response.from(fallbackMessage);
+            }
             aiMessage = response.content();
             if (aiMessage == null) {
                 break;
             }
-            chatMemory.add(aiMessage);
+            aiMessage = appendBookingPreviewMarkerIfNeeded(aiMessage, results);
+            response = Response.from(aiMessage, response.tokenUsage(), response.finishReason(), response.metadata());
+            addMessageToWindow(messages, aiMessage);
         }
 
+        chatMemoryStore.updateMessages(memoryId, messages);
         return response;
+    }
+
+    private AiMessage bookingSubmitFallbackMessage(List<ToolExecutionResultMessage> results) {
+        for (ToolExecutionResultMessage result : results) {
+            if (BOOKING_SUBMIT_TOOL_NAME.equals(result.toolName()) && result.text() != null && !result.text().isBlank()) {
+                return AiMessage.from(result.text());
+            }
+        }
+        return null;
+    }
+
+    private AiMessage appendBookingPreviewMarkerIfNeeded(AiMessage aiMessage, List<ToolExecutionResultMessage> results) {
+        if (aiMessage == null || aiMessage.hasToolExecutionRequests()) {
+            return aiMessage;
+        }
+        String bookingResult = bookingSubmitResultText(results);
+        if (bookingResult == null || !bookingResult.contains("\"readyToSubmit\":true")) {
+            return aiMessage;
+        }
+
+        String text = aiMessage.text() == null ? AiConstant.EMPTY_CONTENT : aiMessage.text();
+        if (text.contains(BOOKING_PREVIEW_MARKER)) {
+            return aiMessage;
+        }
+        return AiMessage.from(text + "\n\n" + BOOKING_PREVIEW_MARKER + bookingResult);
+    }
+
+    private String bookingSubmitResultText(List<ToolExecutionResultMessage> results) {
+        for (ToolExecutionResultMessage result : results) {
+            if (BOOKING_SUBMIT_TOOL_NAME.equals(result.toolName()) && result.text() != null && !result.text().isBlank()) {
+                return result.text();
+            }
+        }
+        return null;
     }
 
     private Response<AiMessage> invokeModel(List<ChatMessage> messages) {
@@ -167,17 +220,56 @@ public class ParallelToolAssistant implements Assistant {
         return ToolArgumentSanitizer.sanitizeResponse(response, toolSpecifications);
     }
 
-    private MessageWindowChatMemory chatMemory(Long memoryId) {
-        return MessageWindowChatMemory.builder()
-                .id(memoryId)
-                .maxMessages(chatMemoryProperties.getMaxMessages())
-                .chatMemoryStore(chatMemoryStore)
-                .build();
+    private void invokeStreamingModel(
+            List<ChatMessage> messages,
+            StreamingResponseHandler<AiMessage> handler
+    ) {
+        List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
+        streamingChatLanguageModel.generate(sanitizedMessages, handler);
     }
 
-    private void ensureSystemMessage(MessageWindowChatMemory chatMemory) {
-        if (chatMemory.messages().isEmpty()) {
-            chatMemory.add(SystemMessage.systemMessage(systemPrompt));
+    private void ensureSystemMessage(List<ChatMessage> messages) {
+        if (messages.isEmpty()) {
+            addMessageToWindow(messages, SystemMessage.systemMessage(systemPrompt));
+        }
+    }
+
+    private void addMessageToWindow(List<ChatMessage> messages, ChatMessage message) {
+        if (message instanceof SystemMessage) {
+            int existingSystemIndex = indexOfSystemMessage(messages);
+            if (existingSystemIndex >= 0) {
+                if (messages.get(existingSystemIndex).equals(message)) {
+                    return;
+                }
+                messages.remove(existingSystemIndex);
+            }
+        }
+        messages.add(message);
+        ensureMessageWindowCapacity(messages);
+    }
+
+    private int indexOfSystemMessage(List<ChatMessage> messages) {
+        for (int index = 0; index < messages.size(); index++) {
+            if (messages.get(index) instanceof SystemMessage) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private void ensureMessageWindowCapacity(List<ChatMessage> messages) {
+        int maxMessages = chatMemoryProperties.getMaxMessages();
+        while (messages.size() > maxMessages) {
+            int removeIndex = !messages.isEmpty() && messages.get(0) instanceof SystemMessage ? 1 : 0;
+            if (removeIndex >= messages.size()) {
+                removeIndex = 0;
+            }
+            ChatMessage removed = messages.remove(removeIndex);
+            if (removed instanceof AiMessage removedAiMessage && removedAiMessage.hasToolExecutionRequests()) {
+                while (messages.size() > removeIndex && messages.get(removeIndex) instanceof ToolExecutionResultMessage) {
+                    messages.remove(removeIndex);
+                }
+            }
         }
     }
 
@@ -267,8 +359,42 @@ public class ParallelToolAssistant implements Assistant {
         } catch (Exception exception) {
             String errorMessage = "Tool execution failed for " + request.name();
             log.warn(errorMessage, exception);
-            throw new IllegalStateException(errorMessage, exception);
+            String result = toolFailureResult(request.name(), exception);
+            ToolExecution toolExecution = ToolExecution.builder()
+                    .request(request)
+                    .result(result)
+                    .build();
+            onToolExecuted.accept(toolExecution);
+            return ToolExecutionResultMessage.from(request, result);
         }
+    }
+
+    private String toolFailureResult(String toolName, Exception exception) {
+        try {
+            if (BOOKING_SUBMIT_TOOL_NAME.equals(toolName)) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("success", false);
+                result.put("readyToSubmit", false);
+                result.put("message", "Booking draft could not be prepared. Please check the selected date and time, then try again.");
+                result.put("warnings", List.of(rootCauseMessage(exception)));
+                return TOOL_ARGUMENT_MAPPER.writeValueAsString(result);
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Tool execution failed: " + rootCauseMessage(exception));
+            return TOOL_ARGUMENT_MAPPER.writeValueAsString(result);
+        } catch (Exception serializationException) {
+            return "{\"success\":false,\"message\":\"Tool execution failed\"}";
+        }
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
     }
 
     private IllegalStateException unwrapParallelError(Exception exception) {
@@ -382,9 +508,16 @@ public class ParallelToolAssistant implements Assistant {
         }
 
         private Object normalizeTemporalArgument(Object rawValue, Class<?> targetType) {
-            if (!LocalDate.class.equals(targetType)) {
-                return rawValue;
+            if (LocalDate.class.equals(targetType)) {
+                return normalizeLocalDateArgument(rawValue);
             }
+            if (LocalTime.class.equals(targetType)) {
+                return normalizeLocalTimeArgument(rawValue);
+            }
+            return rawValue;
+        }
+
+        private Object normalizeLocalDateArgument(Object rawValue) {
             if (rawValue instanceof String || rawValue instanceof Number) {
                 return rawValue;
             }
@@ -415,6 +548,53 @@ public class ParallelToolAssistant implements Assistant {
                 }
             }
             return rawValue;
+        }
+
+        private Object normalizeLocalTimeArgument(Object rawValue) {
+            if (rawValue instanceof String) {
+                String value = rawValue.toString().trim();
+                if (value.matches("^\\d{1,2}:\\d{2}$")) {
+                    return value + ":00";
+                }
+                return value;
+            }
+            if (rawValue instanceof Number secondsOfDay) {
+                long seconds = secondsOfDay.longValue();
+                if (seconds >= 0 && seconds < 24 * 60 * 60) {
+                    return LocalTime.ofSecondOfDay(seconds).toString();
+                }
+                return rawValue;
+            }
+            if (!(rawValue instanceof Map<?, ?> valueMap)) {
+                return rawValue;
+            }
+
+            Object hourRaw = firstPresent(valueMap, "hour", "hours", "h");
+            Object minuteRaw = firstPresent(valueMap, "minute", "minutes", "m");
+            Object secondRaw = firstPresent(valueMap, "second", "seconds", "s");
+            if (hourRaw instanceof Number hour && minuteRaw instanceof Number minute) {
+                int second = secondRaw instanceof Number secondNumber ? secondNumber.intValue() : 0;
+                return LocalTime.of(hour.intValue(), minute.intValue(), second).toString();
+            }
+
+            Object nanoOfDayRaw = valueMap.get("nanoOfDay");
+            if (nanoOfDayRaw instanceof Number nanoOfDay) {
+                return LocalTime.ofNanoOfDay(nanoOfDay.longValue()).toString();
+            }
+            Object secondOfDayRaw = valueMap.get("secondOfDay");
+            if (secondOfDayRaw instanceof Number secondOfDay) {
+                return LocalTime.ofSecondOfDay(secondOfDay.longValue()).toString();
+            }
+            return rawValue;
+        }
+
+        private Object firstPresent(Map<?, ?> valueMap, String... names) {
+            for (String name : names) {
+                if (valueMap.containsKey(name)) {
+                    return valueMap.get(name);
+                }
+            }
+            return null;
         }
     }
 
@@ -480,12 +660,60 @@ public class ParallelToolAssistant implements Assistant {
             CompletableFuture.runAsync(() -> {
                 try {
                     onRetrieved.accept(List.of());
-                    Response<AiMessage> response = runConversation(memoryId, userMessage, onToolExecuted);
-                    String reply = response.content() == null || response.content().text() == null
-                            ? AiConstant.EMPTY_CONTENT
-                            : response.content().text();
-                    emitChunks(reply);
-                    onComplete.accept(response);
+                    List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
+                    ensureSystemMessage(messages);
+                    addMessageToWindow(messages, UserMessage.userMessage(userMessage));
+
+                    Response<AiMessage> probeResponse = invokeModel(messages);
+                    AiMessage probeAiMessage = probeResponse.content();
+
+                    int rounds = 0;
+                    while (probeAiMessage != null && probeAiMessage.hasToolExecutionRequests()) {
+                        addMessageToWindow(messages, probeAiMessage);
+                        rounds++;
+                        if (rounds > MAX_TOOL_ROUNDS) {
+                            throw new IllegalStateException("Too many tool execution rounds: " + rounds);
+                        }
+
+                        List<ToolExecutionResultMessage> results =
+                                executeToolRequests(probeAiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+                        for (ToolExecutionResultMessage result : results) {
+                            addMessageToWindow(messages, result);
+                        }
+
+                        probeResponse = invokeModel(messages);
+                        probeAiMessage = probeResponse.content();
+                    }
+
+                    AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
+                    CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+
+                    invokeStreamingModel(messages, new StreamingResponseHandler<>() {
+                        @Override
+                        public void onNext(String token) {
+                            onNext.accept(token);
+                        }
+
+                        @Override
+                        public void onComplete(Response<AiMessage> response) {
+                            streamedResponseRef.set(response);
+                            streamedResponseFuture.complete(response);
+                        }
+
+                        @Override
+                        public void onError(Throwable error) {
+                            streamedResponseFuture.completeExceptionally(error);
+                        }
+                    });
+
+                    Response<AiMessage> streamedResponse = streamedResponseFuture.join();
+                    AiMessage streamedAiMessage = streamedResponse.content();
+                    if (streamedAiMessage != null) {
+                        addMessageToWindow(messages, streamedAiMessage);
+                    }
+                    chatMemoryStore.updateMessages(memoryId, messages);
+                    Response<AiMessage> completedResponse = streamedResponseRef.get();
+                    onComplete.accept(completedResponse == null ? streamedResponse : completedResponse);
                 } catch (Throwable throwable) {
                     if (ignoreErrors) {
                         return;
@@ -493,16 +721,6 @@ public class ParallelToolAssistant implements Assistant {
                     onError.accept(throwable);
                 }
             });
-        }
-
-        private void emitChunks(String reply) {
-            if (reply.isEmpty()) {
-                return;
-            }
-            for (int index = 0; index < reply.length(); index += STREAM_CHUNK_SIZE) {
-                int endIndex = Math.min(index + STREAM_CHUNK_SIZE, reply.length());
-                onNext.accept(reply.substring(index, endIndex));
-            }
         }
     }
 }

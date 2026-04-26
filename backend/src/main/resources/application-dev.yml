@@ -34,3 +34,16 @@ logging:
   level:
     root: INFO
     edu.xjtlu.cpt202: DEBUG
+
+ai:
+  tools:
+    parallel:
+      enabled: ${AI_TOOLS_PARALLEL_ENABLED:false}
+      max-concurrency: ${AI_TOOLS_PARALLEL_MAX_CONCURRENCY:2}
+      timeout-ms: ${AI_TOOLS_PARALLEL_TIMEOUT_MS:60000}
+  rag:
+    redis:
+      host: ${AI_RAG_REDIS_HOST:${REDIS_HOST:127.0.0.1}}
+      port: ${AI_RAG_REDIS_PORT:${REDIS_PORT:9002}}
+      username: ${AI_RAG_REDIS_USERNAME:}
+      password: ${AI_RAG_REDIS_PASSWORD:${REDIS_PASSWORD:}}

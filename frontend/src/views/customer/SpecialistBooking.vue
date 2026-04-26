@@ -508,8 +508,6 @@ const applyAiBookingDraft = (draft: AiBookingDraftPayload) => {
     const matchedSlot = availability.value.find(slot => slot.id === draftSlotId && slot.status === 'AVAILABLE')
     if (matchedSlot) {
       bookingForm.value.slotId = draftSlotId
-    } else {
-      ElMessage.warning(`AI draft slot #${draftSlotId} is not available on the current date.`)
     }
   }
 

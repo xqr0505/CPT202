@@ -1,5 +1,6 @@
 package edu.xjtlu.cpt202.backend.modules.user.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -70,6 +72,9 @@ class UserAccountServiceImplTest {
 
     @Mock
     private VerificationCodeService verificationCodeService;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private UserAccountServiceImpl userAccountService;
@@ -257,6 +262,31 @@ class UserAccountServiceImplTest {
     }
 
     @Test
+    void updateCurrentUserProfile_whenPhoneNumberFormatIsInvalid_throwsBadRequest() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        UpdateUserProfileDTO request = new UpdateUserProfileDTO();
+        request.setFullName("Alice Smith");
+        request.setEmail("alice@example.com");
+        request.setPhoneNumber("13800138000");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.updateCurrentUserProfile(request)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Please enter a valid phone number.", exception.getMessage());
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper, never()).updateById(any(User.class));
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
+    }
+
+    @Test
     void updateCurrentUserProfile_whenActivityLoggingFails_stillCompletesMainAction() {
         authenticateAs(7L);
         User currentUser = buildUser();
@@ -354,6 +384,7 @@ class UserAccountServiceImplTest {
         authenticateAs(7L);
         User currentUser = buildUser();
         ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setCurrentPassword("OldPass123");
         request.setNewEmail("  alice.new@example.com ");
         request.setCode("123456");
         VerificationCode verificationCode = VerificationCode.builder()
@@ -398,6 +429,7 @@ class UserAccountServiceImplTest {
         authenticateAs(7L);
         User currentUser = buildUser();
         ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setCurrentPassword("OldPass123");
         request.setNewEmail("alice.new@example.com");
         request.setCode("000000");
 
@@ -423,6 +455,32 @@ class UserAccountServiceImplTest {
         verify(userMapper, never()).updateById(any(User.class));
         verifyNoMoreInteractions(userMapper, verificationCodeService);
         verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
+    }
+
+    @Test
+    void changeCurrentUserEmail_whenCurrentPasswordIsWrong_throwsBadRequest() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setCurrentPassword("WrongPass123");
+        request.setNewEmail("alice.new@example.com");
+        request.setCode("123456");
+
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.changeCurrentUserEmail(request)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Current password is incorrect", exception.getMessage());
+
+        verify(userMapper).selectById(7L);
+        verify(userMapper, never()).selectOne(any());
+        verify(userMapper, never()).updateById(any(User.class));
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(verificationCodeService, userSecurityActivityMapper, refreshTokenMapper, avatarStorageService);
     }
 
     @Test

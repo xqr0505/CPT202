@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UserAccountDtoValidationTest {
@@ -21,19 +22,34 @@ class UserAccountDtoValidationTest {
     }
 
     @Test
-    void updateUserProfileDto_rejectsBlankNameInvalidEmailAndPhone() {
+    void updateUserProfileDto_rejectsInvalidEmailAndOverlongFields() {
         UpdateUserProfileDTO request = new UpdateUserProfileDTO();
-        request.setFullName(" ");
+        request.setFullName("A".repeat(61));
         request.setEmail("not-an-email");
-        request.setPhoneNumber("12345");
+        request.setPhoneNumber("+86 " + "1".repeat(15));
 
         Set<String> messages = validator.validate(request).stream()
                 .map(ConstraintViolation::getMessage)
                 .collect(Collectors.toSet());
 
-        assertTrue(messages.contains("Full name is required."));
+        assertTrue(messages.contains("Full name must be at most 60 characters."));
         assertTrue(messages.contains("Please enter a valid email address."));
-        assertTrue(messages.contains("Please enter a valid phone number."));
+        assertTrue(messages.contains("Phone number must be at most 18 characters."));
+    }
+
+    @Test
+    void updateUserProfileDto_allowsBlankOptionalFields() {
+        UpdateUserProfileDTO request = new UpdateUserProfileDTO();
+        request.setFullName(" ");
+        request.setEmail(" ");
+        request.setPhoneNumber(" ");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertFalse(messages.contains("Full name is required."));
+        assertFalse(messages.contains("Please enter a valid phone number."));
     }
 
     @Test

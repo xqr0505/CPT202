@@ -152,6 +152,34 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             New Appointment Time: %s
             Status: %s
             """;
+    private static final String SPECIALIST_APPROVE_CUSTOMER_EMAIL_SUBJECT = "Your booking request was approved";
+    private static final String SPECIALIST_APPROVE_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking request has been approved by the specialist.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Status: CONFIRMED
+            """;
+    private static final String SPECIALIST_REJECT_CUSTOMER_EMAIL_SUBJECT = "Your booking request was rejected";
+    private static final String SPECIALIST_REJECT_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking request has been rejected by the specialist.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Rejection Reason: %s
+            Refund Amount: %s
+            Status: CANCELLED
+            """;
+    private static final String SPECIALIST_TIMEOUT_CUSTOMER_EMAIL_SUBJECT = "Your booking request expired";
+    private static final String SPECIALIST_TIMEOUT_CUSTOMER_EMAIL_TEMPLATE = """
+            Your booking request was automatically rejected because it was not handled in time.
+            Booking ID: %d
+            Specialist: %s
+            Appointment Time: %s
+            Reason: %s
+            Refund Amount: %s
+            Status: CANCELLED
+            """;
 
     private final BookingMapper bookingMapper;
     private final BookingTopicMapper bookingTopicMapper;
@@ -486,6 +514,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());
+        sendSpecialistApprovalEmailAsync(booking, timeSlot);
     }
 
     private void expireTimedOutPendingRequestsForSpecialist(Long currentUserId) {
@@ -545,6 +574,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());
+        sendSpecialistRejectEmailAsync(booking, timeSlot, rejectionReason);
     }
 
     @Override
@@ -805,6 +835,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());
+        sendSpecialistTimeoutRejectEmailAsync(booking, slot, timeoutReason);
     }
 
     private void createFullRefundRecord(Booking booking, String calculationRule) {
@@ -1024,6 +1055,100 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                     );
                     return null;
                 });
+    }
+
+    private void sendSpecialistApprovalEmailAsync(Booking booking, TimeSlot slot) {
+        CompletableFuture.runAsync(() -> sendSpecialistApprovalEmailSafely(booking, slot))
+                .exceptionally(exception -> {
+                    log.error("Unexpected async error while sending specialist approval email: bookingId={}, reason={}",
+                            booking == null ? null : booking.getId(), exception.getMessage());
+                    return null;
+                });
+    }
+
+    private void sendSpecialistApprovalEmailSafely(Booking booking, TimeSlot slot) {
+        if (booking == null || mailSender == null) {
+            return;
+        }
+
+        String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+        if (!StringUtils.hasText(customerEmail)) {
+            log.warn("Skip specialist approval email because customer email is missing: bookingId={}, customerId={}",
+                    booking.getId(), booking.getCustomerId());
+            return;
+        }
+
+        sendSimpleEmail(customerEmail, SPECIALIST_APPROVE_CUSTOMER_EMAIL_SUBJECT, String.format(
+                Locale.ROOT,
+                SPECIALIST_APPROVE_CUSTOMER_EMAIL_TEMPLATE,
+                booking.getId(),
+                resolveSpecialistText(booking.getSpecialistId(), null),
+                formatAppointmentTime(slot)
+        ));
+    }
+
+    private void sendSpecialistRejectEmailAsync(Booking booking, TimeSlot slot, String rejectionReason) {
+        CompletableFuture.runAsync(() -> sendSpecialistRejectEmailSafely(booking, slot, rejectionReason))
+                .exceptionally(exception -> {
+                    log.error("Unexpected async error while sending specialist rejection email: bookingId={}, reason={}",
+                            booking == null ? null : booking.getId(), exception.getMessage());
+                    return null;
+                });
+    }
+
+    private void sendSpecialistRejectEmailSafely(Booking booking, TimeSlot slot, String rejectionReason) {
+        if (booking == null || mailSender == null) {
+            return;
+        }
+
+        String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+        if (!StringUtils.hasText(customerEmail)) {
+            log.warn("Skip specialist rejection email because customer email is missing: bookingId={}, customerId={}",
+                    booking.getId(), booking.getCustomerId());
+            return;
+        }
+
+        sendSimpleEmail(customerEmail, SPECIALIST_REJECT_CUSTOMER_EMAIL_SUBJECT, String.format(
+                Locale.ROOT,
+                SPECIALIST_REJECT_CUSTOMER_EMAIL_TEMPLATE,
+                booking.getId(),
+                resolveSpecialistText(booking.getSpecialistId(), null),
+                formatAppointmentTime(slot),
+                StringUtils.hasText(rejectionReason) ? rejectionReason : "N/A",
+                moneyText(booking.getPrice())
+        ));
+    }
+
+    private void sendSpecialistTimeoutRejectEmailAsync(Booking booking, TimeSlot slot, String timeoutReason) {
+        CompletableFuture.runAsync(() -> sendSpecialistTimeoutRejectEmailSafely(booking, slot, timeoutReason))
+                .exceptionally(exception -> {
+                    log.error("Unexpected async error while sending specialist timeout email: bookingId={}, reason={}",
+                            booking == null ? null : booking.getId(), exception.getMessage());
+                    return null;
+                });
+    }
+
+    private void sendSpecialistTimeoutRejectEmailSafely(Booking booking, TimeSlot slot, String timeoutReason) {
+        if (booking == null || mailSender == null) {
+            return;
+        }
+
+        String customerEmail = resolveCustomerEmail(booking.getCustomerId());
+        if (!StringUtils.hasText(customerEmail)) {
+            log.warn("Skip specialist timeout email because customer email is missing: bookingId={}, customerId={}",
+                    booking.getId(), booking.getCustomerId());
+            return;
+        }
+
+        sendSimpleEmail(customerEmail, SPECIALIST_TIMEOUT_CUSTOMER_EMAIL_SUBJECT, String.format(
+                Locale.ROOT,
+                SPECIALIST_TIMEOUT_CUSTOMER_EMAIL_TEMPLATE,
+                booking.getId(),
+                resolveSpecialistText(booking.getSpecialistId(), null),
+                formatAppointmentTime(slot),
+                StringUtils.hasText(timeoutReason) ? timeoutReason : "N/A",
+                moneyText(booking.getPrice())
+        ));
     }
 
     private void sendBookingSuccessEmailSafely(Long customerId, Booking booking, SpecialistDetailVO specialist, TimeSlot slot) {

@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.booking.model.vo;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -26,4 +27,12 @@ public class SpecialistHandledBookingVO {
     private LocalDateTime decisionTime;
 
     private String rejectionReason;
+
+    private String refundStatus;
+
+    private BigDecimal refundAmount;
+
+    private BigDecimal penaltyAmount;
+
+    private String refundRule;
 }

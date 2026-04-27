@@ -167,6 +167,8 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private JavaMailSender mailSender;
     @Value("${spring.mail.username:}")
     private String mailFromAddress;
+    @Value("${booking.specialist-approval.timeout-minutes:1440}")
+    private long specialistApprovalTimeoutMinutes;
 
     public BookingServiceImpl(
             BookingMapper bookingMapper,
@@ -439,17 +441,27 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public List<SpecialistPendingBookingVO> listPendingRequestsForSpecialist(Long currentUserId) {
-        return bookingMapper.selectPendingRequestsForSpecialist(currentUserId, BookingStatusEnum.PENDING.name());
+        expireTimedOutPendingRequestsForSpecialist(currentUserId);
+        return bookingMapper.selectPendingRequestsForSpecialist(
+                currentUserId,
+                BookingStatusEnum.PENDING.name(),
+                normalizedSpecialistApprovalTimeoutMinutes()
+        );
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public List<SpecialistHandledBookingVO> listHandledRequestsForSpecialist(Long currentUserId) {
+        expireTimedOutPendingRequestsForSpecialist(currentUserId);
         return bookingMapper.selectHandledRequestsForSpecialist(currentUserId);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public SpecialistBookingDetailVO getBookingRequestDetailForSpecialist(Long bookingId, Long currentUserId) {
+        expireTimedOutPendingRequestsForSpecialist(currentUserId);
         validateBookingOwnershipForSpecialist(bookingId, currentUserId);
         SpecialistBookingDetailVO detail = bookingMapper.selectBookingRequestDetailForSpecialist(bookingId, currentUserId);
         if (detail == null) {
@@ -476,6 +488,40 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         invalidateCustomerBookingCache(booking.getCustomerId());
     }
 
+    private void expireTimedOutPendingRequestsForSpecialist(Long currentUserId) {
+        long timeoutMinutes = normalizedSpecialistApprovalTimeoutMinutes();
+        if (timeoutMinutes <= 0) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<SpecialistPendingBookingVO> pendingRequests = bookingMapper.selectPendingRequestsForSpecialist(
+                currentUserId,
+                BookingStatusEnum.PENDING.name(),
+                timeoutMinutes
+        );
+        for (SpecialistPendingBookingVO request : pendingRequests) {
+            LocalDateTime submissionTime = request.getSubmissionTime();
+            if (submissionTime != null && !submissionTime.plusMinutes(timeoutMinutes).isAfter(now)) {
+                systemTimeoutCancelPendingBooking(request.getId(), buildApprovalTimeoutReason(timeoutMinutes));
+            }
+        }
+    }
+
+    private long normalizedSpecialistApprovalTimeoutMinutes() {
+        return Math.max(0, specialistApprovalTimeoutMinutes);
+    }
+
+    private String buildApprovalTimeoutReason(long timeoutMinutes) {
+        if (timeoutMinutes % 60 == 0) {
+            long hours = timeoutMinutes / 60;
+            return "Automatically rejected because the specialist did not handle the request within "
+                    + hours + (hours == 1 ? " hour." : " hours.");
+        }
+        return "Automatically rejected because the specialist did not handle the request within "
+                + timeoutMinutes + (timeoutMinutes == 1 ? " minute." : " minutes.");
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void rejectBookingRequest(Long bookingId, Long currentUserId, SpecialistRejectBookingRequestDTO requestDTO) {
@@ -488,7 +534,9 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setCancelledBy(BookingCancellationSourceEnum.SPECIALIST_MANUAL.getCode());
         booking.setCancelReason(rejectionReason);
         booking.setChangeType("REJECT");
+        booking.setRefundStatus(RefundStatusEnum.PENDING.name());
         bookingMapper.updateById(booking);
+        createFullRefundRecord(booking, "SPECIALIST_REJECT_FULL_REFUND");
 
         TimeSlot timeSlot = timeSlotMapper.selectById(booking.getSlotId());
         if (timeSlot != null) {
@@ -742,6 +790,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         booking.setRefundStatus(RefundStatusEnum.PENDING.name());
         booking.setDecisionTime(now);
         bookingMapper.updateById(booking);
+        createFullRefundRecord(booking, "SYSTEM_TIMEOUT_FULL_REFUND");
 
         TimeSlot releaseSlot = new TimeSlot();
         releaseSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
@@ -756,6 +805,18 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         invalidateCustomerBookingCache(booking.getCustomerId());
+    }
+
+    private void createFullRefundRecord(Booking booking, String calculationRule) {
+        BigDecimal refundAmount = booking.getPrice() == null ? BigDecimal.ZERO : booking.getPrice();
+        refundAmount = refundAmount.max(BigDecimal.ZERO);
+        bookingMapper.insertRefundPenaltyRecord(
+                booking.getId(),
+                refundAmount,
+                BigDecimal.ZERO,
+                calculationRule,
+                RefundStatusEnum.PENDING.name()
+        );
     }
 
     @Override

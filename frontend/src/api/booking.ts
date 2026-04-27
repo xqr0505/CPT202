@@ -164,6 +164,7 @@ export interface SpecialistPendingBookingVO {
   requestedEndTime: string
   topic: string
   submissionTime: string
+  autoRejectAt?: string
   customerNotes?: string
 }
 
@@ -178,6 +179,10 @@ export interface SpecialistHandledBookingVO {
   status: 'APPROVED' | 'REJECTED'
   decisionTime: string
   rejectionReason?: string
+  refundStatus?: string
+  refundAmount?: number
+  penaltyAmount?: number
+  refundRule?: string
 }
 
 export interface SpecialistBookingDetailVO {
@@ -186,11 +191,16 @@ export interface SpecialistBookingDetailVO {
   requestedStartTime: string
   requestedEndTime: string
   topic: string
+  price?: number
   submissionTime: string
   customerNotes?: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   decisionTime?: string
   rejectionReason?: string
+  refundStatus?: string
+  refundAmount?: number
+  penaltyAmount?: number
+  refundRule?: string
 }
 
 export const getUpcomingBookings = () => {

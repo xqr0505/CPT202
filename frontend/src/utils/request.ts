@@ -6,12 +6,12 @@ const request = axios.create({
   timeout: 5000
 })
 
-// 请求拦截器（可以先不用管）
+// Request interceptor (can be left as-is for now)
 request.interceptors.request.use(config => {
   return config
 })
 
-// 响应拦截器
+// Response interceptor
 request.interceptors.response.use(
   response => {
     return response.data

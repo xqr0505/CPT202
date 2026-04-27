@@ -50,4 +50,7 @@ public class AdminSpecialistUpdateDTO {
 
     @Size(max = 500, message = "avatarUrl must be at most 500 characters")
     private String avatarUrl;
+
+    @Size(max = 2000, message = "bio must be at most 2000 characters")
+    private String bio;
 }

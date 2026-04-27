@@ -6,6 +6,7 @@ export interface SpecialistItem {
   id: number
   name: string
   email?: string
+  bio?: string
   categoryId: number
   categoryName?: string
   level: string
@@ -33,6 +34,7 @@ export interface SpecialistListResponse {
 export interface CreateSpecialistPayload {
   name: string
   email: string
+  bio?: string
   categoryId: number
   level: string
   consultationFee: number
@@ -43,6 +45,7 @@ export interface CreateSpecialistPayload {
 export interface UpdateSpecialistPayload {
   name: string
   email: string
+  bio?: string
   password?: string
   resetPasswordToDefault?: boolean
   categoryId: number

@@ -105,7 +105,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/customer/search'
+    component: () => import('../views/pages/HomePlaceholder.vue')
   },
   {
     path: '/:pathMatch(.*)*',

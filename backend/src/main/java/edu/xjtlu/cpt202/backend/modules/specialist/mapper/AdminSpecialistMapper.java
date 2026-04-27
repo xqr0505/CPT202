@@ -80,6 +80,7 @@ public interface AdminSpecialistMapper {
                 COALESCE(NULLIF(u.full_name, ''), u.email) AS name,
                 u.email AS email,
                 COALESCE(sp.avatar_url, '') AS avatarUrl,
+                COALESCE(sp.bio, '') AS bio,
                 sp.category_id AS categoryId,
                 COALESCE(c.category_name, '') AS categoryName,
                 COALESCE(sp.level, '') AS level,
@@ -140,6 +141,7 @@ public interface AdminSpecialistMapper {
                 level = #{level},
                 consultation_fee = #{consultationFee},
                 avatar_url = #{avatarUrl},
+                bio = #{bio},
                 status = #{status},
                 updated_at = NOW()
             WHERE id = #{id}
@@ -150,6 +152,7 @@ public interface AdminSpecialistMapper {
             @Param("level") String level,
             @Param("consultationFee") java.math.BigDecimal consultationFee,
             @Param("avatarUrl") String avatarUrl,
+            @Param("bio") String bio,
             @Param("status") String status
     );
 

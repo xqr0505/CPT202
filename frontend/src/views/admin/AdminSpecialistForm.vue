@@ -108,6 +108,17 @@
             <ImageUploader v-model="form.avatarUrl" />
           </el-form-item>
 
+          <el-form-item label="Bio" prop="bio">
+            <el-input
+              v-model="form.bio"
+              type="textarea"
+              :rows="4"
+              maxlength="2000"
+              show-word-limit
+              placeholder="Please enter specialist bio"
+            />
+          </el-form-item>
+
           <el-form-item class="action-row">
             <el-button @click="goBack">Cancel</el-button>
             <el-button type="primary" :loading="submitLoading" @click="handleSubmit">
@@ -249,6 +260,7 @@ import {
 interface SpecialistFormModel {
   name: string
   email: string
+  bio: string
   resetPasswordToDefault: boolean
   categoryId?: number
   level: string
@@ -256,6 +268,8 @@ interface SpecialistFormModel {
   status: SpecialistStatus
   avatarUrl: string
 }
+
+const DEFAULT_BIO_TEMPLATE = 'Dr. [Full Name] is a [Specialty] specialist with [X]+ years of clinical experience. Focus areas include [Area 1], [Area 2], and [Area 3]. Committed to evidence-based care, clear communication, and personalized treatment planning.'
 
 const route = useRoute()
 const router = useRouter()
@@ -290,6 +304,7 @@ const avatarFallback = computed(() => (form.name.trim().slice(0, 1).toUpperCase(
 const form = reactive<SpecialistFormModel>({
   name: '',
   email: '',
+  bio: DEFAULT_BIO_TEMPLATE,
   resetPasswordToDefault: false,
   categoryId: undefined,
   level: '',
@@ -344,6 +359,9 @@ const rules: FormRules<SpecialistFormModel> = {
     { required: true, message: 'Please enter email', trigger: 'blur' },
     { type: 'email', message: 'Please enter a valid email', trigger: ['blur', 'change'] }
   ],
+  bio: [
+    { max: 2000, message: 'Bio must be at most 2000 characters', trigger: ['blur', 'change'] }
+  ],
   categoryId: [{ required: true, message: 'Please select category', trigger: 'change' }],
   level: [{ required: true, message: 'Please select level', trigger: 'change' }],
   consultationFee: [
@@ -390,6 +408,7 @@ async function fetchSpecialistDetail() {
     const detail = await getSpecialistDetail(specialistId.value)
     form.name = detail.name ?? ''
     form.email = detail.email ?? ''
+    form.bio = detail.bio ?? ''
     form.resetPasswordToDefault = false
     form.categoryId = detail.categoryId
     form.level = detail.level ?? ''
@@ -508,6 +527,7 @@ function buildCreatePayload(): CreateSpecialistPayload {
   return {
     name: form.name.trim(),
     email: form.email.trim().toLowerCase(),
+    bio: form.bio.trim() || undefined,
     categoryId: Number(form.categoryId),
     level: form.level.trim(),
     consultationFee: Number(form.consultationFee),
@@ -520,6 +540,7 @@ function buildUpdatePayload(): UpdateSpecialistPayload {
   return {
     name: form.name.trim(),
     email: form.email.trim().toLowerCase(),
+    bio: form.bio.trim() || undefined,
     categoryId: Number(form.categoryId),
     level: form.level.trim(),
     consultationFee: Number(form.consultationFee),

@@ -6,9 +6,7 @@ import edu.xjtlu.cpt202.backend.common.utils.BeanCopyUtils;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
-import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRule;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
-import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.CreateSlotRequest;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.UpdateSlotRequest;
@@ -22,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,7 +38,6 @@ public class ScheduleServiceImpl implements ScheduleService {
     private static final Long DEV_USER_ID = 1L;
 
     private final TimeSlotMapper timeSlotMapper;
-    private final AvailabilityRecurringRuleMapper recurringRuleMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
     private final RecurringRuleServiceImpl recurringRuleServiceImpl;
 
@@ -64,7 +60,6 @@ public class ScheduleServiceImpl implements ScheduleService {
         Long specialistId = getCurrentSpecialistId();
 
         validateTimeRange(request.getStartTime(), request.getEndTime());
-        ensureWithinConsultationHours(specialistId, request.getSlotDate(), request.getStartTime(), request.getEndTime());
         checkTimeSlotConflict(specialistId, request.getSlotDate(), request.getStartTime(), request.getEndTime(), null);
 
         TimeSlot timeSlot = new TimeSlot();
@@ -110,10 +105,16 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         LocalTime nextStartTime = request.getStartTime() != null ? request.getStartTime() : existingSlot.getStartTime();
         LocalTime nextEndTime = request.getEndTime() != null ? request.getEndTime() : existingSlot.getEndTime();
+        boolean timeChanged = !nextStartTime.equals(existingSlot.getStartTime())
+                || !nextEndTime.equals(existingSlot.getEndTime());
 
         validateTimeRange(nextStartTime, nextEndTime);
-        ensureWithinConsultationHours(specialistId, existingSlot.getSlotDate(), nextStartTime, nextEndTime);
         checkTimeSlotConflict(specialistId, existingSlot.getSlotDate(), nextStartTime, nextEndTime, slotId);
+
+        if (timeChanged && existingSlot.getRecurringRuleId() != null) {
+            recurringRuleServiceImpl.recordRuleException(existingSlot.getRecurringRuleId(), existingSlot.getSlotDate());
+            existingSlot.setRecurringRuleId(null);
+        }
 
         if (request.getStartTime() != null) {
             existingSlot.setStartTime(nextStartTime);
@@ -147,6 +148,10 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
 
         ensureSlotIsAvailable(existingSlot);
+
+        if (existingSlot.getRecurringRuleId() != null) {
+            recurringRuleServiceImpl.recordRuleException(existingSlot.getRecurringRuleId(), existingSlot.getSlotDate());
+        }
 
         timeSlotMapper.deleteById(slotId);
         log.info("Deleted time slot {}", slotId);
@@ -228,30 +233,6 @@ public class ScheduleServiceImpl implements ScheduleService {
     private void ensureSlotIsAvailable(TimeSlot existingSlot) {
         if (!TimeSlotStatusEnum.AVAILABLE.name().equals(existingSlot.getStatus())) {
             throw new BusinessException(BAD_REQUEST.getCode(), "Only available slots can be modified or deleted");
-        }
-    }
-
-    private void ensureWithinConsultationHours(Long specialistId, LocalDate slotDate, LocalTime startTime, LocalTime endTime) {
-        int dayOfWeek = slotDate.getDayOfWeek().getValue();
-
-        LambdaQueryWrapper<AvailabilityRecurringRule> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(AvailabilityRecurringRule::getSpecialistId, specialistId)
-               .eq(AvailabilityRecurringRule::getIsActive, 1)
-               .eq(AvailabilityRecurringRule::getDayOfWeek, dayOfWeek)
-               .and(w -> w.isNull(AvailabilityRecurringRule::getEffectiveEndDate)
-                       .or()
-                       .ge(AvailabilityRecurringRule::getEffectiveEndDate, slotDate));
-
-        List<AvailabilityRecurringRule> rules = recurringRuleMapper.selectList(wrapper);
-        if (rules == null) {
-            rules = Collections.emptyList();
-        }
-
-        boolean coveredByRule = rules.stream().anyMatch(rule ->
-                !startTime.isBefore(rule.getStartTime()) && !endTime.isAfter(rule.getEndTime()));
-
-        if (!coveredByRule) {
-            throw new BusinessException(BAD_REQUEST.getCode(), "Time slot must be within your configured consultation hours");
         }
     }
 }

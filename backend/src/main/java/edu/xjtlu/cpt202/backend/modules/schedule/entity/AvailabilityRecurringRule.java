@@ -20,6 +20,8 @@ public class AvailabilityRecurringRule {
 
     private Long specialistId;
 
+    private LocalDate effectiveStartDate;
+
     private Integer dayOfWeek;
 
     private LocalTime startTime;

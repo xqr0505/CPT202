@@ -44,7 +44,7 @@ class AdminCategoryControllerTest {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("Cardiology@123");
 
-        mockMvc.perform(post("/admin/categories")
+        mockMvc.perform(post("/api/v1/admin/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -55,11 +55,11 @@ class AdminCategoryControllerTest {
     }
 
     @Test
-    void createCategory_rejectsSpecialCharacters_onApiPrefixedRoute() throws Exception {
+    void createCategory_rejectsSpecialCharacters_onVersionedApiRoute() throws Exception {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("Cardiology@123");
 
-        mockMvc.perform(post("/api/admin/categories")
+        mockMvc.perform(post("/api/v1/admin/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -74,7 +74,7 @@ class AdminCategoryControllerTest {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("心脏科");
 
-        mockMvc.perform(post("/admin/categories")
+        mockMvc.perform(post("/api/v1/admin/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -89,7 +89,7 @@ class AdminCategoryControllerTest {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("Cardiology123");
 
-        mockMvc.perform(post("/admin/categories")
+        mockMvc.perform(post("/api/v1/admin/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -104,7 +104,7 @@ class AdminCategoryControllerTest {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXY");
 
-        mockMvc.perform(post("/admin/categories")
+        mockMvc.perform(post("/api/v1/admin/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())

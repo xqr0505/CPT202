@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class ParallelToolAssistantTest {
@@ -59,7 +58,7 @@ class ParallelToolAssistantTest {
     }
 
     @Test
-    void shouldFailWholeRoundWhenAnyParallelToolFails() {
+    void shouldReturnToolFailureResultWhenAnyParallelToolFails() {
         TestReadOnlyTools tools = new TestReadOnlyTools(true);
         Assistant assistant = buildAssistant(tools, Setups.defaultParallelProperties(), new TwoStepToolThenAnswerModel(
                 List.of(
@@ -68,10 +67,7 @@ class ParallelToolAssistantTest {
                 )
         ));
 
-        assertThatThrownBy(() -> assistant.chat(1001L, "query"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Parallel tool execution failed")
-                .hasStackTraceContaining("Tool execution failed for searchKnowledgeBase");
+        assertThat(assistant.chat(1001L, "query")).isEqualTo("done");
     }
 
     @Test

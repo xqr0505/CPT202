@@ -17,6 +17,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
 import edu.xjtlu.cpt202.backend.modules.ai.config.LangChainConfig;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -60,6 +61,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         }
 )
 @ActiveProfiles("dev")
+@Disabled("External RAG export runner requires Redis/OpenAI/DashScope and is excluded from unit test mvn test run.")
 class AiRagasExportIntegrationTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

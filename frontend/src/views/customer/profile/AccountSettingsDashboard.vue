@@ -1903,6 +1903,13 @@ const handleAuthenticationLoss = (): void => {
   clearAuthAndRedirect()
 }
 
+const signOutAfterSensitiveAction = async (): Promise<void> => {
+  shouldBypassUnsavedChangesPrompt.value = true
+  clearSensitiveAccountState()
+  await userStore.logout()
+  await router.replace('/login').catch(() => undefined)
+}
+
 const validateOptionalFullName = (
   rule: unknown,
   value: unknown,
@@ -2210,6 +2217,12 @@ const verifyAndRunPendingAction = async (): Promise<void> => {
     return
   }
 
+  if (pendingAction.value.kind === 'deactivate') {
+    reauthDialogError.value = ''
+    await executePendingAction(currentPassword)
+    return
+  }
+
   reauthDialogError.value = ''
   isVerifyingCurrentPassword.value = true
 
@@ -2387,9 +2400,9 @@ const confirmEmailChange = async (): Promise<void> => {
         emailChangeNotice.value = {
           tone: 'success',
           title: 'Email updated successfully',
-          message: 'Your new email address was verified and saved.'
+          message: 'Your new email address was verified and saved. Please log in again.'
         }
-        void loadSecurityActivity(true)
+        await signOutAfterSensitiveAction()
       } finally {
         isSavingEmail.value = false
       }
@@ -2740,7 +2753,7 @@ const savePassword = async (): Promise<void> => {
         clearRememberedCredentials()
         lastPasswordUpdatedAt.value = new Date()
         ElMessage.success('Password updated successfully. Please log in again.')
-        handleAuthenticationLoss()
+        await signOutAfterSensitiveAction()
       } finally {
         isSavingPassword.value = false
       }
@@ -2777,6 +2790,11 @@ const deactivateAccount = (): void => {
       buildDiffItem('status', 'Account status', accountStatusLabel.value, 'Deactivated')
     ],
     execute: async (currentPassword?: string) => {
+      if (!hasApiSession.value) {
+        handleAuthenticationLoss()
+        return
+      }
+
       isDeactivatingAccount.value = true
 
       try {
@@ -2786,8 +2804,7 @@ const deactivateAccount = (): void => {
 
         applySavedProfilePatch({ status: 'DEACTIVATED' })
         ElMessage.success('Account deactivated successfully. Redirecting to login.')
-        shouldBypassUnsavedChangesPrompt.value = true
-        clearAuthAndRedirect()
+        await signOutAfterSensitiveAction()
       } finally {
         isDeactivatingAccount.value = false
       }

@@ -5,8 +5,10 @@ import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.utils.BeanCopyUtils;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRuleException;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRule;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
+import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleExceptionMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.CreateRecurringRuleRequest;
@@ -36,9 +38,9 @@ import static edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum.*;
 public class RecurringRuleServiceImpl implements RecurringRuleService {
 
     private static final Long DEV_USER_ID = 1L;
-    private static final int SLOT_DURATION_MINUTES = 30;
     private static final int OPEN_ENDED_GENERATION_WEEKS = 12;
 
+    private final AvailabilityRecurringRuleExceptionMapper recurringRuleExceptionMapper;
     private final AvailabilityRecurringRuleMapper recurringRuleMapper;
     private final TimeSlotMapper timeSlotMapper;
     private final SpecialistProfileMapper specialistProfileMapper;
@@ -47,12 +49,25 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
     @Transactional
     public RecurringRuleVO createRecurringRule(CreateRecurringRuleRequest request) {
         Long specialistId = getCurrentSpecialistId();
+        LocalDate effectiveStartDate = request.getEffectiveStartDate() != null
+                ? request.getEffectiveStartDate()
+                : LocalDate.now();
 
         validateTimeRange(request.getStartTime(), request.getEndTime());
-        checkRuleConflict(specialistId, request.getDayOfWeek(), request.getStartTime(), request.getEndTime(), null);
+        validateDateRange(effectiveStartDate, request.getEffectiveEndDate());
+        checkRuleConflict(
+                specialistId,
+                request.getDayOfWeek(),
+                request.getStartTime(),
+                request.getEndTime(),
+                effectiveStartDate,
+                request.getEffectiveEndDate(),
+                null
+        );
 
         AvailabilityRecurringRule rule = new AvailabilityRecurringRule();
         rule.setSpecialistId(specialistId);
+        rule.setEffectiveStartDate(effectiveStartDate);
         rule.setDayOfWeek(request.getDayOfWeek());
         rule.setStartTime(request.getStartTime());
         rule.setEndTime(request.getEndTime());
@@ -106,10 +121,30 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
             throw new BusinessException(FORBIDDEN);
         }
 
+        deleteRuleExceptions(ruleId);
         deleteTimeSlotsByRuleId(ruleId);
 
         recurringRuleMapper.deleteById(ruleId);
         log.info("Deleted recurring rule {} and its generated time slots", ruleId);
+    }
+
+    @Transactional
+    public void recordRuleException(Long ruleId, LocalDate slotDate) {
+        if (ruleId == null || slotDate == null) {
+            return;
+        }
+
+        LambdaQueryWrapper<AvailabilityRecurringRuleException> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AvailabilityRecurringRuleException::getRecurringRuleId, ruleId)
+                .eq(AvailabilityRecurringRuleException::getSlotDate, slotDate);
+        if (recurringRuleExceptionMapper.selectCount(wrapper) > 0) {
+            return;
+        }
+
+        AvailabilityRecurringRuleException exception = new AvailabilityRecurringRuleException();
+        exception.setRecurringRuleId(ruleId);
+        exception.setSlotDate(slotDate);
+        recurringRuleExceptionMapper.insert(exception);
     }
 
     public void ensureSlotsGeneratedForDateRange(LocalDate startDate, LocalDate endDate) {
@@ -132,6 +167,9 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
 
         LambdaQueryWrapper<AvailabilityRecurringRule> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AvailabilityRecurringRule::getIsActive, 1)
+                .and(w -> w.isNull(AvailabilityRecurringRule::getEffectiveStartDate)
+                        .or()
+                        .le(AvailabilityRecurringRule::getEffectiveStartDate, endDate))
                 .and(w -> w.isNull(AvailabilityRecurringRule::getEffectiveEndDate)
                         .or()
                         .ge(AvailabilityRecurringRule::getEffectiveEndDate, generationStart));
@@ -152,8 +190,14 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
             return;
         }
 
+        LocalDate ruleStartDate = resolveRuleStartDate(rule);
+        LocalDate actualGenerationStart = generationStart.isBefore(ruleStartDate) ? ruleStartDate : generationStart;
+        if (actualGenerationStart.isAfter(generationEnd)) {
+            return;
+        }
+
         DayOfWeek targetDayOfWeek = DayOfWeek.of(rule.getDayOfWeek());
-        LocalDate nextOccurrence = generationStart;
+        LocalDate nextOccurrence = actualGenerationStart;
 
         while (nextOccurrence.getDayOfWeek() != targetDayOfWeek) {
             nextOccurrence = nextOccurrence.plusDays(1);
@@ -171,32 +215,27 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
     }
 
     private int createTimeSlotsForOccurrence(AvailabilityRecurringRule rule, LocalDate date) {
-        int createdSlots = 0;
-        LocalTime slotStart = rule.getStartTime();
-
-        while (slotStart.isBefore(rule.getEndTime())) {
-            LocalTime slotEnd = slotStart.plusMinutes(SLOT_DURATION_MINUTES);
-            if (slotEnd.isAfter(rule.getEndTime())) {
-                break;
-            }
-
-            if (hasTimeSlotConflict(rule.getSpecialistId(), date, slotStart, slotEnd)) {
-                log.info(
-                        "Skipped recurring slot on {} from {} to {} for rule {} due to conflict",
-                        date,
-                        slotStart,
-                        slotEnd,
-                        rule.getId()
-                );
-            } else {
-                createTimeSlotFromRule(rule, date, slotStart, slotEnd);
-                createdSlots++;
-            }
-
-            slotStart = slotEnd;
+        if (hasRuleException(rule.getId(), date)) {
+            log.info("Skipped recurring slot on {} for rule {} due to manual override", date, rule.getId());
+            return 0;
         }
 
-        return createdSlots;
+        LocalTime slotStart = rule.getStartTime();
+        LocalTime slotEnd = rule.getEndTime();
+
+        if (hasTimeSlotConflict(rule.getSpecialistId(), date, slotStart, slotEnd)) {
+            log.info(
+                    "Skipped recurring slot on {} from {} to {} for rule {} due to conflict",
+                    date,
+                    slotStart,
+                    slotEnd,
+                    rule.getId()
+            );
+            return 0;
+        }
+
+        createTimeSlotFromRule(rule, date, slotStart, slotEnd);
+        return 1;
     }
 
     private void createTimeSlotFromRule(AvailabilityRecurringRule rule,
@@ -219,6 +258,12 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         wrapper.eq(TimeSlot::getRecurringRuleId, ruleId);
         timeSlotMapper.delete(wrapper);
         log.info("Deleted time slots generated by rule {}", ruleId);
+    }
+
+    private void deleteRuleExceptions(Long ruleId) {
+        LambdaQueryWrapper<AvailabilityRecurringRuleException> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AvailabilityRecurringRuleException::getRecurringRuleId, ruleId);
+        recurringRuleExceptionMapper.delete(wrapper);
     }
 
     private Long getCurrentSpecialistId() {
@@ -244,6 +289,12 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
         }
     }
 
+    private void validateDateRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
+            throw new BusinessException(PARAM_ERROR.getCode(), "Recurring end date must be on or after the start date");
+        }
+    }
+
     private LocalDate resolveGenerationEnd(AvailabilityRecurringRule rule, LocalDate requestedEndDate) {
         LocalDate boundedRequestedEnd = requestedEndDate != null
                 ? requestedEndDate
@@ -256,8 +307,13 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
                 : boundedRequestedEnd;
     }
 
-    private void checkRuleConflict(Long specialistId, Integer dayOfWeek,
-                                    LocalTime startTime, LocalTime endTime, Long excludeRuleId) {
+    private void checkRuleConflict(Long specialistId,
+                                   Integer dayOfWeek,
+                                   LocalTime startTime,
+                                   LocalTime endTime,
+                                   LocalDate effectiveStartDate,
+                                   LocalDate effectiveEndDate,
+                                   Long excludeRuleId) {
         LambdaQueryWrapper<AvailabilityRecurringRule> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AvailabilityRecurringRule::getSpecialistId, specialistId)
                .eq(AvailabilityRecurringRule::getDayOfWeek, dayOfWeek)
@@ -266,7 +322,17 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
                        w -> w.ne(AvailabilityRecurringRule::getId, excludeRuleId))
                .apply("NOT (end_time <= {0} OR start_time >= {1})", startTime, endTime);
 
-        if (recurringRuleMapper.selectCount(wrapper) > 0) {
+        List<AvailabilityRecurringRule> candidates = recurringRuleMapper.selectList(wrapper);
+        boolean hasDateRangeConflict = candidates.stream().anyMatch(existingRule ->
+                dateRangesOverlap(
+                        effectiveStartDate,
+                        effectiveEndDate,
+                        resolveRuleStartDate(existingRule),
+                        existingRule.getEffectiveEndDate()
+                )
+        );
+
+        if (hasDateRangeConflict) {
             throw new BusinessException(PARAM_ERROR.getCode(), "Recurring rule overlaps with an existing rule");
         }
     }
@@ -277,6 +343,28 @@ public class RecurringRuleServiceImpl implements RecurringRuleService {
                .eq(TimeSlot::getSlotDate, slotDate)
                .apply("NOT (end_time <= {0} OR start_time >= {1})", startTime, endTime);
         return timeSlotMapper.selectCount(wrapper) > 0;
+    }
+
+    private boolean hasRuleException(Long ruleId, LocalDate slotDate) {
+        LambdaQueryWrapper<AvailabilityRecurringRuleException> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AvailabilityRecurringRuleException::getRecurringRuleId, ruleId)
+                .eq(AvailabilityRecurringRuleException::getSlotDate, slotDate);
+        return recurringRuleExceptionMapper.selectCount(wrapper) > 0;
+    }
+
+    private LocalDate resolveRuleStartDate(AvailabilityRecurringRule rule) {
+        return rule.getEffectiveStartDate() != null ? rule.getEffectiveStartDate() : LocalDate.now();
+    }
+
+    private boolean dateRangesOverlap(LocalDate startA,
+                                      LocalDate endA,
+                                      LocalDate startB,
+                                      LocalDate endB) {
+        LocalDate normalizedStartA = startA != null ? startA : LocalDate.now();
+        LocalDate normalizedStartB = startB != null ? startB : LocalDate.now();
+        LocalDate normalizedEndA = endA != null ? endA : LocalDate.MAX;
+        LocalDate normalizedEndB = endB != null ? endB : LocalDate.MAX;
+        return !normalizedStartA.isAfter(normalizedEndB) && !normalizedStartB.isAfter(normalizedEndA);
     }
 
     private RecurringRuleVO convertToVO(AvailabilityRecurringRule rule) {

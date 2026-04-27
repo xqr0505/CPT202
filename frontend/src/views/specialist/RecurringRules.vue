@@ -14,8 +14,8 @@
     <div class="info-card">
       <el-icon><InfoFilled /></el-icon>
       <span>
-        Recurring rules automatically generate time slots on a weekly basis.
-        For example, set your availability for every Monday and Wednesday.
+        Recurring rules repeat weekly from the start date you choose.
+        If you later edit or delete one generated slot in the schedule view, only that occurrence changes.
       </span>
     </div>
 
@@ -38,6 +38,10 @@
             </div>
           </div>
           <div class="rule-meta">
+            <div class="meta-item">
+              <el-icon><Calendar /></el-icon>
+              <span>Starts {{ formatDate(rule.effectiveStartDate) }}</span>
+            </div>
             <div class="meta-item">
               <el-icon><Calendar /></el-icon>
               <span>{{ rule.effectiveEndDate ? `Until ${formatDate(rule.effectiveEndDate)}` : 'No end date' }}</span>
@@ -74,6 +78,18 @@
       @close="resetForm"
     >
       <el-form :model="form" :rules="rulesForm" ref="formRef" label-width="140px">
+        <el-form-item label="Start Date" prop="effectiveStartDate">
+          <el-date-picker
+            v-model="form.effectiveStartDate"
+            type="date"
+            placeholder="Select start date"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            :disabled-date="disabledPastDates"
+            style="width: 100%"
+          />
+        </el-form-item>
+
         <el-form-item label="Day of Week" prop="dayOfWeek">
           <el-select v-model="form.dayOfWeek" placeholder="Select day" style="width: 100%">
             <el-option label="Monday" :value="1" />
@@ -87,22 +103,20 @@
         </el-form-item>
 
         <el-form-item label="Start Time" prop="startTime">
-          <el-time-select
+          <el-time-picker
             v-model="form.startTime"
-            start="08:00"
-            step="00:30"
-            end="18:00"
+            format="HH:mm"
+            value-format="HH:mm:ss"
             placeholder="Select start time"
             style="width: 100%"
           />
         </el-form-item>
 
         <el-form-item label="End Time" prop="endTime">
-          <el-time-select
+          <el-time-picker
             v-model="form.endTime"
-            start="08:00"
-            step="00:30"
-            end="18:00"
+            format="HH:mm"
+            value-format="HH:mm:ss"
             placeholder="Select end time"
             style="width: 100%"
           />
@@ -113,11 +127,7 @@
             <el-switch
               v-model="form.noEndDate"
               active-text="No end date"
-              @change="() => {
-                if (form.noEndDate) {
-                  form.effectiveEndDate = ''
-                }
-              }"
+              @change="handleNoEndDateChange"
             />
           </div>
           <el-date-picker
@@ -126,7 +136,7 @@
             placeholder="Select end date"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
-            :disabled-date="disabledPastDates"
+            :disabled-date="disabledRepeatEndDates"
             :disabled="form.noEndDate"
             style="width: 100%"
           />
@@ -163,6 +173,7 @@ const showCreateDialog = ref(false)
 const formRef = ref<FormInstance>()
 
 interface RecurringRuleForm {
+  effectiveStartDate: string
   dayOfWeek: number | null
   startTime: string
   endTime: string
@@ -171,6 +182,7 @@ interface RecurringRuleForm {
 }
 
 const form = ref<RecurringRuleForm>({
+  effectiveStartDate: toDateInputValue(new Date()),
   dayOfWeek: 1,
   startTime: '',
   endTime: '',
@@ -192,6 +204,9 @@ const validateTimeRange = (rule: any, value: any, callback: any) => {
 }
 
 const rulesForm: FormRules = {
+  effectiveStartDate: [
+    { required: true, message: 'Please select start date', trigger: 'change' }
+  ],
   dayOfWeek: [
     { required: true, message: 'Please select a day', trigger: 'change' }
   ],
@@ -206,6 +221,10 @@ const rulesForm: FormRules = {
     {
       validator: (_rule, value, callback) => {
         if (form.value.noEndDate || value) {
+          if (value && form.value.effectiveStartDate && value < form.value.effectiveStartDate) {
+            callback(new Error('End date must be on or after the start date'))
+            return
+          }
           callback()
           return
         }
@@ -221,6 +240,32 @@ function disabledPastDates(date: Date): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return date < today
+}
+
+function disabledRepeatEndDates(date: Date): boolean {
+  if (!form.value.effectiveStartDate) {
+    return disabledPastDates(date)
+  }
+  const [year, month, day] = form.value.effectiveStartDate.split('-').map(Number)
+  if (!year || !month || !day) {
+    return disabledPastDates(date)
+  }
+  const startDate = new Date(year, month - 1, day)
+  startDate.setHours(0, 0, 0, 0)
+  return date < startDate
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function handleNoEndDateChange(value: string | number | boolean) {
+  if (value) {
+    form.value.effectiveEndDate = ''
+  }
 }
 
 function formatDate(dateStr: string | null): string {
@@ -244,6 +289,7 @@ async function fetchRules() {
 
 function resetForm() {
   form.value = {
+    effectiveStartDate: toDateInputValue(new Date()),
     dayOfWeek: null,
     startTime: '',
     endTime: '',
@@ -261,6 +307,7 @@ async function handleCreate() {
       submitting.value = true
       try {
         const payload: CreateRecurringRuleRequest = {
+          effectiveStartDate: form.value.effectiveStartDate,
           dayOfWeek: form.value.dayOfWeek as number,
           startTime: form.value.startTime,
           endTime: form.value.endTime,

@@ -64,6 +64,7 @@ class RecurringRuleControllerTest {
                         .content("""
                                 {
                                   "dayOfWeek": 1,
+                                  "effectiveStartDate": "2026-04-01",
                                   "startTime": "09:00:00",
                                   "endTime": "10:00:00",
                                   "effectiveEndDate": "2026-04-24"
@@ -72,6 +73,7 @@ class RecurringRuleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.effectiveStartDate").value("2026-04-01"))
                 .andExpect(jsonPath("$.data.dayOfWeekDesc").value("Monday"));
     }
 
@@ -118,6 +120,7 @@ class RecurringRuleControllerTest {
                         .content("""
                                 {
                                   "dayOfWeek": 1,
+                                  "effectiveStartDate": "2026-04-01",
                                   "startTime": "09:00:00",
                                   "endTime": "10:00:00",
                                   "effectiveEndDate": null
@@ -133,6 +136,7 @@ class RecurringRuleControllerTest {
         RecurringRuleVO rule = new RecurringRuleVO();
         rule.setId(1L);
         rule.setSpecialistId(1L);
+        rule.setEffectiveStartDate(LocalDate.of(2026, 4, 1));
         rule.setDayOfWeek(1);
         rule.setDayOfWeekDesc("Monday");
         rule.setStartTime(LocalTime.of(9, 0));
@@ -147,6 +151,7 @@ class RecurringRuleControllerTest {
         RecurringRuleVO rule = new RecurringRuleVO();
         rule.setId(2L);
         rule.setSpecialistId(1L);
+        rule.setEffectiveStartDate(LocalDate.of(2026, 4, 1));
         rule.setDayOfWeek(1);
         rule.setDayOfWeekDesc("Monday");
         rule.setStartTime(LocalTime.of(9, 0));

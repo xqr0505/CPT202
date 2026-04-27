@@ -14,6 +14,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class DashScopeEmbeddingProperties {
 
     private String apiKey;
-    private String modelName = "text-embedding-v4";
+    private String modelName = "text-embedding-v2";
     private int dimension = 1536;
 }

@@ -95,6 +95,8 @@ mybatis-plus:
 
 # 客户取消 / 改期规则（第一步：试算接口读取）
 booking:
+  specialist-approval:
+    timeout-minutes: ${SPECIALIST_APPROVAL_TIMEOUT_MINUTES:1440}
   customer-change:
     full-refund-lead-hours: 24
     min-lead-hours: 2

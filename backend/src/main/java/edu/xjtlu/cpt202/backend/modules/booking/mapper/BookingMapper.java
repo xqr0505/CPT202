@@ -15,8 +15,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Update;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -130,7 +132,8 @@ public interface BookingMapper extends BaseMapper<Booking> {
 
     List<SpecialistPendingBookingVO> selectPendingRequestsForSpecialist(
             @Param("currentUserId") Long currentUserId,
-            @Param("status") String status
+            @Param("status") String status,
+            @Param("timeoutMinutes") long timeoutMinutes
     );
 
     List<SpecialistHandledBookingVO> selectHandledRequestsForSpecialist(
@@ -169,6 +172,31 @@ public interface BookingMapper extends BaseMapper<Booking> {
             @Param("rejectionReason") String rejectionReason,
             @Param("changeType") String changeType,
             @Param("decisionTime") LocalDateTime decisionTime
+    );
+
+    @Insert("""
+            INSERT INTO refund_penalties (
+                booking_id,
+                refund_amount,
+                penalty_amount,
+                calculation_rule,
+                status,
+                processed_at
+            ) VALUES (
+                #{bookingId},
+                #{refundAmount},
+                #{penaltyAmount},
+                #{calculationRule},
+                #{status},
+                NOW()
+            )
+            """)
+    int insertRefundPenaltyRecord(
+            @Param("bookingId") Long bookingId,
+            @Param("refundAmount") BigDecimal refundAmount,
+            @Param("penaltyAmount") BigDecimal penaltyAmount,
+            @Param("calculationRule") String calculationRule,
+            @Param("status") String status
     );
 
     @Update("""

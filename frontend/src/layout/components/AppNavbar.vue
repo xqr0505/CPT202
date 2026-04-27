@@ -13,7 +13,14 @@
         @select="handleMenuSelect"
       >
         <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
-          <span>{{ item.name }}</span>
+          <span class="menu-label">
+            <span>{{ item.name }}</span>
+            <el-badge
+              v-if="getMenuBadgeValue(item) > 0"
+              :value="getMenuBadgeValue(item)"
+              :type="urgentApprovalCount > 0 ? 'danger' : 'primary'"
+            />
+          </span>
         </el-menu-item>
       </el-menu>
 
@@ -45,7 +52,14 @@
       >
         <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
           <span class="menu-icon" v-html="item.icon"></span>
-          <span class="menu-text" v-if="activeMenu === item.path">{{ item.name }}</span>
+          <span class="menu-text" v-if="activeMenu === item.path">
+            {{ item.name }}
+            <el-badge
+              v-if="getMenuBadgeValue(item) > 0"
+              :value="getMenuBadgeValue(item)"
+              :type="urgentApprovalCount > 0 ? 'danger' : 'primary'"
+            />
+          </span>
         </el-menu-item>
       </el-menu>
 
@@ -55,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   NavigationFailureType,
   isNavigationFailure,
@@ -67,11 +81,14 @@ import { USER_ROLES } from '@/constants/roles'
 import { useAiChatStore } from '@/stores/aiChat'
 import { AI_NAV_MENU_KEY, AI_NAV_MENU_LABEL } from '@/constants/ai'
 import { ElMessageBox } from 'element-plus'
+import { getPendingBookingRequests, type SpecialistPendingBookingVO } from '@/api/booking'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const aiChatStore = useAiChatStore()
+const approvalPendingCount = ref(0)
+const urgentApprovalCount = ref(0)
 
 interface NavMenuItem {
   name: string
@@ -133,6 +150,37 @@ const displayName = computed<string>(() => {
 const avatarSrc = computed<string>(() => userStore.userInfo?.avatar?.trim() || '')
 const userInitial = computed<string>(() => displayName.value.charAt(0).toUpperCase())
 
+function getApprovalMinutes(request: SpecialistPendingBookingVO): number | null {
+  if (!request.autoRejectAt) return null
+  const expiresAt = new Date(request.autoRejectAt).getTime()
+  if (Number.isNaN(expiresAt)) return null
+  return Math.ceil((expiresAt - Date.now()) / 60000)
+}
+
+function getMenuBadgeValue(item: NavMenuItem): number {
+  return item.path === '/specialist/booking-requests' ? approvalPendingCount.value : 0
+}
+
+async function refreshApprovalBadge(): Promise<void> {
+  if (!userStore.isLoggedIn || userStore.userRole !== USER_ROLES.SPECIALIST) {
+    approvalPendingCount.value = 0
+    urgentApprovalCount.value = 0
+    return
+  }
+
+  try {
+    const requests = await getPendingBookingRequests()
+    approvalPendingCount.value = requests.length
+    urgentApprovalCount.value = requests.filter(request => {
+      const minutes = getApprovalMinutes(request)
+      return minutes !== null && minutes > 0 && minutes <= 60
+    }).length
+  } catch (error) {
+    approvalPendingCount.value = 0
+    urgentApprovalCount.value = 0
+  }
+}
+
 const handleMenuSelect = (path: string): void => {
   if (path === AI_NAV_MENU_KEY) {
     aiChatStore.openDrawer()
@@ -189,6 +237,15 @@ const handleLogout = async (): Promise<void> => {
     // closed dialog -> do nothing
   }
 }
+
+onMounted(() => {
+  refreshApprovalBadge()
+  window.addEventListener('specialist-approval-queue-updated', refreshApprovalBadge)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('specialist-approval-queue-updated', refreshApprovalBadge)
+})
 </script>
 
 <style lang="scss">
@@ -260,6 +317,13 @@ const handleLogout = async (): Promise<void> => {
   flex: 1;
   border-right: none !important;
   background: transparent;
+}
+
+.menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
 }
 
 :deep(.sidebar-menu .el-menu-item) {

@@ -69,6 +69,34 @@ class UserAccountDtoValidationTest {
     }
 
     @Test
+    void changePasswordDto_rejectsBlankCurrentPassword() {
+        ChangePasswordDTO request = new ChangePasswordDTO();
+        request.setCurrentPassword(" ");
+        request.setNewPassword("NewPass456");
+        request.setConfirmationPassword("NewPass456");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("Current password is required"));
+    }
+
+    @Test
+    void changePasswordDto_rejectsBlankConfirmationPassword() {
+        ChangePasswordDTO request = new ChangePasswordDTO();
+        request.setCurrentPassword("OldPass123");
+        request.setNewPassword("NewPass456");
+        request.setConfirmationPassword(" ");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("Confirmation password is required"));
+    }
+
+    @Test
     void confirmCurrentPasswordDto_rejectsBlankPassword() {
         ConfirmCurrentPasswordDTO request = new ConfirmCurrentPasswordDTO();
         request.setCurrentPassword(" ");
@@ -93,6 +121,18 @@ class UserAccountDtoValidationTest {
     }
 
     @Test
+    void sendChangeEmailCodeDto_rejectsBlankEmail() {
+        SendChangeEmailCodeDTO request = new SendChangeEmailCodeDTO();
+        request.setNewEmail(" ");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("New email is required."));
+    }
+
+    @Test
     void changeCurrentUserEmailDto_rejectsInvalidEmailAndCode() {
         ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
         request.setNewEmail(" ");
@@ -104,5 +144,19 @@ class UserAccountDtoValidationTest {
 
         assertTrue(messages.contains("New email is required."));
         assertTrue(messages.contains("Verification code must be 6 digits."));
+    }
+
+    @Test
+    void changeCurrentUserEmailDto_rejectsBlankCurrentPassword() {
+        ChangeCurrentUserEmailDTO request = new ChangeCurrentUserEmailDTO();
+        request.setCurrentPassword(" ");
+        request.setNewEmail("alice.new@example.com");
+        request.setCode("123456");
+
+        Set<String> messages = validator.validate(request).stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.toSet());
+
+        assertTrue(messages.contains("Current password is required"));
     }
 }

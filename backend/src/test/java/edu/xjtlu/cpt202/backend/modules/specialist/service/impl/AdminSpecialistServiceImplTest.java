@@ -168,13 +168,13 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("300.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("300.00"), null, null, "ACTIVE"
         )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
         verify(adminSpecialistMapper).updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("300.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("300.00"), null, null, "ACTIVE"
         );
         verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
         ArgumentCaptor<SpecialistFeeChangeRecord> recordCaptor = ArgumentCaptor.forClass(SpecialistFeeChangeRecord.class);
@@ -202,13 +202,13 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
         verify(adminSpecialistMapper).updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         );
         verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
     }
@@ -232,7 +232,7 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
         when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
 
@@ -267,7 +267,7 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
@@ -302,7 +302,7 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
         when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
 
@@ -432,7 +432,7 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.selectCategoryCountById(1L)).thenReturn(1L);
         when(adminSpecialistMapper.selectUserIdBySpecialistId(1L)).thenReturn(101L);
         when(adminSpecialistMapper.updateSpecialistProfileById(
-                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, "ACTIVE"
+                1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);

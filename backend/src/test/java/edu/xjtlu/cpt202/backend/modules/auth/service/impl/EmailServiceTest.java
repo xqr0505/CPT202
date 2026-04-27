@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Disabled;
     "ai.openai.model-name=gpt-3.5-turbo"  
 })
 @Transactional  
+@Disabled("Integration-style email/database test; excluded from unit test mvn test run.")
 public class EmailServiceTest {
 
     @Autowired

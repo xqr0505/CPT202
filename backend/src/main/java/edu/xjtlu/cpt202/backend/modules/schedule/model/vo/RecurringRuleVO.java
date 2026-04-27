@@ -17,6 +17,8 @@ public class RecurringRuleVO {
 
     private Long specialistId;
 
+    private LocalDate effectiveStartDate;
+
     private Integer dayOfWeek;
 
     private String dayOfWeekDesc;

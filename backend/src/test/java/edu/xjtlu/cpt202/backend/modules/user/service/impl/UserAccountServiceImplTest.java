@@ -19,6 +19,7 @@ import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserProfileVO;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserSecurityActivityVO;
+import edu.xjtlu.cpt202.backend.modules.user.model.vo.VerifyPasswordVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -176,6 +177,38 @@ class UserAccountServiceImplTest {
         verify(userSecurityActivityMapper).selectList(any());
         verifyNoMoreInteractions(userMapper, userSecurityActivityMapper);
         verifyNoInteractions(refreshTokenMapper, avatarStorageService);
+    }
+
+    @Test
+    void verifyCurrentUserPassword_returnsTrueWhenCurrentPasswordMatches() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        VerifyPasswordVO response = userAccountService.verifyCurrentUserPassword("OldPass123");
+
+        assertTrue(response.isValid());
+        verify(userMapper).selectById(7L);
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
+    }
+
+    @Test
+    void verifyCurrentUserPassword_whenCurrentPasswordIsWrong_throwsBadRequest() {
+        authenticateAs(7L);
+        User currentUser = buildUser();
+        when(userMapper.selectById(7L)).thenReturn(currentUser);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userAccountService.verifyCurrentUserPassword("WrongPass123")
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Current password is incorrect", exception.getMessage());
+        verify(userMapper).selectById(7L);
+        verifyNoMoreInteractions(userMapper);
+        verifyNoInteractions(userSecurityActivityMapper, refreshTokenMapper, avatarStorageService, verificationCodeService);
     }
 
     @Test

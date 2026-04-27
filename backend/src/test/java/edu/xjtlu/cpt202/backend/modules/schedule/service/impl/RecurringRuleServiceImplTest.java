@@ -3,8 +3,10 @@ package edu.xjtlu.cpt202.backend.modules.schedule.service.impl;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.TimeSlotStatusEnum;
+import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRuleException;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.AvailabilityRecurringRule;
 import edu.xjtlu.cpt202.backend.modules.schedule.entity.TimeSlot;
+import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleExceptionMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.AvailabilityRecurringRuleMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.mapper.TimeSlotMapper;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.CreateRecurringRuleRequest;
@@ -42,6 +44,9 @@ class RecurringRuleServiceImplTest {
     private TimeSlotMapper timeSlotMapper;
 
     @Mock
+    private AvailabilityRecurringRuleExceptionMapper recurringRuleExceptionMapper;
+
+    @Mock
     private SpecialistProfileMapper specialistProfileMapper;
 
     @InjectMocks
@@ -51,12 +56,14 @@ class RecurringRuleServiceImplTest {
     void createRecurringRule_success() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
-        request.setStartTime(LocalTime.of(9, 0));
-        request.setEndTime(LocalTime.of(10, 0));
+        request.setEffectiveStartDate(LocalDate.now());
+        request.setStartTime(LocalTime.of(18, 0));
+        request.setEndTime(LocalTime.of(19, 0));
         request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
-        when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
         when(timeSlotMapper.selectCount(any())).thenReturn(0L);
 
         ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
@@ -74,19 +81,19 @@ class RecurringRuleServiceImplTest {
         assertEquals("Active", result.getStatusDesc());
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
-        verify(timeSlotMapper, times(4)).insert(slotCaptor.capture());
+        verify(timeSlotMapper, times(2)).insert(slotCaptor.capture());
 
         List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
-        assertEquals(LocalTime.of(9, 0), generatedSlots.get(0).getStartTime());
-        assertEquals(LocalTime.of(9, 30), generatedSlots.get(0).getEndTime());
-        assertEquals(LocalTime.of(9, 30), generatedSlots.get(1).getStartTime());
-        assertEquals(LocalTime.of(10, 0), generatedSlots.get(1).getEndTime());
+        assertEquals(LocalTime.of(18, 0), generatedSlots.get(0).getStartTime());
+        assertEquals(LocalTime.of(19, 0), generatedSlots.get(1).getEndTime());
+        assertEquals(LocalTime.of(19, 0), generatedSlots.get(0).getEndTime());
     }
 
     @Test
     void createRecurringRule_invalidTimeRange() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(1);
+        request.setEffectiveStartDate(LocalDate.now());
         request.setStartTime(LocalTime.of(11, 0));
         request.setEndTime(LocalTime.of(11, 0));
         request.setEffectiveEndDate(LocalDate.now().plusDays(1));
@@ -102,12 +109,21 @@ class RecurringRuleServiceImplTest {
     void createRecurringRule_conflict() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(1);
+        request.setEffectiveStartDate(LocalDate.of(2026, 4, 1));
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
-        request.setEffectiveEndDate(LocalDate.now().plusDays(7));
+        request.setEffectiveEndDate(LocalDate.of(2026, 4, 30));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
-        when(recurringRuleMapper.selectCount(any())).thenReturn(1L);
+        AvailabilityRecurringRule existingRule = new AvailabilityRecurringRule();
+        existingRule.setId(88L);
+        existingRule.setSpecialistId(1L);
+        existingRule.setDayOfWeek(1);
+        existingRule.setEffectiveStartDate(LocalDate.of(2026, 4, 10));
+        existingRule.setEffectiveEndDate(LocalDate.of(2026, 5, 10));
+        existingRule.setStartTime(LocalTime.of(9, 30));
+        existingRule.setEndTime(LocalTime.of(10, 30));
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(existingRule));
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> recurringRuleService.createRecurringRule(request));
@@ -121,6 +137,7 @@ class RecurringRuleServiceImplTest {
         rule.setId(41L);
         rule.setSpecialistId(1L);
         rule.setDayOfWeek(1);
+        rule.setEffectiveStartDate(LocalDate.now());
         rule.setStartTime(LocalTime.of(9, 0));
         rule.setEndTime(LocalTime.of(10, 0));
         rule.setIsActive(1);
@@ -180,12 +197,14 @@ class RecurringRuleServiceImplTest {
     void createRecurringRule_skipsConflictingDatesAndCreatesRemainingSlots() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
+        request.setEffectiveStartDate(LocalDate.now());
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
         request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
-        when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L, 0L);
         when(timeSlotMapper.selectCount(any())).thenReturn(1L, 0L, 0L, 0L);
 
         ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
@@ -198,11 +217,11 @@ class RecurringRuleServiceImplTest {
         recurringRuleService.createRecurringRule(request);
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
-        verify(timeSlotMapper, times(3)).insert(slotCaptor.capture());
+        verify(timeSlotMapper, times(1)).insert(slotCaptor.capture());
 
         List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
         assertEquals(TimeSlotStatusEnum.AVAILABLE.name(), generatedSlots.get(0).getStatus());
-        assertEquals(LocalTime.of(9, 30), generatedSlots.get(0).getStartTime());
+        assertEquals(LocalTime.of(9, 0), generatedSlots.get(0).getStartTime());
         assertEquals(LocalTime.of(10, 0), generatedSlots.get(0).getEndTime());
     }
 
@@ -210,12 +229,14 @@ class RecurringRuleServiceImplTest {
     void recurringGeneratedSlots_areVisibleWhenViewingWeeklySchedule() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
+        request.setEffectiveStartDate(LocalDate.now());
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
         request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
-        when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
         when(timeSlotMapper.selectCount(any())).thenReturn(0L, 0L);
 
         ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
@@ -228,10 +249,10 @@ class RecurringRuleServiceImplTest {
         recurringRuleService.createRecurringRule(request);
 
         ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
-        verify(timeSlotMapper, times(4)).insert(slotCaptor.capture());
+        verify(timeSlotMapper, times(2)).insert(slotCaptor.capture());
 
         List<TimeSlot> generatedSlots = slotCaptor.getAllValues();
-        assertEquals(4, generatedSlots.size());
+        assertEquals(2, generatedSlots.size());
         assertTrue(generatedSlots.stream().allMatch(slot -> TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())));
         assertTrue(generatedSlots.stream().allMatch(slot -> Long.valueOf(61L).equals(slot.getRecurringRuleId())));
         assertTrue(generatedSlots.stream().allMatch(slot -> !slot.getSlotDate().isAfter(request.getEffectiveEndDate())));
@@ -241,11 +262,13 @@ class RecurringRuleServiceImplTest {
     void createRecurringRule_withoutEndDate_generatesInitialRollingHorizon() {
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
+        request.setEffectiveStartDate(LocalDate.now());
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
-        when(recurringRuleMapper.selectCount(any())).thenReturn(0L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
         when(timeSlotMapper.selectCount(any())).thenReturn(0L);
 
         ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
@@ -260,6 +283,108 @@ class RecurringRuleServiceImplTest {
         assertNotNull(result);
         assertEquals(71L, result.getId());
         assertEquals(null, result.getEffectiveEndDate());
+        verify(timeSlotMapper, atLeastOnce()).insert(any(TimeSlot.class));
+    }
+
+    @Test
+    void recordRuleException_skipsDuplicateInsert() {
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(1L);
+
+        recurringRuleService.recordRuleException(90L, LocalDate.of(2026, 4, 10));
+
+        verify(recurringRuleExceptionMapper, times(0)).insert(any(AvailabilityRecurringRuleException.class));
+    }
+
+    @Test
+    void createRecurringRule_futureStartDate_doesNotGenerateEarlierOccurrences() {
+        LocalDate futureStart = LocalDate.now().plusWeeks(2);
+
+        CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
+        request.setDayOfWeek(futureStart.getDayOfWeek().getValue());
+        request.setEffectiveStartDate(futureStart);
+        request.setStartTime(LocalTime.of(14, 0));
+        request.setEndTime(LocalTime.of(15, 0));
+        request.setEffectiveEndDate(futureStart.plusWeeks(1));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
+
+        ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
+        when(recurringRuleMapper.insert(ruleCaptor.capture())).thenAnswer(invocation -> {
+            AvailabilityRecurringRule rule = ruleCaptor.getValue();
+            rule.setId(72L);
+            return 1;
+        });
+
+        recurringRuleService.createRecurringRule(request);
+
+        ArgumentCaptor<TimeSlot> slotCaptor = ArgumentCaptor.forClass(TimeSlot.class);
+        verify(timeSlotMapper, atLeastOnce()).insert(slotCaptor.capture());
+        assertTrue(slotCaptor.getAllValues().stream().allMatch(slot -> !slot.getSlotDate().isBefore(futureStart)));
+    }
+
+    @Test
+    void createRecurringRule_allowsNonOverlappingDateRangesForSameWeeklyTime() {
+        CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
+        request.setDayOfWeek(1);
+        request.setEffectiveStartDate(LocalDate.of(2026, 7, 1));
+        request.setStartTime(LocalTime.of(9, 0));
+        request.setEndTime(LocalTime.of(10, 0));
+        request.setEffectiveEndDate(LocalDate.of(2026, 7, 31));
+
+        AvailabilityRecurringRule existingRule = new AvailabilityRecurringRule();
+        existingRule.setId(99L);
+        existingRule.setSpecialistId(1L);
+        existingRule.setDayOfWeek(1);
+        existingRule.setEffectiveStartDate(LocalDate.of(2026, 5, 1));
+        existingRule.setEffectiveEndDate(LocalDate.of(2026, 5, 31));
+        existingRule.setStartTime(LocalTime.of(9, 0));
+        existingRule.setEndTime(LocalTime.of(10, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of(existingRule));
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
+
+        ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
+        when(recurringRuleMapper.insert(ruleCaptor.capture())).thenAnswer(invocation -> {
+            AvailabilityRecurringRule rule = ruleCaptor.getValue();
+            rule.setId(100L);
+            return 1;
+        });
+
+        RecurringRuleVO result = recurringRuleService.createRecurringRule(request);
+
+        assertEquals(100L, result.getId());
+        verify(recurringRuleMapper).insert(any(AvailabilityRecurringRule.class));
+    }
+
+    @Test
+    void createRecurringRule_allowsArbitraryWeeklyTime() {
+        CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
+        request.setDayOfWeek(2);
+        request.setEffectiveStartDate(LocalDate.of(2026, 4, 14));
+        request.setStartTime(LocalTime.of(18, 0));
+        request.setEndTime(LocalTime.of(19, 0));
+        request.setEffectiveEndDate(LocalDate.of(2026, 4, 28));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
+        when(recurringRuleExceptionMapper.selectCount(any())).thenReturn(0L);
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
+
+        ArgumentCaptor<AvailabilityRecurringRule> ruleCaptor = ArgumentCaptor.forClass(AvailabilityRecurringRule.class);
+        when(recurringRuleMapper.insert(ruleCaptor.capture())).thenAnswer(invocation -> {
+            AvailabilityRecurringRule rule = ruleCaptor.getValue();
+            rule.setId(110L);
+            return 1;
+        });
+
+        RecurringRuleVO result = recurringRuleService.createRecurringRule(request);
+
+        assertEquals(110L, result.getId());
         verify(timeSlotMapper, atLeastOnce()).insert(any(TimeSlot.class));
     }
 }

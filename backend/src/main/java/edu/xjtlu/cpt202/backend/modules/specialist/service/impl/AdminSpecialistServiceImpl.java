@@ -89,6 +89,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         String initialPassword = DEFAULT_SPECIALIST_INITIAL_PASSWORD;
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
+        String normalizedBio = normalizeOptionalBio(request.getBio());
         String mappedStatus = mapToDbStatus(request.getStatus());
         validateSpecialistLevel(normalizedLevel);
         validateFeeWithinRange(normalizedLevel, request.getConsultationFee());
@@ -106,6 +107,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 .level(normalizedLevel)
                 .consultationFee(request.getConsultationFee())
                 .avatarUrl(normalizedAvatarUrl)
+                .bio(normalizedBio)
                 .status(mappedStatus)
                 .build();
         specialistProfileMapper.insert(specialistProfile);
@@ -162,6 +164,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 : normalizeOptionalPassword(request.getPassword());
         String normalizedLevel = request.getLevel().trim();
         String normalizedAvatarUrl = request.getAvatarUrl() == null ? null : request.getAvatarUrl().trim();
+        String normalizedBio = normalizeOptionalBio(request.getBio());
         String mappedStatus = mapToDbStatus(request.getStatus());
         validateSpecialistLevel(normalizedLevel);
         ensureSpecialistEmailUnique(normalizedEmail, userId);
@@ -172,6 +175,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 normalizedLevel,
                 request.getConsultationFee(),
                 normalizedAvatarUrl,
+                normalizedBio,
                 mappedStatus
         );
         if (updatedProfileRows == 0) {
@@ -312,6 +316,13 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
             return null;
         }
         return password.trim();
+    }
+
+    private String normalizeOptionalBio(String bio) {
+        if (!StringUtils.hasText(bio)) {
+            return null;
+        }
+        return bio.trim();
     }
 
     private void ensureSpecialistEmailUnique(String normalizedEmail, Long currentUserId) {

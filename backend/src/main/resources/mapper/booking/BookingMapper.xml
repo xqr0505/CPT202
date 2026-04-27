@@ -363,14 +363,15 @@
             TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
             TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
             b.topic AS topic,
-            b.created_at AS submissionTime
+            b.created_at AS submissionTime,
+            DATE_ADD(b.created_at, INTERVAL #{timeoutMinutes} MINUTE) AS autoRejectAt
         FROM bookings b
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN users u ON b.customer_id = u.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id
         WHERE sp.user_id = #{currentUserId}
           AND b.status = #{status}
-        ORDER BY b.created_at DESC
+        ORDER BY autoRejectAt ASC, b.created_at ASC
     </select>
 
     <select id="selectHandledRequestsForSpecialist"
@@ -389,11 +390,20 @@
                 ELSE b.status
             END AS status,
             b.decision_time AS decisionTime,
-            b.rejection_reason AS rejectionReason
+            b.rejection_reason AS rejectionReason,
+            b.refund_status AS refundStatus,
+            rp.refund_amount AS refundAmount,
+            rp.penalty_amount AS penaltyAmount,
+            rp.calculation_rule AS refundRule
         FROM bookings b
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN users u ON b.customer_id = u.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        LEFT JOIN refund_penalties rp ON rp.id = (
+            SELECT MAX(inner_rp.id)
+            FROM refund_penalties inner_rp
+            WHERE inner_rp.booking_id = b.id
+        )
         WHERE sp.user_id = #{currentUserId}
           AND b.decision_time IS NOT NULL
           AND (
@@ -411,6 +421,7 @@
             TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
             TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
             b.topic AS topic,
+            b.price AS price,
             b.created_at AS submissionTime,
             b.customer_notes AS customerNotes,
             CASE
@@ -419,11 +430,20 @@
                 ELSE b.status
             END AS status,
             b.decision_time AS decisionTime,
-            b.rejection_reason AS rejectionReason
+            b.rejection_reason AS rejectionReason,
+            b.refund_status AS refundStatus,
+            rp.refund_amount AS refundAmount,
+            rp.penalty_amount AS penaltyAmount,
+            rp.calculation_rule AS refundRule
         FROM bookings b
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN users u ON b.customer_id = u.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id
+        LEFT JOIN refund_penalties rp ON rp.id = (
+            SELECT MAX(inner_rp.id)
+            FROM refund_penalties inner_rp
+            WHERE inner_rp.booking_id = b.id
+        )
         WHERE b.id = #{bookingId}
           AND sp.user_id = #{currentUserId}
         LIMIT 1

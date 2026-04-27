@@ -340,6 +340,18 @@ const syncBookingFormDraft = () => {
   }
 }
 
+const clearBookingFormDraft = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const scopedStorageKey = resolveBookingFormDraftStorageKey()
+  window.sessionStorage.removeItem(scopedStorageKey)
+  if (scopedStorageKey !== BOOKING_FORM_DRAFT_STORAGE_KEY) {
+    window.sessionStorage.removeItem(BOOKING_FORM_DRAFT_STORAGE_KEY)
+  }
+}
+
 const syncAiBookingPageContext = () => {
   if (typeof window === 'undefined') {
     return
@@ -476,6 +488,7 @@ const resetBookingForm = () => {
   bookingForm.value.slotId = null
   bookingForm.value.topic = ''
   bookingForm.value.customerNotes = ''
+  clearBookingFormDraft()
   syncAiBookingPageContext()
 }
 

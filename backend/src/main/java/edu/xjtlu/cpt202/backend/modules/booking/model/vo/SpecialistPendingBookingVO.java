@@ -21,4 +21,6 @@ public class SpecialistPendingBookingVO {
     private String topic;
 
     private LocalDateTime submissionTime;
+
+    private LocalDateTime autoRejectAt;
 }

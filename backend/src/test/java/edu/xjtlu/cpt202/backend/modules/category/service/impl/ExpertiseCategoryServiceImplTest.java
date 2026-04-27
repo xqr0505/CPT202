@@ -5,6 +5,7 @@ import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.category.entity.ExpertiseCategory;
 import edu.xjtlu.cpt202.backend.modules.category.mapper.ExpertiseCategoryMapper;
 import edu.xjtlu.cpt202.backend.modules.category.model.dto.CategoryRequest;
+import edu.xjtlu.cpt202.backend.modules.category.model.vo.CategoryVO;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,11 +14,15 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +38,31 @@ class ExpertiseCategoryServiceImplTest {
     private ExpertiseCategoryServiceImpl expertiseCategoryService;
 
     @Test
+    void listCategories_success_mapsEntityToVO() {
+        ExpertiseCategory first = new ExpertiseCategory();
+        first.setId(1L);
+        first.setCategoryName("Cardiology");
+        first.setCreatedAt(LocalDateTime.of(2026, 4, 1, 10, 0, 0));
+
+        ExpertiseCategory second = new ExpertiseCategory();
+        second.setId(2L);
+        second.setCategoryName("Neurology");
+        second.setCreatedAt(LocalDateTime.of(2026, 4, 2, 11, 30, 0));
+
+        when(expertiseCategoryMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(first, second));
+
+        List<CategoryVO> result = expertiseCategoryService.listCategories();
+
+        assertEquals(2, result.size());
+        assertEquals(1L, result.get(0).getId());
+        assertEquals("Cardiology", result.get(0).getCategoryName());
+        assertEquals(LocalDateTime.of(2026, 4, 1, 10, 0, 0), result.get(0).getCreateTime());
+        assertEquals(2L, result.get(1).getId());
+        assertEquals("Neurology", result.get(1).getCategoryName());
+        assertEquals(LocalDateTime.of(2026, 4, 2, 11, 30, 0), result.get(1).getCreateTime());
+    }
+
+    @Test
     void createCategory_success() {
         CategoryRequest request = new CategoryRequest();
         request.setCategoryName("  Cardiology  ");
@@ -44,6 +74,18 @@ class ExpertiseCategoryServiceImplTest {
         ArgumentCaptor<ExpertiseCategory> categoryCaptor = ArgumentCaptor.forClass(ExpertiseCategory.class);
         verify(expertiseCategoryMapper).insert(categoryCaptor.capture());
         assertEquals("Cardiology", categoryCaptor.getValue().getCategoryName());
+    }
+
+    @Test
+    void createCategory_success_whenDuplicateCountIsNull() {
+        CategoryRequest request = new CategoryRequest();
+        request.setCategoryName("Dermatology");
+
+        when(expertiseCategoryMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        expertiseCategoryService.createCategory(request);
+
+        verify(expertiseCategoryMapper).insert(any(ExpertiseCategory.class));
     }
 
     @Test
@@ -102,6 +144,23 @@ class ExpertiseCategoryServiceImplTest {
     }
 
     @Test
+    void updateCategory_throwsBusinessException_whenCategoryNotFound() {
+        CategoryRequest request = new CategoryRequest();
+        request.setCategoryName("Psychology");
+
+        when(expertiseCategoryMapper.selectById(1L)).thenReturn(null);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> expertiseCategoryService.updateCategory(1L, request));
+
+        assertEquals(404, exception.getCode());
+        assertEquals("Category not found", exception.getMessage());
+        verify(expertiseCategoryMapper, never()).selectCount(any(LambdaQueryWrapper.class));
+        verify(expertiseCategoryMapper, never()).updateById(any(ExpertiseCategory.class));
+        verifyNoInteractions(specialistProfileMapper);
+    }
+
+    @Test
     void deleteCategory_throwsBusinessException_whenCategoryAssignedToSpecialists() {
         ExpertiseCategory category = new ExpertiseCategory();
         category.setId(1L);
@@ -130,5 +189,18 @@ class ExpertiseCategoryServiceImplTest {
         expertiseCategoryService.deleteCategory(1L);
 
         verify(expertiseCategoryMapper).deleteById(1L);
+    }
+
+    @Test
+    void deleteCategory_throwsBusinessException_whenCategoryNotFound() {
+        when(expertiseCategoryMapper.selectById(1L)).thenReturn(null);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> expertiseCategoryService.deleteCategory(1L));
+
+        assertEquals(404, exception.getCode());
+        assertEquals("Category not found", exception.getMessage());
+        verify(expertiseCategoryMapper, never()).deleteById(any(Long.class));
+        verifyNoInteractions(specialistProfileMapper);
     }
 }

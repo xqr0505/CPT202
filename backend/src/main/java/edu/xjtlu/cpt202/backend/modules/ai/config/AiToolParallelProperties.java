@@ -25,7 +25,7 @@ public class AiToolParallelProperties {
     private Integer maxConcurrency = 4;
 
     @Min(1)
-    private Long timeoutMs = 8000L;
+    private Long timeoutMs = 60000L;
 
     private Set<String> readOnlyNames = new LinkedHashSet<>(Set.of(
             "searchCurrentCustomerBookings",

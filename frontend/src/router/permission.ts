@@ -35,7 +35,6 @@ export function setupRouterGuard(router: Router) {
     const user = getUser();
 
     const shouldAttemptRefresh = Boolean(refreshToken && (!token || isTokenExpired(token)));
-
     if (shouldAttemptRefresh) {
       try {
         await refreshAuthToken();
@@ -64,6 +63,9 @@ export function setupRouterGuard(router: Router) {
 
       return true;
     } else {
+      if (to.path === '/') {
+        return { path: '/customer/search' };
+      }
       if (isPublicPath(to.path) || authRoutes.includes(to.path)) {
         return true;
       }

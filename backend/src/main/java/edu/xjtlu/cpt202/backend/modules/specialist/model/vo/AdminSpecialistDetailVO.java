@@ -15,6 +15,8 @@ public class AdminSpecialistDetailVO {
 
     private String avatarUrl;
 
+    private String bio;
+
     private Long categoryId;
 
     private String categoryName;

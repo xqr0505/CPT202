@@ -3,7 +3,7 @@ START TRANSACTION;
 
 -- password:Test12345
 INSERT INTO `users` (`email`, `password_hash`, `role`, `status`, `full_name`, `created_at`) 
-VALUES ('test.user@expertlink.com', '$2a$10$1HK2O2.daVRPTmEe1DbIdOT76IkQAk52Hfqxn8.uGunRWFijRv/1q', 'CUSTOMER', 'ACTIVE', 'Test User', NOW());
+VALUES ('test.customer@expertlink.com', '$2a$10$1HK2O2.daVRPTmEe1DbIdOT76IkQAk52Hfqxn8.uGunRWFijRv/1q', 'CUSTOMER', 'ACTIVE', 'Test Customer', NOW());
 
 SET @cust_id = LAST_INSERT_ID();
 

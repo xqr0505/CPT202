@@ -71,7 +71,16 @@
         </div>
         <div class="booking-confirm-row">
           <span>Notes</span>
-          <strong>{{ bookingPreview.customerNotes || 'No notes provided' }}</strong>
+          <div class="booking-confirm-notes-input">
+            <el-input
+              v-model="manualBookingNotes"
+              type="textarea"
+              :rows="3"
+              maxlength="300"
+              show-word-limit
+              placeholder="Enter notes manually"
+            />
+          </div>
         </div>
       </div>
 
@@ -96,6 +105,7 @@ import { ElMessage } from 'element-plus'
 import CustomButton from '@/components/common/CustomButton.vue'
 import { createBooking } from '@/api/booking'
 import { getUser } from '@/api/request'
+import { fetchSpecialistAvailability, fetchSpecialists } from '@/api/specialist'
 import { useAiChatStore } from '@/stores/aiChat'
 import {
   AI_CHAT_CLEAR_BUTTON_TEXT,
@@ -161,6 +171,7 @@ interface AiBookingPageContext {
 const bookingSubmitting = ref(false)
 const bookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
 const bookingConfirmDialogVisible = ref(false)
+const manualBookingNotes = ref('')
 const lastPreviewKey = ref('')
 const dismissedPreviewKeys = new Set<string>()
 
@@ -245,6 +256,20 @@ const normalizeDoctorName = (value: string | null): string => {
     return ''
   }
   return value
+    .replace(/\([^)]*\)|（[^）]*）/g, '')
+    .replace(/^doctor\s+/i, '')
+    .replace(/^dr\.?\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+const normalizeDoctorNameSafe = (value: string | null): string => {
+  if (!value) {
+    return ''
+  }
+  return value
+    .replace(/\([^)]*\)|\uFF08[^\uFF09]*\uFF09/g, '')
     .replace(/^doctor\s+/i, '')
     .replace(/^dr\.?\s*/i, '')
     .replace(/\s+/g, ' ')
@@ -253,7 +278,7 @@ const normalizeDoctorName = (value: string | null): string => {
 }
 
 const resolveSpecialistIdByName = (pageContext: AiBookingPageContext | null, specialistName: string | null): number | null => {
-  const normalizedTargetName = normalizeDoctorName(specialistName)
+  const normalizedTargetName = normalizeDoctorNameSafe(specialistName)
   const visibleSpecialists = pageContext?.visibleSpecialists
   if (!normalizedTargetName || !Array.isArray(visibleSpecialists) || visibleSpecialists.length === 0) {
     return null
@@ -262,7 +287,7 @@ const resolveSpecialistIdByName = (pageContext: AiBookingPageContext | null, spe
   const normalizedItems = visibleSpecialists
     .map(item => ({
       id: normalizeNumericId(item.id),
-      normalizedName: normalizeDoctorName(normalizeString(item.name)),
+      normalizedName: normalizeDoctorNameSafe(normalizeString(item.name)),
     }))
     .filter(item => Boolean(item.id) && Boolean(item.normalizedName))
 
@@ -278,6 +303,99 @@ const resolveSpecialistIdByName = (pageContext: AiBookingPageContext | null, spe
   return fuzzy?.id || null
 }
 
+const resolveSpecialistIdBySearchApi = async (
+  pageContext: AiBookingPageContext | null,
+  specialistName: string | null,
+  slotDate: string | null
+): Promise<number | null> => {
+  const normalizedDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
+  const normalizedTargetName = normalizeDoctorNameSafe(specialistName)
+  if (!normalizedTargetName) {
+    return null
+  }
+  const rawKeyword = normalizeString(specialistName)
+  const normalizedKeyword = normalizedTargetName
+
+  const mergeCandidates = (target: Array<{ id?: number; name?: string }>, source: Array<{ id?: number; name?: string }>) => {
+    const existing = new Set(target.map(item => normalizeNumericId(item.id)).filter(Boolean) as number[])
+    for (const item of source) {
+      const id = normalizeNumericId(item.id)
+      if (!id || existing.has(id)) {
+        continue
+      }
+      existing.add(id)
+      target.push(item)
+    }
+  }
+
+  try {
+    const candidates: Array<{ id?: number; name?: string }> = []
+    const keywordCandidates = [rawKeyword, normalizedKeyword].filter(
+      (value, index, arr) => Boolean(value) && arr.indexOf(value) === index
+    ) as string[]
+
+    for (const keyword of keywordCandidates) {
+      const withKeywordAndDate = await fetchSpecialists({
+        keyword,
+        date: normalizedDate || undefined,
+        pageNo: 1,
+        pageSize: 24,
+      })
+      mergeCandidates(candidates, withKeywordAndDate.list || [])
+      if (candidates.length) {
+        break
+      }
+    }
+
+    if (!candidates.length) {
+      for (const keyword of keywordCandidates) {
+        const withKeywordOnly = await fetchSpecialists({
+          keyword,
+          pageNo: 1,
+          pageSize: 24,
+        })
+        mergeCandidates(candidates, withKeywordOnly.list || [])
+        if (candidates.length) {
+          break
+        }
+      }
+    }
+
+    if (!candidates.length && normalizedDate) {
+      const withDateOnly = await fetchSpecialists({
+        date: normalizedDate,
+        pageNo: 1,
+        pageSize: 24,
+      })
+      mergeCandidates(candidates, withDateOnly.list || [])
+    }
+
+    if (!candidates.length && Array.isArray(pageContext?.visibleSpecialists)) {
+      mergeCandidates(candidates, pageContext.visibleSpecialists as Array<{ id?: number; name?: string }>)
+    }
+
+    const normalizedItems = candidates
+      .map(item => ({
+        id: normalizeNumericId(item.id),
+        normalizedName: normalizeDoctorNameSafe(normalizeString(item.name)),
+      }))
+      .filter(item => Boolean(item.id) && Boolean(item.normalizedName))
+
+    const exact = normalizedItems.find(item => item.normalizedName === normalizedTargetName)
+    if (exact?.id) {
+      return exact.id
+    }
+
+    const fuzzy = normalizedItems.find(item =>
+      item.normalizedName.includes(normalizedTargetName) ||
+      normalizedTargetName.includes(item.normalizedName)
+    )
+    return fuzzy?.id || null
+  } catch {
+    return null
+  }
+}
+
 const extractSpecialistNameFromContent = (content: string): string | null => {
   const fromLabel = normalizeLineValue(extractFirstMatch(content, [
     /(?:\*\*|__)?\s*specialistName\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
@@ -290,6 +408,38 @@ const extractSpecialistNameFromContent = (content: string): string | null => {
   const drMatched = content.match(/\bDr\.?\s+[A-Za-z][A-Za-z\s'.-]{1,80}/)
   if (drMatched?.[0]) {
     return normalizeLineValue(drMatched[0])
+  }
+
+  return null
+}
+
+const extractSpecialistNameHeuristic = (content: string): string | null => {
+  return normalizeLineValue(extractFirstMatch(content, [
+    /(?:\u9884\u7ea6|book(?:ing)?(?:\s+with|\s+for)?)\s+([A-Za-z][A-Za-z0-9_.\- ]{1,60})/i,
+    /(?:expert|doctor|specialist)\s+([A-Za-z][A-Za-z0-9_.\- ]{1,60})/i,
+  ]))
+}
+
+const resolveSpecialistNameByVisibleList = (
+  content: string,
+  pageContext: AiBookingPageContext | null
+): string | null => {
+  const visibleSpecialists = pageContext?.visibleSpecialists
+  if (!Array.isArray(visibleSpecialists) || !visibleSpecialists.length) {
+    return null
+  }
+
+  const normalizedContent = normalizeDoctorNameSafe(content)
+  if (!normalizedContent) {
+    return null
+  }
+
+  for (const item of visibleSpecialists) {
+    const candidateName = normalizeString(item.name)
+    const normalizedCandidate = normalizeDoctorNameSafe(candidateName)
+    if (normalizedCandidate && normalizedContent.includes(normalizedCandidate)) {
+      return candidateName
+    }
   }
 
   return null
@@ -362,6 +512,113 @@ const isSlotAvailableInContext = (pageContext: AiBookingPageContext | null, slot
     return null
   }
   return normalizeStatus(matched.status) === 'AVAILABLE'
+}
+
+const resolveSlotIdByAvailabilityApi = async (
+  specialistId: number,
+  slotDate: string,
+  startTime: string,
+  endTime: string
+): Promise<number | null> => {
+  const normalizedDate = normalizeDate(slotDate)
+  const normalizedStart = normalizeTime(startTime)
+  const normalizedEnd = normalizeTime(endTime)
+  if (!normalizedDate || !normalizedStart || !normalizedEnd) {
+    return null
+  }
+
+  try {
+    const slots = await fetchSpecialistAvailability(specialistId, normalizedDate)
+    const matchedSlot = slots.find(slot =>
+      normalizeStatus(slot.status) === 'AVAILABLE' &&
+      normalizeTime(normalizeString(slot.startTime)) === normalizedStart &&
+      normalizeTime(normalizeString(slot.endTime)) === normalizedEnd
+    )
+    return normalizeNumericId(matchedSlot?.id) || null
+  } catch {
+    return null
+  }
+}
+
+const resolveSpecialistIdBySlotIdInVisibleSpecialists = async (
+  pageContext: AiBookingPageContext | null,
+  slotId: number,
+  slotDate: string,
+  specialistName?: string | null
+): Promise<number | null> => {
+  const targetSlotId = normalizeNumericId(slotId)
+  const normalizedDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
+  if (!targetSlotId || !normalizedDate) {
+    return null
+  }
+
+  const candidates: Array<{ id?: number; name?: string }> = []
+  const appendCandidates = (source: Array<{ id?: number; name?: string }>) => {
+    const existing = new Set(candidates.map(item => normalizeNumericId(item.id)).filter(Boolean) as number[])
+    for (const item of source) {
+      const id = normalizeNumericId(item.id)
+      if (!id || existing.has(id)) {
+        continue
+      }
+      existing.add(id)
+      candidates.push(item)
+    }
+  }
+
+  if (Array.isArray(pageContext?.visibleSpecialists) && pageContext.visibleSpecialists.length > 0) {
+    appendCandidates(pageContext.visibleSpecialists as Array<{ id?: number; name?: string }>)
+  }
+
+  try {
+    const rawKeyword = normalizeString(specialistName)
+    const normalizedKeyword = normalizeDoctorNameSafe(specialistName || null)
+    const keywordCandidates = [rawKeyword, normalizedKeyword].filter(
+      (value, index, arr) => Boolean(value) && arr.indexOf(value) === index
+    ) as string[]
+
+    for (const keyword of keywordCandidates) {
+      const byKeyword = await fetchSpecialists({
+        keyword,
+        date: normalizedDate,
+        pageNo: 1,
+        pageSize: 24,
+      })
+      appendCandidates((byKeyword.list || []) as Array<{ id?: number; name?: string }>)
+    }
+
+    if (!candidates.length) {
+      const byDateOnly = await fetchSpecialists({
+        date: normalizedDate,
+        pageNo: 1,
+        pageSize: 24,
+      })
+      appendCandidates((byDateOnly.list || []) as Array<{ id?: number; name?: string }>)
+    }
+  } catch {
+    // ignore search failure and fallback to current candidates
+  }
+
+  if (!candidates.length) {
+    return null
+  }
+
+  for (const specialist of candidates) {
+    const specialistId = normalizeNumericId(specialist.id)
+    if (!specialistId) {
+      continue
+    }
+    try {
+      const slots = await fetchSpecialistAvailability(specialistId, normalizedDate)
+      const matched = slots.some(slot => normalizeNumericId(slot.id) === targetSlotId)
+      if (matched) {
+        return specialistId
+      }
+    } catch {
+      // ignore single specialist availability lookup failure and continue
+    }
+  }
+
+  return null
 }
 
 const normalizeLineValue = (value: string | null): string | null => {
@@ -521,7 +778,10 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
       getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
     )
     const specialistNameFromText = extractSpecialistNameFromContent(content)
-    const resolvedSpecialistName = specialistNameFromJson || specialistNameFromText
+    const specialistNameFromHeuristic = extractSpecialistNameHeuristic(content)
+    const specialistNameFromVisibleList = resolveSpecialistNameByVisibleList(content, pageContext)
+    const resolvedSpecialistName =
+      specialistNameFromJson || specialistNameFromText || specialistNameFromHeuristic || specialistNameFromVisibleList
     const customerNotesFromJson = normalizeString(
       getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
     )
@@ -545,10 +805,10 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
       resolveSlotIdByContext(pageContext, resolvedSlotDateFromJson, resolvedStartTimeFromJson, resolvedEndTimeFromJson) ||
       normalizeNumericId(pageContext?.selectedSlotId)
 
-    if (specialistIdFromJson && slotIdFromJson) {
+    if (specialistIdFromJson || resolvedSpecialistName) {
       return {
-        specialistId: specialistIdFromJson,
-        slotId: slotIdFromJson,
+        specialistId: specialistIdFromJson || 0,
+        slotId: slotIdFromJson || 0,
         slotDate: resolvedSlotDateFromJson || 'N/A',
         startTime: resolvedStartTimeFromJson || '--:--:--',
         endTime: resolvedEndTimeFromJson || '--:--:--',
@@ -608,7 +868,10 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
     /(?:\*\*|__)?\s*\u5907\u6ce8\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
     /(?:\*\*|__)?\s*(?:\u5907\u6ce8|notes?|customerNotes)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
   ]))
-  const specialistName = extractSpecialistNameFromContent(content)
+  const specialistName =
+    extractSpecialistNameFromContent(content) ||
+    extractSpecialistNameHeuristic(content) ||
+    resolveSpecialistNameByVisibleList(content, pageContext)
   const consultationFee = normalizeNumber(extractFirstMatch(content, [
     /consultationFee\s*[:=\uFF1A\uFF1D]\s*([0-9]+(?:\.[0-9]+)?)/i,
     /(?:\*\*|__)?\s*(?:consultation\s*fee|fee|price)\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/i,
@@ -630,13 +893,13 @@ const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPrevi
     slotIdRaw ||
     resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
     normalizeNumericId(pageContext?.selectedSlotId)
-  if (!specialistId || !slotId) {
+  if (!specialistId && !specialistName) {
     return null
   }
 
   return {
-    specialistId,
-    slotId,
+    specialistId: specialistId || 0,
+    slotId: slotId || 0,
     slotDate: resolvedSlotDate || 'N/A',
     startTime: resolvedStartTime || '--:--:--',
     endTime: resolvedEndTime || '--:--:--',
@@ -665,7 +928,12 @@ const isBookingConflictContent = (content: string): boolean => {
   return BOOKING_CONFLICT_PATTERN.test(content || '')
 }
 
-const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
+const hasBookingIntent = (content: string): boolean => {
+  const text = content || ''
+  return /(\u9884\u7ea6|book|booking)/i.test(text)
+}
+
+const openBookingPreview = async (preview: AiBookingSubmitPreviewPayload): Promise<void> => {
   const latestAssistant = aiChatStore.messages
     .slice()
     .reverse()
@@ -690,19 +958,44 @@ const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
     fallback?.endTime ||
     normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) ||
     '--:--:--'
-  const resolvedSpecialistId =
+  const hintedSlotId =
+    preview.slotId ||
+    fallback?.slotId ||
+    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
+    normalizeNumericId(pageContext?.selectedSlotId) ||
+    0
+  let resolvedSpecialistId =
     preview.specialistId ||
     fallback?.specialistId ||
     resolveCurrentPageSpecialistId() ||
     resolveSpecialistIdByName(pageContext, preview.specialistName || fallback?.specialistName || null) ||
     normalizeNumericId(pageContext?.specialistId) ||
     0
-  const resolvedSlotId =
-    preview.slotId ||
-    fallback?.slotId ||
-    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
-    normalizeNumericId(pageContext?.selectedSlotId) ||
-    0
+  if (!resolvedSpecialistId && hintedSlotId) {
+    resolvedSpecialistId = await resolveSpecialistIdBySlotIdInVisibleSpecialists(
+      pageContext,
+      hintedSlotId,
+      resolvedSlotDate,
+      preview.specialistName || fallback?.specialistName || null
+    ) || 0
+  }
+  if (!resolvedSpecialistId) {
+    resolvedSpecialistId = await resolveSpecialistIdBySearchApi(
+      pageContext,
+      preview.specialistName || fallback?.specialistName || null,
+      resolvedSlotDate
+    ) || 0
+  }
+  let resolvedSlotId =
+    hintedSlotId
+  if (!resolvedSlotId && resolvedSpecialistId) {
+    resolvedSlotId = await resolveSlotIdByAvailabilityApi(
+      resolvedSpecialistId,
+      resolvedSlotDate,
+      resolvedStartTime,
+      resolvedEndTime
+    ) || 0
+  }
   if (!resolvedSpecialistId || !resolvedSlotId) {
     return
   }
@@ -733,6 +1026,7 @@ const openBookingPreview = (preview: AiBookingSubmitPreviewPayload): void => {
   }
   lastPreviewKey.value = previewKey
   bookingPreview.value = mergedPreview
+  manualBookingNotes.value = ''
   bookingConfirmDialogVisible.value = true
 }
 
@@ -741,7 +1035,8 @@ const onAiBookingSubmitPreview = (event: Event): void => {
   if (!customEvent.detail) {
     return
   }
-  openBookingPreview(customEvent.detail)
+  dismissedPreviewKeys.clear()
+  void openBookingPreview(customEvent.detail)
 
   if (customEvent.detail.warnings?.length) {
     ElMessage.warning(`AI draft warning: ${customEvent.detail.warnings[0]}`)
@@ -757,6 +1052,7 @@ const dismissBookingPreview = () => {
   }
   bookingConfirmDialogVisible.value = false
   bookingPreview.value = null
+  manualBookingNotes.value = ''
   lastPreviewKey.value = ''
 }
 
@@ -779,11 +1075,12 @@ const confirmBookingFromPreview = async () => {
       specialistId: bookingPreview.value.specialistId,
       slotId: bookingPreview.value.slotId,
       topic: bookingPreview.value.topic,
-      customerNotes: bookingPreview.value.customerNotes || '',
+      customerNotes: manualBookingNotes.value.trim(),
     }, true)
 
     bookingPreview.value = null
     bookingConfirmDialogVisible.value = false
+    manualBookingNotes.value = ''
     lastPreviewKey.value = ''
     aiChatStore.closeDrawer()
     ElMessage.success(`Booking created successfully. Status: ${created.status}.`)
@@ -816,15 +1113,23 @@ watch(
       return
     }
     const latestMessage = aiChatStore.messages[aiChatStore.messages.length - 1]
-    if (!latestMessage || latestMessage.role !== 'assistant' || latestMessage.status !== 'done') {
+    if (!latestMessage || latestMessage.status !== 'done') {
       return
     }
-    if (isBookingConflictContent(latestMessage.content || '')) {
+
+    const isAssistantMessage = latestMessage.role === 'assistant'
+    const isUserBookingMessage = latestMessage.role === 'user' && hasBookingIntent(latestMessage.content || '')
+    if (!isAssistantMessage && !isUserBookingMessage) {
       return
     }
+    if (isAssistantMessage && isBookingConflictContent(latestMessage.content || '')) {
+      return
+    }
+
+    dismissedPreviewKeys.clear()
     const parsedPreview = parsePreviewFromAssistantMessage(latestMessage.content || '')
     if (parsedPreview) {
-      openBookingPreview(parsedPreview)
+      void openBookingPreview(parsedPreview)
     }
   }
 )
@@ -835,6 +1140,7 @@ onBeforeUnmount(() => {
   bookingConfirmDialogVisible.value = false
   bookingPreview.value = null
   bookingSubmitting.value = false
+  manualBookingNotes.value = ''
   lastPreviewKey.value = ''
 })
 
@@ -849,6 +1155,7 @@ const drawerVisible = computed<boolean>({
     aiChatStore.closeDrawer()
     bookingConfirmDialogVisible.value = false
     bookingPreview.value = null
+    manualBookingNotes.value = ''
     lastPreviewKey.value = ''
   }
 })
@@ -941,6 +1248,10 @@ const drawerVisible = computed<boolean>({
 .booking-confirm-row strong {
   color: var(--color-text-primary);
   text-align: right;
+}
+
+.booking-confirm-notes-input {
+  width: 260px;
 }
 
 :deep(.ai-chat-drawer__message-area .ai-message-list) {

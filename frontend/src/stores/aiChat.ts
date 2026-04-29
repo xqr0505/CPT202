@@ -358,13 +358,13 @@ const tryExtractBookingSubmitPreviewFromText = (content: string): AiBookingSubmi
   const pageContext = readBookingPageContext()
   const specialistId = specialistIdRaw || normalizeNumericId(pageContext?.specialistId)
   const slotId = slotIdRaw || normalizeNumericId(pageContext?.selectedSlotId)
-  if (!specialistId || !slotId) {
+  if (!specialistId && !specialistName) {
     return null
   }
 
   return {
-    specialistId,
-    slotId,
+    specialistId: specialistId || 0,
+    slotId: slotId || 0,
     topic: topic || normalizeString(pageContext?.selectedTopic) || '',
     slotDate: slotDate || normalizeString(pageContext?.selectedDate) || 'N/A',
     startTime: startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',
@@ -384,50 +384,53 @@ const tryExtractBookingSubmitPreview = (content: string): AiBookingSubmitPreview
     const readyToSubmit = parseBooleanFlag(
       getParsedValueByAliases(parsed, ['readyToSubmit', 'ready_to_submit', '\u5f85\u786e\u8ba4', '\u53ef\u63d0\u4ea4'])
     )
-    if (success && readyToSubmit) {
-      const specialistIdRaw = normalizeNumericId(
-        getParsedValueByAliases(parsed, ['specialistId', 'specialist_id', '\u533b\u751fID', '\u4e13\u5bb6ID'])
-      )
-      const slotIdRaw = normalizeNumericId(
-        getParsedValueByAliases(parsed, ['slotId', 'slot_id', '\u65f6\u6bb5ID'])
-      )
-      const topic = normalizeString(
-        getParsedValueByAliases(parsed, ['topic', '\u4e3b\u9898'])
-      )
-      const slotDate = normalizeString(
-        getParsedValueByAliases(parsed, ['slotDate', 'slot_date', '\u65e5\u671f'])
-      )
-      const startTime = normalizeTime(normalizeString(
-        getParsedValueByAliases(parsed, ['startTime', 'start_time', '\u5f00\u59cb\u65f6\u95f4'])
-      ))
-      const endTime = normalizeTime(normalizeString(
-        getParsedValueByAliases(parsed, ['endTime', 'end_time', '\u7ed3\u675f\u65f6\u95f4'])
-      ))
+    const specialistIdRaw = normalizeNumericId(
+      getParsedValueByAliases(parsed, ['specialistId', 'specialist_id', '\u533b\u751fID', '\u4e13\u5bb6ID'])
+    )
+    const slotIdRaw = normalizeNumericId(
+      getParsedValueByAliases(parsed, ['slotId', 'slot_id', '\u65f6\u6bb5ID'])
+    )
+    const topic = normalizeString(
+      getParsedValueByAliases(parsed, ['topic', '\u4e3b\u9898'])
+    )
+    const slotDate = normalizeString(
+      getParsedValueByAliases(parsed, ['slotDate', 'slot_date', '\u65e5\u671f'])
+    )
+    const startTime = normalizeTime(normalizeString(
+      getParsedValueByAliases(parsed, ['startTime', 'start_time', '\u5f00\u59cb\u65f6\u95f4'])
+    ))
+    const endTime = normalizeTime(normalizeString(
+      getParsedValueByAliases(parsed, ['endTime', 'end_time', '\u7ed3\u675f\u65f6\u95f4'])
+    ))
+    const specialistName = normalizeString(
+      getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
+    )
+    const customerNotes = normalizeString(
+      getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
+    )
+    const consultationFee = normalizeNumber(
+      getParsedValueByAliases(parsed, ['consultationFee', 'consultation_fee', 'fee', 'price', '\u54a8\u8be2\u8d39'])
+    )
+    const warningsRaw = getParsedValueByAliases(parsed, ['warnings', '\u8b66\u544a'])
+    const warnings = Array.isArray(warningsRaw)
+      ? warningsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : undefined
 
+    const hasStructuredBookingFields = Boolean(
+      specialistIdRaw || slotIdRaw || topic || slotDate || startTime || endTime || specialistName
+    )
+
+    if (success && readyToSubmit || hasStructuredBookingFields) {
       const pageContext = readBookingPageContext()
       const specialistId = specialistIdRaw || normalizeNumericId(pageContext?.specialistId)
       const slotId = slotIdRaw || normalizeNumericId(pageContext?.selectedSlotId)
-      if (!specialistId || !slotId) {
+      if (!specialistId && !specialistName) {
         return null
       }
 
-      const specialistName = normalizeString(
-        getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
-      )
-      const customerNotes = normalizeString(
-        getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
-      )
-      const consultationFee = normalizeNumber(
-        getParsedValueByAliases(parsed, ['consultationFee', 'consultation_fee', 'fee', 'price', '\u54a8\u8be2\u8d39'])
-      )
-      const warningsRaw = getParsedValueByAliases(parsed, ['warnings', '\u8b66\u544a'])
-      const warnings = Array.isArray(warningsRaw)
-        ? warningsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
-        : undefined
-
       return {
-        specialistId,
-        slotId,
+        specialistId: specialistId || 0,
+        slotId: slotId || 0,
         topic: topic || normalizeString(pageContext?.selectedTopic) || '',
         slotDate: slotDate || normalizeString(pageContext?.selectedDate) || 'N/A',
         startTime: startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) || '--:--:--',

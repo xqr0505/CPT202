@@ -66,6 +66,7 @@ export function setupRouterGuard(router: Router) {
       if (to.path === '/') {
         return { path: '/customer/search' };
       }
+
       if (isPublicPath(to.path) || authRoutes.includes(to.path)) {
         return true;
       }

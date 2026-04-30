@@ -58,16 +58,21 @@ class ParallelToolAssistantTest {
     }
 
     @Test
-    void shouldReturnToolFailureResultWhenAnyParallelToolFails() {
+    void shouldConvertParallelToolFailureIntoToolResult() {
         TestReadOnlyTools tools = new TestReadOnlyTools(true);
-        Assistant assistant = buildAssistant(tools, Setups.defaultParallelProperties(), new TwoStepToolThenAnswerModel(
-                List.of(
-                        request("id-1", "searchCurrentCustomerBookings"),
-                        request("id-2", "searchKnowledgeBase")
-                )
+        CaptureToolResultTextsModel model = new CaptureToolResultTextsModel(List.of(
+                request("id-1", "searchCurrentCustomerBookings"),
+                request("id-2", "searchKnowledgeBase")
         ));
+        Assistant assistant = buildAssistant(tools, Setups.defaultParallelProperties(), model);
 
-        assertThat(assistant.chat(1001L, "query")).isEqualTo("done");
+        String reply = assistant.chat(1001L, "query");
+
+        assertThat(reply).isEqualTo("done");
+        assertThat(model.toolResultTexts()).hasSize(2);
+        assertThat(model.toolResultTexts().get(0)).contains("bookings");
+        assertThat(model.toolResultTexts().get(1)).contains("\"success\":false");
+        assertThat(model.toolResultTexts().get(1)).contains("forced");
     }
 
     @Test
@@ -90,6 +95,27 @@ class ParallelToolAssistantTest {
         assertThat(reply).isEqualTo("done");
         assertThat(mixedTools.writeThreadName()).doesNotContain("ai-tool-parallel-");
         assertThat(model.toolResultIds()).containsExactly("id-a", "id-b", "id-c");
+    }
+
+    @Test
+    void shouldConvertParallelTimeoutIntoToolFailureResult() {
+        SlowReadOnlyTools tools = new SlowReadOnlyTools();
+        AiToolParallelProperties parallelProperties = Setups.defaultParallelProperties();
+        parallelProperties.setTimeoutMs(100L);
+        CaptureToolResultTextsModel model = new CaptureToolResultTextsModel(List.of(
+                request("id-a", "searchCurrentCustomerBookings"),
+                request("id-b", "searchKnowledgeBase")
+        ));
+        Assistant assistant = buildAssistant(tools, parallelProperties, model);
+
+        String reply = assistant.chat(1001L, "query");
+
+        assertThat(reply).isEqualTo("done");
+        assertThat(model.toolResultTexts()).hasSize(2);
+        assertThat(model.toolResultTexts().get(0)).contains("\"success\":false");
+        assertThat(model.toolResultTexts().get(0)).contains("timed out");
+        assertThat(model.toolResultTexts().get(1)).contains("\"success\":false");
+        assertThat(model.toolResultTexts().get(1)).contains("timed out");
     }
 
     @Test
@@ -200,6 +226,28 @@ class ParallelToolAssistantTest {
         }
     }
 
+    private static class CaptureToolResultTextsModel extends TwoStepToolThenAnswerModel {
+        private final List<String> toolResultTexts = new ArrayList<>();
+
+        private CaptureToolResultTextsModel(List<ToolExecutionRequest> firstRoundRequests) {
+            super(firstRoundRequests);
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecifications) {
+            messages.stream()
+                    .filter(message -> message instanceof dev.langchain4j.data.message.ToolExecutionResultMessage)
+                    .map(dev.langchain4j.data.message.ToolExecutionResultMessage.class::cast)
+                    .map(dev.langchain4j.data.message.ToolExecutionResultMessage::text)
+                    .forEach(toolResultTexts::add);
+            return super.generate(messages, toolSpecifications);
+        }
+
+        private List<String> toolResultTexts() {
+            return toolResultTexts;
+        }
+    }
+
     private static class TestReadOnlyTools {
         private final boolean failKnowledgeTool;
         private final ConcurrentLinkedQueue<String> executionThreads = new ConcurrentLinkedQueue<>();
@@ -253,6 +301,21 @@ class ParallelToolAssistantTest {
 
         private String writeThreadName() {
             return writeThreadName;
+        }
+    }
+
+    private static class SlowReadOnlyTools {
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchCurrentCustomerBookings() throws InterruptedException {
+            Thread.sleep(500);
+            return "bookings";
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchKnowledgeBase() throws InterruptedException {
+            Thread.sleep(500);
+            return "knowledge";
         }
     }
 

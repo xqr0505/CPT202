@@ -165,7 +165,7 @@ export const logout = (options?: { redirectTo?: string | null }) => {
     return;
   }
 
-  router.push({ name: 'Login' }).catch(() => null);
+  router.push({ path: '/auth' }).catch(() => null);
 };
 
 const createAuthFailureError = (message: string): AuthFailureError => {

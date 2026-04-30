@@ -19,8 +19,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,14 +55,19 @@ class RecurringRuleServiceImplTest {
     @InjectMocks
     private RecurringRuleServiceImpl recurringRuleService;
 
+    private static LocalDate futureDate(int days) {
+        return LocalDate.now().plusDays(days);
+    }
+
     @Test
     void createRecurringRule_success() {
+        LocalDate startDate = futureDate(1);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
-        request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
-        request.setEffectiveStartDate(LocalDate.now());
+        request.setDayOfWeek(startDate.getDayOfWeek().getValue());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(18, 0));
         request.setEndTime(LocalTime.of(19, 0));
-        request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
+        request.setEffectiveEndDate(startDate.plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
@@ -91,12 +99,13 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void createRecurringRule_invalidTimeRange() {
+        LocalDate startDate = futureDate(1);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(1);
-        request.setEffectiveStartDate(LocalDate.now());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(11, 0));
         request.setEndTime(LocalTime.of(11, 0));
-        request.setEffectiveEndDate(LocalDate.now().plusDays(1));
+        request.setEffectiveEndDate(startDate.plusDays(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         BusinessException exception = assertThrows(BusinessException.class,
@@ -107,20 +116,21 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void createRecurringRule_conflict() {
+        LocalDate startDate = futureDate(14);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(1);
-        request.setEffectiveStartDate(LocalDate.of(2026, 4, 1));
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
-        request.setEffectiveEndDate(LocalDate.of(2026, 4, 30));
+        request.setEffectiveEndDate(startDate.plusWeeks(4));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         AvailabilityRecurringRule existingRule = new AvailabilityRecurringRule();
         existingRule.setId(88L);
         existingRule.setSpecialistId(1L);
         existingRule.setDayOfWeek(1);
-        existingRule.setEffectiveStartDate(LocalDate.of(2026, 4, 10));
-        existingRule.setEffectiveEndDate(LocalDate.of(2026, 5, 10));
+        existingRule.setEffectiveStartDate(startDate.plusDays(3));
+        existingRule.setEffectiveEndDate(startDate.plusWeeks(5));
         existingRule.setStartTime(LocalTime.of(9, 30));
         existingRule.setEndTime(LocalTime.of(10, 30));
         when(recurringRuleMapper.selectList(any())).thenReturn(List.of(existingRule));
@@ -133,11 +143,12 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void getActiveRecurringRules_success() {
+        LocalDate startDate = futureDate(1);
         AvailabilityRecurringRule rule = new AvailabilityRecurringRule();
         rule.setId(41L);
         rule.setSpecialistId(1L);
         rule.setDayOfWeek(1);
-        rule.setEffectiveStartDate(LocalDate.now());
+        rule.setEffectiveStartDate(startDate);
         rule.setStartTime(LocalTime.of(9, 0));
         rule.setEndTime(LocalTime.of(10, 0));
         rule.setIsActive(1);
@@ -186,6 +197,7 @@ class RecurringRuleServiceImplTest {
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectById(46L)).thenReturn(rule);
+        when(timeSlotMapper.selectCount(any())).thenReturn(0L);
 
         recurringRuleService.deleteRecurringRule(46L);
 
@@ -194,13 +206,35 @@ class RecurringRuleServiceImplTest {
     }
 
     @Test
+    void deleteRecurringRule_rejectsWhenGeneratedSlotsAreBookedOrLocked() {
+        AvailabilityRecurringRule rule = new AvailabilityRecurringRule();
+        rule.setId(47L);
+        rule.setSpecialistId(1L);
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+        when(recurringRuleMapper.selectById(47L)).thenReturn(rule);
+        when(timeSlotMapper.selectCount(any())).thenReturn(1L);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> recurringRuleService.deleteRecurringRule(47L)
+        );
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Recurring rule has booked or locked slots and cannot be deleted", exception.getMessage());
+        verify(timeSlotMapper, never()).delete(any());
+        verify(recurringRuleMapper, never()).deleteById(eq(47L));
+    }
+
+    @Test
     void createRecurringRule_skipsConflictingDatesAndCreatesRemainingSlots() {
+        LocalDate startDate = futureDate(1);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
-        request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
-        request.setEffectiveStartDate(LocalDate.now());
+        request.setDayOfWeek(startDate.getDayOfWeek().getValue());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
-        request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
+        request.setEffectiveEndDate(startDate.plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
@@ -227,12 +261,13 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void recurringGeneratedSlots_areVisibleWhenViewingWeeklySchedule() {
+        LocalDate startDate = futureDate(1);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
-        request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
-        request.setEffectiveStartDate(LocalDate.now());
+        request.setDayOfWeek(startDate.getDayOfWeek().getValue());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
-        request.setEffectiveEndDate(LocalDate.now().plusWeeks(1));
+        request.setEffectiveEndDate(startDate.plusWeeks(1));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectList(any())).thenReturn(List.of());
@@ -260,9 +295,10 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void createRecurringRule_withoutEndDate_generatesInitialRollingHorizon() {
+        LocalDate startDate = futureDate(1);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
-        request.setDayOfWeek(LocalDate.now().getDayOfWeek().getValue());
-        request.setEffectiveStartDate(LocalDate.now());
+        request.setDayOfWeek(startDate.getDayOfWeek().getValue());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
 
@@ -327,19 +363,20 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void createRecurringRule_allowsNonOverlappingDateRangesForSameWeeklyTime() {
+        LocalDate requestStartDate = futureDate(60);
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
         request.setDayOfWeek(1);
-        request.setEffectiveStartDate(LocalDate.of(2026, 7, 1));
+        request.setEffectiveStartDate(requestStartDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
-        request.setEffectiveEndDate(LocalDate.of(2026, 7, 31));
+        request.setEffectiveEndDate(requestStartDate.plusWeeks(4));
 
         AvailabilityRecurringRule existingRule = new AvailabilityRecurringRule();
         existingRule.setId(99L);
         existingRule.setSpecialistId(1L);
         existingRule.setDayOfWeek(1);
-        existingRule.setEffectiveStartDate(LocalDate.of(2026, 5, 1));
-        existingRule.setEffectiveEndDate(LocalDate.of(2026, 5, 31));
+        existingRule.setEffectiveStartDate(requestStartDate.minusWeeks(8));
+        existingRule.setEffectiveEndDate(requestStartDate.minusWeeks(4));
         existingRule.setStartTime(LocalTime.of(9, 0));
         existingRule.setEndTime(LocalTime.of(10, 0));
 
@@ -363,12 +400,16 @@ class RecurringRuleServiceImplTest {
 
     @Test
     void createRecurringRule_allowsArbitraryWeeklyTime() {
+        LocalDate startDate = LocalDate.now()
+                .plusDays(1)
+                .with(TemporalAdjusters.nextOrSame(DayOfWeek.TUESDAY));
+
         CreateRecurringRuleRequest request = new CreateRecurringRuleRequest();
-        request.setDayOfWeek(2);
-        request.setEffectiveStartDate(LocalDate.of(2026, 4, 14));
+        request.setDayOfWeek(DayOfWeek.TUESDAY.getValue());
+        request.setEffectiveStartDate(startDate);
         request.setStartTime(LocalTime.of(18, 0));
         request.setEndTime(LocalTime.of(19, 0));
-        request.setEffectiveEndDate(LocalDate.of(2026, 4, 28));
+        request.setEffectiveEndDate(startDate.plusWeeks(2));
 
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
         when(recurringRuleMapper.selectList(any())).thenReturn(List.of());

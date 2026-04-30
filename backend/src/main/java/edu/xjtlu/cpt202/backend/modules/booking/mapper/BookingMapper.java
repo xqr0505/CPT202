@@ -16,6 +16,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
@@ -30,6 +31,20 @@ import java.util.Optional;
  */
 @Mapper
 public interface BookingMapper extends BaseMapper<Booking> {
+
+    @Select("""
+            SELECT b.*
+            FROM bookings b
+            JOIN time_slots ts ON ts.id = b.slot_id
+            WHERE b.status = #{bookingStatus}
+              AND ts.status = #{slotStatus}
+              AND TIMESTAMP(ts.slot_date, COALESCE(ts.end_time, ts.start_time)) <= #{cutoffTime}
+            """)
+    List<Booking> selectAutoCompletableConfirmedBookings(
+            @Param("bookingStatus") String bookingStatus,
+            @Param("slotStatus") String slotStatus,
+            @Param("cutoffTime") LocalDateTime cutoffTime
+    );
 
     List<UpcomingBookingVO> selectUpcomingBookings(
             @Param("customerId") Long customerId,
@@ -237,5 +252,18 @@ public interface BookingMapper extends BaseMapper<Booking> {
             @Param("status") String status,
             @Param("changeType") String changeType,
             @Param("decisionTime") LocalDateTime decisionTime
+    );
+
+    @Update("""
+            UPDATE bookings
+            SET status = #{targetStatus},
+                updated_at = NOW()
+            WHERE id = #{bookingId}
+              AND status = #{sourceStatus}
+            """)
+    int updateStatusIfCurrent(
+            @Param("bookingId") Long bookingId,
+            @Param("sourceStatus") String sourceStatus,
+            @Param("targetStatus") String targetStatus
     );
 }

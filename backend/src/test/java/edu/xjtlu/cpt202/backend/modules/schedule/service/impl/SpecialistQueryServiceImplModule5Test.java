@@ -52,6 +52,10 @@ class SpecialistQueryServiceImplModule5Test {
     @InjectMocks
     private SpecialistQueryServiceImpl specialistQueryService;
 
+    private static LocalDate futureDate(int days) {
+        return LocalDate.now().plusDays(days);
+    }
+
     @Test
     void listCategories_returnsMapperCategories() {
         SpecialistCategoryVO category = new SpecialistCategoryVO();
@@ -80,7 +84,7 @@ class SpecialistQueryServiceImplModule5Test {
         searchPage.setTotal(1);
         searchPage.setRecords(List.of(specialist));
 
-        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(searchPage);
 
         PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
@@ -92,16 +96,19 @@ class SpecialistQueryServiceImplModule5Test {
 
         verify(specialistQueryMapper).searchSpecialists(
                 argThat(matchesPage(1L, 12L)),
-                eq(query)
+                eq(query),
+                any(LocalDate.class),
+                any(LocalTime.class)
         );
     }
 
     @Test
     void searchSpecialists_acceptsCategoryKeywordDateAndFeeSortFilters() {
+        LocalDate targetDate = futureDate(2);
         SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
         query.setCategoryId(3L);
         query.setKeyword("Hel");
-        query.setDate(LocalDate.of(2026, 4, 24));
+        query.setDate(targetDate);
         query.setSortBy("feeDesc");
         query.setPageNo(2);
         query.setPageSize(6);
@@ -116,7 +123,7 @@ class SpecialistQueryServiceImplModule5Test {
         searchPage.setTotal(1);
         searchPage.setRecords(List.of(specialist));
 
-        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(searchPage);
 
         PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
@@ -126,28 +133,31 @@ class SpecialistQueryServiceImplModule5Test {
 
         verify(specialistQueryMapper).searchSpecialists(
                 argThat(matchesPage(2L, 6L)),
-                eq(query)
+                eq(query),
+                any(LocalDate.class),
+                any(LocalTime.class)
         );
     }
 
     @Test
     void searchSpecialists_generatesSlotsWhenDateFilterIsProvided() {
+        LocalDate targetDate = futureDate(3);
         SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
-        query.setDate(LocalDate.of(2026, 4, 25));
+        query.setDate(targetDate);
         query.setSortBy("recommended");
 
         IPage<SpecialistSummaryVO> searchPage = new Page<>(1, 12);
         searchPage.setTotal(0);
         searchPage.setRecords(List.of());
 
-        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(searchPage);
 
         PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
 
         assertNotNull(result);
         verify(recurringRuleServiceImpl)
-                .ensureSlotsGeneratedForDateRange(LocalDate.of(2026, 4, 25), LocalDate.of(2026, 4, 25));
+                .ensureSlotsGeneratedForDateRange(targetDate, targetDate);
     }
 
     @Test
@@ -159,7 +169,7 @@ class SpecialistQueryServiceImplModule5Test {
         searchPage.setTotal(0);
         searchPage.setRecords(List.of());
 
-        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(searchPage);
 
         PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
@@ -168,7 +178,9 @@ class SpecialistQueryServiceImplModule5Test {
         assertEquals(0, result.getTotal());
         verify(specialistQueryMapper).searchSpecialists(
                 any(),
-                eq(query)
+                eq(query),
+                any(LocalDate.class),
+                any(LocalTime.class)
         );
     }
 
@@ -181,13 +193,29 @@ class SpecialistQueryServiceImplModule5Test {
         searchPage.setTotal(0);
         searchPage.setRecords(List.of());
 
-        when(specialistQueryMapper.searchSpecialists(any(), eq(query)))
+        when(specialistQueryMapper.searchSpecialists(any(), eq(query), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(searchPage);
 
         PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
 
         assertNotNull(result);
         verify(recurringRuleServiceImpl, never()).ensureSlotsGeneratedForDateRange(any(), any());
+    }
+
+    @Test
+    void searchSpecialists_returnsEmptyResultForPastDateFilter() {
+        SpecialistSearchQueryDTO query = new SpecialistSearchQueryDTO();
+        query.setDate(LocalDate.now().minusDays(1));
+        query.setSortBy("recommended");
+
+        PageResult<SpecialistSummaryVO> result = specialistQueryService.searchSpecialists(query);
+
+        assertNotNull(result);
+        assertEquals(0L, result.getTotal());
+        assertTrue(result.getList().isEmpty());
+        verify(recurringRuleServiceImpl, never()).ensureSlotsGeneratedForDateRange(any(), any());
+        verify(specialistQueryMapper, never())
+                .searchSpecialists(any(), any(), any(LocalDate.class), any(LocalTime.class));
     }
 
     @Test
@@ -217,27 +245,28 @@ class SpecialistQueryServiceImplModule5Test {
         when(specialistQueryMapper.getSpecialistDetail(77L)).thenReturn(null);
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> specialistQueryService.listAvailability(77L, LocalDate.of(2026, 4, 21)));
+                () -> specialistQueryService.listAvailability(77L, futureDate(2)));
 
         assertEquals(ResultCodeEnum.NOT_FOUND.getCode(), exception.getCode());
         verify(recurringRuleServiceImpl, never())
                 .ensureSlotsGeneratedForSpecialist(anyLong(), any(), any());
-        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any());
+        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any(), any(), any());
     }
 
     @Test
     void listAvailability_returnsEmptyListWhenNoSlotsAvailable() {
+        LocalDate targetDate = futureDate(2);
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(18L);
         detail.setName("Dr. Empty");
         detail.setStatus("ACTIVE");
 
         when(specialistQueryMapper.getSpecialistDetail(18L)).thenReturn(detail);
-        when(specialistQueryMapper.listAvailabilityByDate(18L, LocalDate.of(2026, 4, 21)))
+        when(specialistQueryMapper.listAvailabilityByDate(eq(18L), eq(targetDate), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(Collections.emptyList());
 
         List<SpecialistAvailabilityVO> result =
-                specialistQueryService.listAvailability(18L, LocalDate.of(2026, 4, 21));
+                specialistQueryService.listAvailability(18L, targetDate);
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
@@ -245,6 +274,7 @@ class SpecialistQueryServiceImplModule5Test {
 
     @Test
     void listAvailability_returnsEmptyListForInactiveSpecialist() {
+        LocalDate targetDate = futureDate(2);
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(21L);
         detail.setName("Dr. Offline");
@@ -253,17 +283,18 @@ class SpecialistQueryServiceImplModule5Test {
         when(specialistQueryMapper.getSpecialistDetail(21L)).thenReturn(detail);
 
         List<SpecialistAvailabilityVO> result =
-                specialistQueryService.listAvailability(21L, LocalDate.of(2026, 4, 21));
+                specialistQueryService.listAvailability(21L, targetDate);
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
         verify(recurringRuleServiceImpl, never())
                 .ensureSlotsGeneratedForSpecialist(anyLong(), any(), any());
-        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any());
+        verify(specialistQueryMapper, never()).listAvailabilityByDate(anyLong(), any(), any(), any());
     }
 
     @Test
     void listAvailability_returnsMapperSlotsForChosenDate() {
+        LocalDate targetDate = futureDate(3);
         SpecialistDetailVO detail = new SpecialistDetailVO();
         detail.setId(22L);
         detail.setName("Dr. Ava");
@@ -271,22 +302,33 @@ class SpecialistQueryServiceImplModule5Test {
 
         SpecialistAvailabilityVO availability = new SpecialistAvailabilityVO();
         availability.setId(7L);
-        availability.setSlotDate(LocalDate.of(2026, 4, 22));
+        availability.setSlotDate(targetDate);
         availability.setStartTime(LocalTime.of(9, 30));
         availability.setEndTime(LocalTime.of(10, 0));
         availability.setStatus("Open for booking");
 
         when(specialistQueryMapper.getSpecialistDetail(22L)).thenReturn(detail);
-        when(specialistQueryMapper.listAvailabilityByDate(22L, LocalDate.of(2026, 4, 22)))
+        when(specialistQueryMapper.listAvailabilityByDate(eq(22L), eq(targetDate), any(LocalDate.class), any(LocalTime.class)))
                 .thenReturn(List.of(availability));
 
         List<SpecialistAvailabilityVO> result =
-                specialistQueryService.listAvailability(22L, LocalDate.of(2026, 4, 22));
+                specialistQueryService.listAvailability(22L, targetDate);
 
         assertEquals(1, result.size());
         assertEquals(LocalTime.of(9, 30), result.get(0).getStartTime());
         assertEquals("Open for booking", result.get(0).getStatus());
         verify(recurringRuleServiceImpl)
-                .ensureSlotsGeneratedForSpecialist(22L, LocalDate.of(2026, 4, 22), LocalDate.of(2026, 4, 22));
+                .ensureSlotsGeneratedForSpecialist(22L, targetDate, targetDate);
+    }
+
+    @Test
+    void listAvailability_returnsEmptyListForPastDate() {
+        List<SpecialistAvailabilityVO> result =
+                specialistQueryService.listAvailability(22L, LocalDate.now().minusDays(1));
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+        verify(recurringRuleServiceImpl, never()).ensureSlotsGeneratedForSpecialist(anyLong(), any(), any());
+        verify(specialistQueryMapper, never()).getSpecialistDetail(anyLong());
     }
 }

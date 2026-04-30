@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Set;
 
@@ -41,12 +42,21 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
     @Override
     public PageResult<SpecialistSummaryVO> searchSpecialists(SpecialistSearchQueryDTO query) {
         validateSort(query.getSortBy());
+        LocalDate today = LocalDate.now();
         if (query.getDate() != null) {
+            if (query.getDate().isBefore(today)) {
+                return new PageResult<>(0L, List.of());
+            }
             recurringRuleServiceImpl.ensureSlotsGeneratedForDateRange(query.getDate(), query.getDate());
         }
 
         Page<SpecialistSummaryVO> page = new Page<>(query.getPageNo(), query.getPageSize());
-        IPage<SpecialistSummaryVO> searchPage = specialistQueryMapper.searchSpecialists(page, query);
+        IPage<SpecialistSummaryVO> searchPage = specialistQueryMapper.searchSpecialists(
+                page,
+                query,
+                today,
+                LocalTime.now()
+        );
 
         return new PageResult<>(searchPage.getTotal(), searchPage.getRecords());
     }
@@ -62,12 +72,16 @@ public class SpecialistQueryServiceImpl implements SpecialistQueryService {
 
     @Override
     public List<SpecialistAvailabilityVO> listAvailability(Long specialistId, LocalDate date) {
+        LocalDate today = LocalDate.now();
+        if (date.isBefore(today)) {
+            return List.of();
+        }
         SpecialistDetailVO detail = getSpecialistDetail(specialistId);
         if (!"ACTIVE".equals(detail.getStatus())) {
             return List.of();
         }
         recurringRuleServiceImpl.ensureSlotsGeneratedForSpecialist(specialistId, date, date);
-        return specialistQueryMapper.listAvailabilityByDate(specialistId, date);
+        return specialistQueryMapper.listAvailabilityByDate(specialistId, date, today, LocalTime.now());
     }
 
     private void validateSort(String sortBy) {

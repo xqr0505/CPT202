@@ -37,6 +37,7 @@
           type="date"
           value-format="YYYY-MM-DD"
           placeholder="Choose a date"
+          :disabled-date="disabledPastDates"
           @update:model-value="updateField('date', $event ?? '')"
         />
       </label>
@@ -90,6 +91,12 @@ const sortOptions: Array<{ label: string; value: SpecialistSortOption }> = [
   { label: 'Fee: Low to High', value: SPECIALIST_SORT_OPTIONS.FEE_ASC },
   { label: 'Fee: High to Low', value: SPECIALIST_SORT_OPTIONS.FEE_DESC },
 ]
+
+const disabledPastDates = (date: Date): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
 
 const normalizeCategoryId = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') {

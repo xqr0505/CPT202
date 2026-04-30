@@ -385,7 +385,7 @@
             b.created_at AS submissionTime,
             b.customer_notes AS customerNotes,
             CASE
-                WHEN b.status = 'CONFIRMED' THEN 'APPROVED'
+                WHEN b.status IN ('CONFIRMED', 'COMPLETED') THEN 'APPROVED'
                 WHEN b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL THEN 'REJECTED'
                 ELSE b.status
             END AS status,
@@ -407,7 +407,7 @@
         WHERE sp.user_id = #{currentUserId}
           AND b.decision_time IS NOT NULL
           AND (
-            b.status = 'CONFIRMED'
+            b.status IN ('CONFIRMED', 'COMPLETED')
             OR (b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL)
           )
         ORDER BY b.decision_time DESC, b.created_at DESC
@@ -425,7 +425,7 @@
             b.created_at AS submissionTime,
             b.customer_notes AS customerNotes,
             CASE
-                WHEN b.status = 'CONFIRMED' THEN 'APPROVED'
+                WHEN b.status IN ('CONFIRMED', 'COMPLETED') THEN 'APPROVED'
                 WHEN b.status = 'CANCELLED' AND b.rejection_reason IS NOT NULL THEN 'REJECTED'
                 ELSE b.status
             END AS status,

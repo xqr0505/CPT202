@@ -34,6 +34,8 @@ public interface BookingService extends IService<Booking> {
 
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);
 
+    int autoCompleteExpiredConfirmedBookings();
+
     BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO);
 
     AiBookingFormDraftVO buildAiBookingDraft(

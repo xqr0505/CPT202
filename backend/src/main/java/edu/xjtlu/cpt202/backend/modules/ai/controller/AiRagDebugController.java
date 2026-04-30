@@ -11,6 +11,7 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -38,6 +39,7 @@ import java.util.Set;
  */
 @RestController
 @RequestMapping(AiConstant.API_V1_AI + "/rag")
+@ConditionalOnBean(RagProperties.class)
 public class AiRagDebugController {
 
     private final RagProperties ragProperties;

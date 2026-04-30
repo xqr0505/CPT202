@@ -45,10 +45,15 @@ class ScheduleServiceImplTest {
     @InjectMocks
     private ScheduleServiceImpl scheduleService;
 
+    private static LocalDate futureDate(int days) {
+        return LocalDate.now().plusDays(days);
+    }
+
     @Test
     void createSlot_success() {
+        LocalDate slotDate = futureDate(2);
         CreateSlotRequest request = new CreateSlotRequest();
-        request.setSlotDate(LocalDate.of(2026, 4, 12));
+        request.setSlotDate(slotDate);
         request.setStartTime(LocalTime.of(18, 0));
         request.setEndTime(LocalTime.of(19, 0));
 
@@ -67,7 +72,7 @@ class ScheduleServiceImplTest {
         assertNotNull(result);
         assertEquals(101L, result.getId());
         assertEquals(1L, result.getSpecialistId());
-        assertEquals(LocalDate.of(2026, 4, 12), result.getSlotDate());
+        assertEquals(slotDate, result.getSlotDate());
         assertEquals(LocalTime.of(18, 0), result.getStartTime());
         assertEquals(LocalTime.of(19, 0), result.getEndTime());
         assertEquals(TimeSlotStatusEnum.AVAILABLE.name(), result.getStatus());
@@ -76,8 +81,9 @@ class ScheduleServiceImplTest {
 
     @Test
     void createSlot_invalidTimeRange() {
+        LocalDate slotDate = futureDate(2);
         CreateSlotRequest request = new CreateSlotRequest();
-        request.setSlotDate(LocalDate.of(2026, 4, 10));
+        request.setSlotDate(slotDate);
         request.setStartTime(LocalTime.of(10, 0));
         request.setEndTime(LocalTime.of(10, 0));
 
@@ -89,8 +95,9 @@ class ScheduleServiceImplTest {
 
     @Test
     void createSlot_conflict() {
+        LocalDate slotDate = futureDate(2);
         CreateSlotRequest request = new CreateSlotRequest();
-        request.setSlotDate(LocalDate.of(2026, 4, 10));
+        request.setSlotDate(slotDate);
         request.setStartTime(LocalTime.of(9, 0));
         request.setEndTime(LocalTime.of(10, 0));
 
@@ -100,6 +107,21 @@ class ScheduleServiceImplTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> scheduleService.createSlot(request));
 
         assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), exception.getCode());
+    }
+
+    @Test
+    void createSlot_rejectsPastTimeSlot() {
+        CreateSlotRequest request = new CreateSlotRequest();
+        request.setSlotDate(LocalDate.now().minusDays(1));
+        request.setStartTime(LocalTime.of(9, 0));
+        request.setEndTime(LocalTime.of(10, 0));
+
+        when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> scheduleService.createSlot(request));
+
+        assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), exception.getCode());
+        assertEquals("Time slot must start in the future", exception.getMessage());
     }
 
     @Test
@@ -152,10 +174,11 @@ class ScheduleServiceImplTest {
 
     @Test
     void updateSlot_successWithNewTimeAndStatus() {
+        LocalDate slotDate = futureDate(3);
         TimeSlot slot = new TimeSlot();
         slot.setId(12L);
         slot.setSpecialistId(1L);
-        slot.setSlotDate(LocalDate.of(2026, 4, 8));
+        slot.setSlotDate(slotDate);
         slot.setStartTime(LocalTime.of(9, 0));
         slot.setEndTime(LocalTime.of(10, 0));
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
@@ -179,10 +202,11 @@ class ScheduleServiceImplTest {
 
     @Test
     void updateSlot_rejectsConflictingTimeRangeAndPreservesOriginalSlot() {
+        LocalDate slotDate = futureDate(3);
         TimeSlot slot = new TimeSlot();
         slot.setId(12L);
         slot.setSpecialistId(1L);
-        slot.setSlotDate(LocalDate.of(2026, 4, 8));
+        slot.setSlotDate(slotDate);
         slot.setStartTime(LocalTime.of(9, 0));
         slot.setEndTime(LocalTime.of(10, 0));
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
@@ -297,6 +321,8 @@ class ScheduleServiceImplTest {
         TimeSlot slot = new TimeSlot();
         slot.setId(21L);
         slot.setSpecialistId(1L);
+        slot.setSlotDate(futureDate(2));
+        slot.setStartTime(LocalTime.of(9, 0));
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
         when(specialistProfileMapper.selectIdByUserId(1L)).thenReturn(1L);
 
@@ -326,11 +352,12 @@ class ScheduleServiceImplTest {
 
     @Test
     void updateSlot_detachesRecurringOccurrenceWhenTimeChanges() {
+        LocalDate slotDate = futureDate(4);
         TimeSlot slot = new TimeSlot();
         slot.setId(33L);
         slot.setSpecialistId(1L);
         slot.setRecurringRuleId(7L);
-        slot.setSlotDate(LocalDate.of(2026, 4, 11));
+        slot.setSlotDate(slotDate);
         slot.setStartTime(LocalTime.of(9, 0));
         slot.setEndTime(LocalTime.of(10, 0));
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
@@ -348,16 +375,17 @@ class ScheduleServiceImplTest {
         assertEquals(LocalTime.of(10, 0), result.getStartTime());
         assertEquals(LocalTime.of(11, 30), result.getEndTime());
         assertEquals(null, slot.getRecurringRuleId());
-        verify(recurringRuleServiceImpl).recordRuleException(7L, LocalDate.of(2026, 4, 11));
+        verify(recurringRuleServiceImpl).recordRuleException(7L, slotDate);
     }
 
     @Test
     void deleteSlot_recordsRecurringOccurrenceExceptionBeforeDelete() {
+        LocalDate slotDate = futureDate(5);
         TimeSlot slot = new TimeSlot();
         slot.setId(34L);
         slot.setSpecialistId(1L);
         slot.setRecurringRuleId(8L);
-        slot.setSlotDate(LocalDate.of(2026, 4, 12));
+        slot.setSlotDate(slotDate);
         slot.setStartTime(LocalTime.of(9, 0));
         slot.setEndTime(LocalTime.of(10, 0));
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
@@ -367,7 +395,7 @@ class ScheduleServiceImplTest {
 
         scheduleService.deleteSlot(34L);
 
-        verify(recurringRuleServiceImpl).recordRuleException(8L, LocalDate.of(2026, 4, 12));
+        verify(recurringRuleServiceImpl).recordRuleException(8L, slotDate);
         verify(timeSlotMapper).deleteById(34L);
     }
 }

@@ -90,6 +90,16 @@ public class BookingServiceImplTest {
         UserContextHolder.clear();
     }
 
+    private static LocalDate futureDate(int days) {
+        return LocalDate.now().plusDays(days);
+    }
+
+    private static void populateFutureSlot(TimeSlot slot, int days) {
+        slot.setSlotDate(futureDate(days));
+        slot.setStartTime(LocalTime.of(10, 0));
+        slot.setEndTime(LocalTime.of(11, 0));
+    }
+
     @Test
     public void getUpcomingBookingsByCustomer_Success() {
         // Arrange
@@ -151,6 +161,59 @@ public class BookingServiceImplTest {
         assertEquals("CONFIRMED", result.get(2).getStatus());
     }
 
+    @Test
+    void autoCompleteExpiredConfirmedBookings_CompletesEndedConfirmedBookings() {
+        Booking first = new Booking();
+        first.setId(101L);
+        first.setCustomerId(11L);
+        first.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        Booking second = new Booking();
+        second.setId(102L);
+        second.setCustomerId(12L);
+        second.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        when(bookingMapper.selectAutoCompletableConfirmedBookings(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(TimeSlotStatusEnum.BOOKED.name()),
+                any(LocalDateTime.class)))
+                .thenReturn(List.of(first, second));
+        when(bookingMapper.updateStatusIfCurrent(101L, BookingStatusEnum.CONFIRMED.name(), BookingStatusEnum.COMPLETED.name()))
+                .thenReturn(1);
+        when(bookingMapper.updateStatusIfCurrent(102L, BookingStatusEnum.CONFIRMED.name(), BookingStatusEnum.COMPLETED.name()))
+                .thenReturn(1);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Collections.emptySet());
+
+        int result = bookingService.autoCompleteExpiredConfirmedBookings();
+
+        assertEquals(2, result);
+        verify(bookingMapper).updateStatusIfCurrent(101L, BookingStatusEnum.CONFIRMED.name(), BookingStatusEnum.COMPLETED.name());
+        verify(bookingMapper).updateStatusIfCurrent(102L, BookingStatusEnum.CONFIRMED.name(), BookingStatusEnum.COMPLETED.name());
+        verify(jsonRedisTemplate, times(2)).keys(anyString());
+    }
+
+    @Test
+    void autoCompleteExpiredConfirmedBookings_DoesNotInvalidateCacheWhenNothingChanges() {
+        Booking booking = new Booking();
+        booking.setId(103L);
+        booking.setCustomerId(13L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+
+        when(bookingMapper.selectAutoCompletableConfirmedBookings(
+                eq(BookingStatusEnum.CONFIRMED.name()),
+                eq(TimeSlotStatusEnum.BOOKED.name()),
+                any(LocalDateTime.class)))
+                .thenReturn(List.of(booking));
+        when(bookingMapper.updateStatusIfCurrent(103L, BookingStatusEnum.CONFIRMED.name(), BookingStatusEnum.COMPLETED.name()))
+                .thenReturn(0);
+
+        int result = bookingService.autoCompleteExpiredConfirmedBookings();
+
+        assertEquals(0, result);
+        verify(jsonRedisTemplate, never()).keys(anyString());
+        verify(jsonRedisTemplate, never()).delete(anySet());
+    }
+
 
     @Test
     public void createBooking_Success() {
@@ -165,6 +228,7 @@ public class BookingServiceImplTest {
         slot.setId(11L);
         slot.setSpecialistId(1L);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        populateFutureSlot(slot, 2);
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("88.50"));
@@ -213,6 +277,7 @@ public class BookingServiceImplTest {
         slot.setId(21L);
         slot.setSpecialistId(2L);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        populateFutureSlot(slot, 2);
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(new BigDecimal("170.00"));
@@ -257,6 +322,7 @@ public class BookingServiceImplTest {
         slot.setId(11L);
         slot.setSpecialistId(1L);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        populateFutureSlot(slot, 2);
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(BigDecimal.TEN);
@@ -307,6 +373,7 @@ public class BookingServiceImplTest {
         TimeSlot slot = new TimeSlot();
         slot.setId(11L);
         slot.setSpecialistId(2L);
+        populateFutureSlot(slot, 2);
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
 
@@ -328,6 +395,7 @@ public class BookingServiceImplTest {
         slot.setId(11L);
         slot.setSpecialistId(1L);
         slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+        populateFutureSlot(slot, 2);
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
 
@@ -349,6 +417,7 @@ public class BookingServiceImplTest {
         slot.setId(11L);
         slot.setSpecialistId(1L);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        populateFutureSlot(slot, 2);
 
         when(timeSlotMapper.selectById(11L)).thenReturn(slot);
         // explicitly mark this topic as not allowed
@@ -372,6 +441,7 @@ public class BookingServiceImplTest {
         slot.setId(11L);
         slot.setSpecialistId(1L);
         slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        populateFutureSlot(slot, 2);
 
         SpecialistDetailVO specialist = new SpecialistDetailVO();
         specialist.setConsultationFee(BigDecimal.TEN);
@@ -388,6 +458,30 @@ public class BookingServiceImplTest {
 
         assertEquals(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), exception.getCode());
         assertEquals("Time slot already booked", exception.getMessage());
+    }
+
+    @Test
+    public void createBooking_PastTimeSlotRejected() {
+        BookingCreateDTO createDTO = new BookingCreateDTO();
+        createDTO.setSpecialistId(1L);
+        createDTO.setSlotId(11L);
+        createDTO.setTopic("Career Planning");
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(11L);
+        slot.setSpecialistId(1L);
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        slot.setSlotDate(LocalDate.now().minusDays(1));
+        slot.setStartTime(LocalTime.of(10, 0));
+        slot.setEndTime(LocalTime.of(11, 0));
+
+        when(timeSlotMapper.selectById(11L)).thenReturn(slot);
+
+        BusinessException exception = assertThrows(BusinessException.class, () ->
+                bookingService.createBooking(1L, createDTO));
+
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), exception.getCode());
+        assertEquals("Past time slots cannot be booked", exception.getMessage());
     }
 
     @Test

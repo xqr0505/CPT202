@@ -8,6 +8,7 @@ import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.KnowledgeQueryRewriteService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
  * @since 2026/4/21
  */
 @Component
+@ConditionalOnBean(ContentRetriever.class)
 public class KnowledgeTools {
 
     private final ContentRetriever contentRetriever;

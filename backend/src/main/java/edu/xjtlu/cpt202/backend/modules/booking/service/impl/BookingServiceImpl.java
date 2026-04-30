@@ -67,6 +67,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -233,6 +234,46 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public int autoCompleteExpiredConfirmedBookings() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Booking> expiredConfirmedBookings = bookingMapper.selectAutoCompletableConfirmedBookings(
+                BookingStatusEnum.CONFIRMED.name(),
+                TimeSlotStatusEnum.BOOKED.name(),
+                now
+        );
+        if (expiredConfirmedBookings == null || expiredConfirmedBookings.isEmpty()) {
+            return 0;
+        }
+
+        Set<Long> affectedCustomerIds = new HashSet<>();
+        int completedCount = 0;
+        for (Booking booking : expiredConfirmedBookings) {
+            if (booking == null || booking.getId() == null) {
+                continue;
+            }
+
+            int updated = bookingMapper.updateStatusIfCurrent(
+                    booking.getId(),
+                    BookingStatusEnum.CONFIRMED.name(),
+                    BookingStatusEnum.COMPLETED.name()
+            );
+            if (updated > 0) {
+                completedCount += updated;
+                if (booking.getCustomerId() != null) {
+                    affectedCustomerIds.add(booking.getCustomerId());
+                }
+            }
+        }
+
+        affectedCustomerIds.forEach(this::invalidateCustomerBookingCache);
+        if (completedCount > 0) {
+            log.info("Automatically completed {} confirmed booking(s) whose time slots have ended.", completedCount);
+        }
+        return completedCount;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO) {
         TimeSlot slot = timeSlotMapper.selectById(createDTO.getSlotId());
         if (slot == null) {
@@ -244,6 +285,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         if (!TimeSlotStatusEnum.AVAILABLE.name().equals(slot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Time slot already booked");
         }
+        ensureSlotStartIsInFuture(resolveSlotStart(slot), "Past time slots cannot be booked");
 
         String normalizedTopic = normalizeTopic(createDTO.getTopic());
         validateTopic(normalizedTopic);
@@ -530,6 +572,15 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 timeoutMinutes
         );
         for (SpecialistPendingBookingVO request : pendingRequests) {
+            LocalDateTime requestedStartTime = request.getRequestedStartTime();
+            if (requestedStartTime != null && !requestedStartTime.isAfter(now)) {
+                systemTimeoutCancelPendingBooking(
+                        request.getId(),
+                        "Automatically rejected because the requested time slot has already started."
+                );
+                continue;
+            }
+
             LocalDateTime submissionTime = request.getSubmissionTime();
             if (submissionTime != null && !submissionTime.plusMinutes(timeoutMinutes).isAfter(now)) {
                 systemTimeoutCancelPendingBooking(request.getId(), buildApprovalTimeoutReason(timeoutMinutes));
@@ -969,6 +1020,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     }
 
     private Booking loadPendingBookingForSpecialist(Long bookingId, Long currentUserId) {
+        expireTimedOutPendingRequestsForSpecialist(currentUserId);
         validateBookingOwnershipForSpecialist(bookingId, currentUserId);
         Booking booking = bookingMapper.selectById(bookingId);
         if (booking == null) {
@@ -998,6 +1050,12 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
             throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Time slot has no start time");
         }
         return LocalDateTime.of(date, start);
+    }
+
+    private void ensureSlotStartIsInFuture(LocalDateTime slotStart, String message) {
+        if (!slotStart.isAfter(LocalDateTime.now())) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), message);
+        }
     }
 
     private void validateRescheduleTargetLeadTime(LocalDateTime newSlotStart, LocalDateTime now) {

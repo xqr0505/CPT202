@@ -34,7 +34,7 @@ public interface TimeSlotMapper extends BaseMapper<TimeSlot> {
                 ts.created_at AS createdAt,
                 ts.updated_at AS updatedAt
             FROM time_slots ts
-            LEFT JOIN bookings b ON b.slot_id = ts.id AND b.status IN ('PENDING', 'CONFIRMED')
+            LEFT JOIN bookings b ON b.slot_id = ts.id AND b.status IN ('PENDING', 'CONFIRMED', 'COMPLETED')
             LEFT JOIN users u ON u.id = b.customer_id
             WHERE ts.specialist_id = #{specialistId}
               AND ts.slot_date BETWEEN #{weekStartDate} AND #{weekEndDate}

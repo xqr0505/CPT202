@@ -61,7 +61,7 @@
 
           <div v-if="day.slots.length === 0" class="no-slots">
             <span>No slots</span>
-            <el-button size="small" text @click="openCreateForDay(day.date)">
+            <el-button v-if="!isPastDate(day.date)" size="small" text @click="openCreateForDay(day.date)">
               Add slot
             </el-button>
           </div>
@@ -146,9 +146,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleCreate">
-          Create
-        </el-button>
+        <el-button type="primary" :loading="submitting" @click="handleCreate"> Create </el-button>
       </template>
     </el-dialog>
 
@@ -175,17 +173,28 @@
           </el-descriptions-item>
         </el-descriptions>
         <p v-if="selectedSlot?.recurringRuleId && canEditSlot(selectedSlot)" class="detail-tip">
-          Manual changes to this generated slot only affect this occurrence.
+          Manual changes to this generated slot only affect this occurrence. Use Delete Recurring
+          Rule to remove the weekly pattern and its generated available slots.
         </p>
-        <p v-if="!canEditSlot(selectedSlot)" class="detail-tip">
-          This slot already has a booking and cannot be edited or deleted.
+        <p v-else-if="selectedSlot && !canEditSlot(selectedSlot)" class="detail-tip">
+          {{ getSlotRestrictionMessage(selectedSlot) }}
         </p>
       </div>
       <template #footer>
         <div v-if="selectedSlot && canEditSlot(selectedSlot)">
           <el-button @click="showDetailDialog = false">Close</el-button>
           <el-button type="primary" @click="openUpdateDialog">Update</el-button>
-          <el-button type="danger" @click="handleDelete">Delete</el-button>
+          <el-button v-if="selectedSlot.recurringRuleId" plain type="danger" @click="handleDelete">
+            Delete This Occurrence
+          </el-button>
+          <el-button
+            v-if="selectedSlot.recurringRuleId"
+            type="danger"
+            @click="handleDeleteRecurringRule"
+          >
+            Delete Recurring Rule
+          </el-button>
+          <el-button v-else type="danger" @click="handleDelete">Delete</el-button>
         </div>
         <div v-else-if="selectedSlot && canForceCancelSlot(selectedSlot)">
           <el-button @click="showDetailDialog = false">Close</el-button>
@@ -225,9 +234,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showUpdateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleUpdate">
-          Update
-        </el-button>
+        <el-button type="primary" :loading="submitting" @click="handleUpdate"> Update </el-button>
       </template>
     </el-dialog>
 
@@ -246,9 +253,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showForceCancelDialog = false">Cancel</el-button>
-        <el-button type="primary" @click="goToForceCancelOptionStep">
-          Confirm
-        </el-button>
+        <el-button type="primary" @click="goToForceCancelOptionStep"> Confirm </el-button>
       </template>
     </el-dialog>
 
@@ -280,11 +285,12 @@ import { specialistForceCancelBooking } from '@/api/booking'
 import {
   createRecurringRule,
   createSlot,
+  deleteRecurringRule,
   deleteSlot,
   getWeeklySchedule,
   updateSlot,
   type TimeSlotVO,
-  type UpdateSlotRequest
+  type UpdateSlotRequest,
 } from '@/api/schedule'
 
 const router = useRouter()
@@ -319,30 +325,73 @@ const createForm = ref<CreateSlotForm>({
   endTime: '',
   isRecurring: false,
   noEndDate: true,
-  effectiveEndDate: ''
+  effectiveEndDate: '',
 })
 
 const updateForm = ref<UpdateSlotRequest>({
   startTime: '',
-  endTime: ''
+  endTime: '',
 })
 
 const forceCancelForm = ref({
   cancelReason: '',
-  releaseSlot: true
+  releaseSlot: true,
 })
 
-const validateCreateTimeRange = (rule: unknown, value: unknown, callback: (error?: Error) => void) => {
-  if (createForm.value.startTime && createForm.value.endTime && createForm.value.startTime >= createForm.value.endTime) {
+const validateCreateTimeRange = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void,
+) => {
+  if (
+    createForm.value.startTime &&
+    createForm.value.endTime &&
+    createForm.value.startTime >= createForm.value.endTime
+  ) {
     callback(new Error('End time must be after start time'))
     return
   }
   callback()
 }
 
-const validateUpdateTimeRange = (rule: unknown, value: unknown, callback: (error?: Error) => void) => {
-  if (updateForm.value.startTime && updateForm.value.endTime && updateForm.value.startTime >= updateForm.value.endTime) {
+const validateCreateStartTime = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void,
+) => {
+  const slotStartAt = resolveSlotStartAt(createForm.value.slotDate, createForm.value.startTime)
+  if (slotStartAt && slotStartAt.getTime() <= Date.now()) {
+    callback(new Error('Start time must be in the future'))
+    return
+  }
+  callback()
+}
+
+const validateUpdateTimeRange = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void,
+) => {
+  if (
+    updateForm.value.startTime &&
+    updateForm.value.endTime &&
+    updateForm.value.startTime >= updateForm.value.endTime
+  ) {
     callback(new Error('End time must be after start time'))
+    return
+  }
+  callback()
+}
+
+const validateUpdateStartTime = (
+  rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void,
+) => {
+  const slotDate = selectedSlot.value?.slotDate || ''
+  const slotStartAt = resolveSlotStartAt(slotDate, updateForm.value.startTime || '')
+  if (slotStartAt && slotStartAt.getTime() <= Date.now()) {
+    callback(new Error('Start time must be in the future'))
     return
   }
   callback()
@@ -350,10 +399,13 @@ const validateUpdateTimeRange = (rule: unknown, value: unknown, callback: (error
 
 const createRules: FormRules = {
   slotDate: [{ required: true, message: 'Please select a date', trigger: 'change' }],
-  startTime: [{ required: true, message: 'Please select start time', trigger: 'change' }],
+  startTime: [
+    { required: true, message: 'Please select start time', trigger: 'change' },
+    { validator: validateCreateStartTime, trigger: 'change' },
+  ],
   endTime: [
     { required: true, message: 'Please select end time', trigger: 'change' },
-    { validator: validateCreateTimeRange, trigger: 'change' }
+    { validator: validateCreateTimeRange, trigger: 'change' },
   ],
   effectiveEndDate: [
     {
@@ -364,17 +416,20 @@ const createRules: FormRules = {
         }
         callback(new Error('Please select an end date or choose no end date'))
       },
-      trigger: 'change'
-    }
-  ]
+      trigger: 'change',
+    },
+  ],
 }
 
 const updateRules: FormRules = {
-  startTime: [{ required: true, message: 'Please select start time', trigger: 'change' }],
+  startTime: [
+    { required: true, message: 'Please select start time', trigger: 'change' },
+    { validator: validateUpdateStartTime, trigger: 'change' },
+  ],
   endTime: [
     { required: true, message: 'Please select end time', trigger: 'change' },
-    { validator: validateUpdateTimeRange, trigger: 'change' }
-  ]
+    { validator: validateUpdateTimeRange, trigger: 'change' },
+  ],
 }
 
 const weekLabel = computed(() => {
@@ -396,14 +451,14 @@ const weekDays = computed(() => {
     const date = new Date(currentWeekStart.value)
     date.setDate(date.getDate() + index)
     const dateStr = formatDate(date)
-    const daySlots = slots.value.filter(slot => slot.slotDate === dateStr)
+    const daySlots = slots.value.filter((slot) => slot.slotDate === dateStr)
 
     days.push({
       date: dateStr,
       dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.getDate().toString(),
       isToday: isToday(date),
-      slots: daySlots.sort((left, right) => left.startTime.localeCompare(right.startTime))
+      slots: daySlots.sort((left, right) => left.startTime.localeCompare(right.startTime)),
     })
   }
   return days
@@ -442,8 +497,30 @@ function getDayNameForDate(dateStr: string): string {
   return parseLocalDate(dateStr).toLocaleDateString('en-US', { weekday: 'long' })
 }
 
+function normalizeTimeValue(time: string): string {
+  return /^\d{2}:\d{2}$/.test(time) ? `${time}:00` : time
+}
+
+function resolveSlotStartAt(slotDate: string, startTime: string): Date | null {
+  if (!slotDate || !startTime) {
+    return null
+  }
+
+  const slotStartAt = new Date(`${slotDate}T${normalizeTimeValue(startTime)}`)
+  return Number.isNaN(slotStartAt.getTime()) ? null : slotStartAt
+}
+
 function isToday(date: Date): boolean {
   return date.toDateString() === new Date().toDateString()
+}
+
+function isPastDate(dateStr: string): boolean {
+  const targetDate = parseLocalDate(dateStr)
+  targetDate.setHours(0, 0, 0, 0)
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return targetDate < today
 }
 
 function disabledPastDates(date: Date): boolean {
@@ -475,15 +552,33 @@ function getSlotDisplayLabel(slot: TimeSlotVO): string {
   return slot.bookingStatusDesc || slot.statusDesc || slot.bookingStatus || slot.status
 }
 
+function hasSlotStarted(slot: TimeSlotVO): boolean {
+  const slotStartAt = resolveSlotStartAt(slot.slotDate, slot.startTime)
+  return slotStartAt ? slotStartAt.getTime() <= Date.now() : false
+}
+
 function canEditSlot(slot: TimeSlotVO): boolean {
-  return slot.status === 'AVAILABLE' && !slot.bookingStatus
+  return slot.status === 'AVAILABLE' && !slot.bookingStatus && !hasSlotStarted(slot)
 }
 
 function canForceCancelSlot(slot: TimeSlotVO): boolean {
   if (!slot.bookingId) {
     return false
   }
+  if (hasSlotStarted(slot)) {
+    return false
+  }
   return slot.bookingStatus === 'PENDING' || slot.bookingStatus === 'CONFIRMED'
+}
+
+function getSlotRestrictionMessage(slot: TimeSlotVO): string {
+  if (hasSlotStarted(slot)) {
+    return 'This time slot has already started or passed and can no longer be changed.'
+  }
+  if (slot.bookingStatus) {
+    return 'This slot already has a booking and cannot be edited or deleted.'
+  }
+  return 'Only future available time slots can be changed.'
 }
 
 function getSlotStatusClass(slot: TimeSlotVO): string {
@@ -491,8 +586,9 @@ function getSlotStatusClass(slot: TimeSlotVO): string {
     AVAILABLE: 'status-available',
     PENDING: 'status-pending',
     CONFIRMED: 'status-confirmed',
+    COMPLETED: 'status-completed',
     BOOKED: 'status-booked',
-    LOCKED: 'status-locked'
+    LOCKED: 'status-locked',
   }
   return statusMap[getSlotStatusKey(slot)] || ''
 }
@@ -502,8 +598,9 @@ function getStatusTagType(slot: TimeSlotVO): string {
     AVAILABLE: 'success',
     PENDING: 'warning',
     CONFIRMED: 'primary',
+    COMPLETED: 'success',
     BOOKED: 'warning',
-    LOCKED: 'info'
+    LOCKED: 'info',
   }
   return typeMap[getSlotStatusKey(slot)] || 'info'
 }
@@ -543,6 +640,10 @@ function openSlotDetail(slot: TimeSlotVO) {
 }
 
 function openCreateForDay(date: string) {
+  if (isPastDate(date)) {
+    ElMessage.warning('Past dates cannot be modified')
+    return
+  }
   createForm.value.slotDate = date
   showCreateDialog.value = true
 }
@@ -553,7 +654,7 @@ function openUpdateDialog() {
   }
   updateForm.value = {
     startTime: selectedSlot.value.startTime,
-    endTime: selectedSlot.value.endTime
+    endTime: selectedSlot.value.endTime,
   }
   showDetailDialog.value = false
   showUpdateDialog.value = true
@@ -565,7 +666,7 @@ function openForceCancelDialog() {
   }
   forceCancelForm.value = {
     cancelReason: '',
-    releaseSlot: true
+    releaseSlot: true,
   }
   showForceCancelOptionDialog.value = false
   showForceCancelDialog.value = true
@@ -599,7 +700,7 @@ function resetCreateForm() {
     endTime: '',
     isRecurring: false,
     noEndDate: true,
-    effectiveEndDate: ''
+    effectiveEndDate: '',
   }
 }
 
@@ -626,14 +727,14 @@ async function handleCreate() {
         effectiveStartDate: slotDate,
         startTime: createForm.value.startTime,
         endTime: createForm.value.endTime,
-        effectiveEndDate: createForm.value.noEndDate ? null : createForm.value.effectiveEndDate
+        effectiveEndDate: createForm.value.noEndDate ? null : createForm.value.effectiveEndDate,
       })
       ElMessage.success('Recurring schedule created successfully')
     } else {
       await createSlot({
         slotDate,
         startTime: createForm.value.startTime,
-        endTime: createForm.value.endTime
+        endTime: createForm.value.endTime,
       })
       ElMessage.success('Time slot created successfully')
     }
@@ -650,7 +751,7 @@ async function handleUpdate() {
     return
   }
   if (!canEditSlot(selectedSlot.value)) {
-    ElMessage.warning('Only available slots can be modified')
+    ElMessage.warning(getSlotRestrictionMessage(selectedSlot.value))
     return
   }
   if (!updateFormRef.value) {
@@ -678,23 +779,52 @@ async function handleDelete() {
     return
   }
   if (!canEditSlot(selectedSlot.value)) {
-    ElMessage.warning('Only available slots can be deleted')
+    ElMessage.warning(getSlotRestrictionMessage(selectedSlot.value))
+    return
+  }
+
+  try {
+    const confirmMessage = selectedSlot.value.recurringRuleId
+      ? 'Are you sure you want to delete only this recurring occurrence?'
+      : 'Are you sure you want to delete this available time slot?'
+    await ElMessageBox.confirm(confirmMessage, 'Confirm Delete', {
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+      type: 'warning',
+    })
+    await deleteSlot(selectedSlot.value.id)
+    ElMessage.success(
+      selectedSlot.value.recurringRuleId
+        ? 'Recurring occurrence deleted successfully'
+        : 'Time slot deleted successfully',
+    )
+    showDetailDialog.value = false
+    await fetchSchedule()
+  } catch (error: unknown) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('Failed to delete slot:', error)
+    }
+  }
+}
+
+async function handleDeleteRecurringRule() {
+  if (!selectedSlot.value?.recurringRuleId) {
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      'Are you sure you want to delete this available time slot?',
-      'Confirm Delete',
-      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
+      'Are you sure you want to delete this recurring rule? This removes the weekly pattern and its generated available time slots. Booked or locked generated slots must be cleared first.',
+      'Confirm Delete Recurring Rule',
+      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' },
     )
-    await deleteSlot(selectedSlot.value.id)
-    ElMessage.success('Time slot deleted successfully')
+    await deleteRecurringRule(selectedSlot.value.recurringRuleId)
+    ElMessage.success('Recurring rule deleted successfully')
     showDetailDialog.value = false
     await fetchSchedule()
   } catch (error: unknown) {
-    if (error !== 'cancel') {
-      console.error('Failed to delete slot:', error)
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('Failed to delete recurring rule:', error)
     }
   }
 }
@@ -717,7 +847,7 @@ async function handleForceCancel() {
   try {
     await specialistForceCancelBooking(selectedSlot.value.bookingId, {
       cancelReason: reason,
-      releaseSlot: forceCancelForm.value.releaseSlot
+      releaseSlot: forceCancelForm.value.releaseSlot,
     })
     ElMessage.success('Booking cancelled successfully')
     showForceCancelOptionDialog.value = false
@@ -858,6 +988,11 @@ watch(currentWeekStart, () => {
     &.status-confirmed {
       background: rgba(64, 158, 255, 0.14);
       border: 1px solid rgba(64, 158, 255, 0.28);
+    }
+
+    &.status-completed {
+      background: rgba(103, 194, 58, 0.14);
+      border: 1px solid rgba(103, 194, 58, 0.28);
     }
 
     &.status-locked {

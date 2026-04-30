@@ -60,6 +60,7 @@
                   type="date"
                   value-format="YYYY-MM-DD"
                   placeholder="Select date"
+                  :disabled-date="disabledPastDates"
                 />
               </div>
 
@@ -233,9 +234,34 @@ const toLocalDateString = () => {
   return `${year}-${month}-${day}`
 }
 
-const selectedDate = ref(
-  typeof route.query.date === 'string' && route.query.date ? route.query.date : toLocalDateString(),
-)
+const disabledPastDates = (date: Date): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+const isPastDateString = (value: string): boolean => {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) {
+    return false
+  }
+
+  const selected = new Date(year, month - 1, day)
+  selected.setHours(0, 0, 0, 0)
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return selected < today
+}
+
+const normalizeSelectedDate = (value: unknown): string => {
+  if (typeof value !== 'string' || !value) {
+    return toLocalDateString()
+  }
+  return isPastDateString(value) ? toLocalDateString() : value
+}
+
+const selectedDate = ref(normalizeSelectedDate(route.query.date))
 
 const specialistId = computed(() => Number(route.params.id))
 const isSpecialistActive = computed(() => specialist.value?.status === 'ACTIVE')
@@ -653,8 +679,7 @@ onBeforeUnmount(() => {
 watch(
   () => [route.params.id, route.query.date],
   async () => {
-    selectedDate.value =
-      typeof route.query.date === 'string' && route.query.date ? route.query.date : toLocalDateString()
+    selectedDate.value = normalizeSelectedDate(route.query.date)
     bookingForm.value.slotId = null
     syncAiBookingPageContext()
     await loadDetail()
@@ -664,6 +689,10 @@ watch(
 )
 
 watch(selectedDate, async () => {
+  if (isPastDateString(selectedDate.value)) {
+    selectedDate.value = toLocalDateString()
+    return
+  }
   syncAiBookingPageContext()
   if (specialist.value) {
     await loadAvailability()

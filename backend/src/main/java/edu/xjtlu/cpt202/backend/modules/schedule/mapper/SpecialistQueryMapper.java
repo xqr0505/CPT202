@@ -12,6 +12,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 @Mapper
@@ -48,6 +49,10 @@ public interface SpecialistQueryMapper {
                         WHERE ts.specialist_id = sp.id
                           AND ts.slot_date = #{query.date}
                           AND ts.status = 'AVAILABLE'
+                          AND (
+                              ts.slot_date > #{today}
+                              OR (ts.slot_date = #{today} AND ts.start_time > #{currentTime})
+                          )
                     ) THEN TRUE
                     ELSE FALSE
                 END AS hasAvailabilityOnSelectedDate
@@ -75,6 +80,10 @@ public interface SpecialistQueryMapper {
                         WHERE ts_filter.specialist_id = sp.id
                           AND ts_filter.slot_date = #{query.date}
                           AND ts_filter.status = 'AVAILABLE'
+                          AND (
+                              ts_filter.slot_date > #{today}
+                              OR (ts_filter.slot_date = #{today} AND ts_filter.start_time > #{currentTime})
+                          )
                     )
                 </if>
             </where>
@@ -121,7 +130,9 @@ public interface SpecialistQueryMapper {
             </script>
             """)
     IPage<SpecialistSummaryVO> searchSpecialists(Page<SpecialistSummaryVO> page,
-                                                 @Param("query") SpecialistSearchQueryDTO query);
+                                                 @Param("query") SpecialistSearchQueryDTO query,
+                                                 @Param("today") LocalDate today,
+                                                 @Param("currentTime") LocalTime currentTime);
 
     @Select("""
             SELECT
@@ -155,8 +166,14 @@ public interface SpecialistQueryMapper {
             WHERE ts.specialist_id = #{specialistId}
               AND ts.slot_date = #{date}
               AND ts.status IN ('AVAILABLE', 'BOOKED', 'LOCKED')
+              AND (
+                  ts.slot_date > #{today}
+                  OR (ts.slot_date = #{today} AND ts.start_time > #{currentTime})
+              )
             ORDER BY ts.start_time ASC
             """)
     List<SpecialistAvailabilityVO> listAvailabilityByDate(@Param("specialistId") Long specialistId,
-                                                          @Param("date") LocalDate date);
+                                                          @Param("date") LocalDate date,
+                                                          @Param("today") LocalDate today,
+                                                          @Param("currentTime") LocalTime currentTime);
 }

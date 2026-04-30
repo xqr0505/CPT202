@@ -162,6 +162,27 @@ const normalizeCategoryId = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+const isPastDateString = (value: string): boolean => {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) {
+    return false
+  }
+
+  const selectedDate = new Date(year, month - 1, day)
+  selectedDate.setHours(0, 0, 0, 0)
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return selectedDate < today
+}
+
+const normalizeSearchDate = (value: unknown): string => {
+  if (typeof value !== 'string' || !value) {
+    return ''
+  }
+  return isPastDateString(value) ? '' : value
+}
+
 const parseRouteState = () => {
   const query = route.query
   const parsedSortBy =
@@ -173,7 +194,7 @@ const parseRouteState = () => {
   filters.value = {
     keyword: typeof query.keyword === 'string' ? query.keyword : '',
     categoryId: normalizeCategoryId(query.categoryId),
-    date: typeof query.date === 'string' ? query.date : '',
+    date: normalizeSearchDate(query.date),
     sortBy: parsedSortBy,
   }
   currentPage.value = parsePositiveInteger(query.pageNo, 1)
@@ -193,8 +214,9 @@ const buildSearchQuery = (pageNo: number) => {
   if (categoryId !== null) {
     query.categoryId = String(categoryId)
   }
-  if (filters.value.date) {
-    query.date = filters.value.date
+  const normalizedDate = normalizeSearchDate(filters.value.date)
+  if (normalizedDate) {
+    query.date = normalizedDate
   }
   if (filters.value.sortBy !== SPECIALIST_SORT_OPTIONS.RECOMMENDED) {
     query.sortBy = filters.value.sortBy

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         Long specialistId = getCurrentSpecialistId();
 
         validateTimeRange(request.getStartTime(), request.getEndTime());
+        ensureSlotStartsInFuture(request.getSlotDate(), request.getStartTime(), "Time slot must start in the future");
         checkTimeSlotConflict(specialistId, request.getSlotDate(), request.getStartTime(), request.getEndTime(), null);
 
         TimeSlot timeSlot = new TimeSlot();
@@ -102,6 +104,11 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
 
         ensureSlotIsAvailable(existingSlot);
+        ensureSlotStartsInFuture(
+                existingSlot.getSlotDate(),
+                existingSlot.getStartTime(),
+                "Only future time slots can be modified or deleted"
+        );
 
         LocalTime nextStartTime = request.getStartTime() != null ? request.getStartTime() : existingSlot.getStartTime();
         LocalTime nextEndTime = request.getEndTime() != null ? request.getEndTime() : existingSlot.getEndTime();
@@ -109,6 +116,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 || !nextEndTime.equals(existingSlot.getEndTime());
 
         validateTimeRange(nextStartTime, nextEndTime);
+        ensureSlotStartsInFuture(existingSlot.getSlotDate(), nextStartTime, "Time slot must start in the future");
         checkTimeSlotConflict(specialistId, existingSlot.getSlotDate(), nextStartTime, nextEndTime, slotId);
 
         if (timeChanged && existingSlot.getRecurringRuleId() != null) {
@@ -148,6 +156,11 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
 
         ensureSlotIsAvailable(existingSlot);
+        ensureSlotStartsInFuture(
+                existingSlot.getSlotDate(),
+                existingSlot.getStartTime(),
+                "Only future time slots can be deleted"
+        );
 
         if (existingSlot.getRecurringRuleId() != null) {
             recurringRuleServiceImpl.recordRuleException(existingSlot.getRecurringRuleId(), existingSlot.getSlotDate());
@@ -193,6 +206,17 @@ public class ScheduleServiceImpl implements ScheduleService {
     private void validateTimeRange(LocalTime start, LocalTime end) {
         if (start.isAfter(end) || start.equals(end)) {
             throw new BusinessException(PARAM_ERROR);
+        }
+    }
+
+    private void ensureSlotStartsInFuture(LocalDate slotDate, LocalTime startTime, String message) {
+        if (slotDate == null || startTime == null) {
+            throw new BusinessException(PARAM_ERROR.getCode(), "Time slot has no start time");
+        }
+
+        LocalDateTime slotStart = LocalDateTime.of(slotDate, startTime);
+        if (!slotStart.isAfter(LocalDateTime.now())) {
+            throw new BusinessException(BAD_REQUEST.getCode(), message);
         }
     }
 

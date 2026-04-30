@@ -14,8 +14,9 @@
     <div class="info-card">
       <el-icon><InfoFilled /></el-icon>
       <span>
-        Recurring rules repeat weekly from the start date you choose.
-        If you later edit or delete one generated slot in the schedule view, only that occurrence changes.
+        Recurring rules repeat weekly from the start date you choose. If you later edit or delete
+        one generated slot in the schedule view, only that occurrence changes. To remove the whole
+        rule, delete it here after clearing any booked or locked generated slots.
       </span>
     </div>
 
@@ -44,7 +45,9 @@
             </div>
             <div class="meta-item">
               <el-icon><Calendar /></el-icon>
-              <span>{{ rule.effectiveEndDate ? `Until ${formatDate(rule.effectiveEndDate)}` : 'No end date' }}</span>
+              <span>{{
+                rule.effectiveEndDate ? `Until ${formatDate(rule.effectiveEndDate)}` : 'No end date'
+              }}</span>
             </div>
             <div class="meta-item">
               <el-tag :type="rule.isActive === 1 ? 'success' : 'info'" size="small">
@@ -54,9 +57,7 @@
           </div>
         </div>
         <div class="rule-actions">
-          <el-button type="danger" size="small" @click="handleDelete(rule.id)">
-            Delete
-          </el-button>
+          <el-button type="danger" size="small" @click="handleDelete(rule.id)"> Delete </el-button>
         </div>
       </el-card>
     </div>
@@ -162,7 +163,7 @@ import {
   createRecurringRule,
   deleteRecurringRule,
   type CreateRecurringRuleRequest,
-  type RecurringRuleVO
+  type RecurringRuleVO,
 } from '@/api/schedule'
 
 // ============== State ==============
@@ -187,7 +188,7 @@ const form = ref<RecurringRuleForm>({
   startTime: '',
   endTime: '',
   noEndDate: true,
-  effectiveEndDate: ''
+  effectiveEndDate: '',
 })
 
 // ============== Validation Rules ==============
@@ -203,19 +204,74 @@ const validateTimeRange = (rule: any, value: any, callback: any) => {
   }
 }
 
+const resolveDateString = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const parseDateString = (value: string): Date | null => {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) {
+    return null
+  }
+  return new Date(year, month - 1, day)
+}
+
+const resolveDateTime = (dateStr: string, timeStr: string): Date | null => {
+  const date = parseDateString(dateStr)
+  if (!date || !timeStr) {
+    return null
+  }
+
+  const normalizedTime = /^\d{2}:\d{2}$/.test(timeStr) ? `${timeStr}:00` : timeStr
+  const resolved = new Date(`${resolveDateString(date)}T${normalizedTime}`)
+  return Number.isNaN(resolved.getTime()) ? null : resolved
+}
+
+const resolveFirstOccurrenceDate = (startDate: string, dayOfWeek: number | null): string => {
+  const parsedStartDate = parseDateString(startDate)
+  if (!parsedStartDate || !dayOfWeek) {
+    return startDate
+  }
+
+  const targetDay = dayOfWeek % 7
+  const currentDay = parsedStartDate.getDay()
+  const diff = (targetDay - currentDay + 7) % 7
+  const firstOccurrence = new Date(parsedStartDate)
+  firstOccurrence.setDate(firstOccurrence.getDate() + diff)
+  return resolveDateString(firstOccurrence)
+}
+
+const validateFirstOccurrenceStartTime = (_rule: any, _value: any, callback: any) => {
+  if (!form.value.effectiveStartDate || !form.value.dayOfWeek || !form.value.startTime) {
+    callback()
+    return
+  }
+
+  const firstOccurrenceDate = resolveFirstOccurrenceDate(
+    form.value.effectiveStartDate,
+    form.value.dayOfWeek,
+  )
+  const firstOccurrenceStartAt = resolveDateTime(firstOccurrenceDate, form.value.startTime)
+  if (firstOccurrenceStartAt && firstOccurrenceStartAt.getTime() <= Date.now()) {
+    callback(new Error('First occurrence must start in the future'))
+    return
+  }
+  callback()
+}
+
 const rulesForm: FormRules = {
-  effectiveStartDate: [
-    { required: true, message: 'Please select start date', trigger: 'change' }
-  ],
-  dayOfWeek: [
-    { required: true, message: 'Please select a day', trigger: 'change' }
-  ],
+  effectiveStartDate: [{ required: true, message: 'Please select start date', trigger: 'change' }],
+  dayOfWeek: [{ required: true, message: 'Please select a day', trigger: 'change' }],
   startTime: [
-    { required: true, message: 'Please select start time', trigger: 'change' }
+    { required: true, message: 'Please select start time', trigger: 'change' },
+    { validator: validateFirstOccurrenceStartTime, trigger: 'change' },
   ],
   endTime: [
     { required: true, message: 'Please select end time', trigger: 'change' },
-    { validator: validateTimeRange, trigger: 'change' }
+    { validator: validateTimeRange, trigger: 'change' },
   ],
   effectiveEndDate: [
     {
@@ -230,9 +286,9 @@ const rulesForm: FormRules = {
         }
         callback(new Error('Please select effective end date or choose no end date'))
       },
-      trigger: 'change'
-    }
-  ]
+      trigger: 'change',
+    },
+  ],
 }
 
 // ============== Methods ==============
@@ -294,14 +350,14 @@ function resetForm() {
     startTime: '',
     endTime: '',
     noEndDate: true,
-    effectiveEndDate: ''
+    effectiveEndDate: '',
   }
   formRef.value?.resetFields()
 }
 
 async function handleCreate() {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       submitting.value = true
@@ -311,7 +367,7 @@ async function handleCreate() {
           dayOfWeek: form.value.dayOfWeek as number,
           startTime: form.value.startTime,
           endTime: form.value.endTime,
-          effectiveEndDate: form.value.noEndDate ? null : form.value.effectiveEndDate
+          effectiveEndDate: form.value.noEndDate ? null : form.value.effectiveEndDate,
         }
         await createRecurringRule(payload)
         ElMessage.success('Recurring rule created successfully')
@@ -330,16 +386,16 @@ async function handleCreate() {
 async function handleDelete(ruleId: number) {
   try {
     await ElMessageBox.confirm(
-      'Are you sure you want to delete this recurring rule? This will also delete all generated time slots.',
+      'Are you sure you want to delete this recurring rule? This removes the weekly pattern and its generated available time slots. Booked or locked generated slots must be cleared first.',
       'Confirm Delete',
-      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
+      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' },
     )
-    
+
     await deleteRecurringRule(ruleId)
     ElMessage.success('Recurring rule deleted successfully')
     await fetchRules()
   } catch (error: any) {
-    if (error !== 'cancel') {
+    if (error !== 'cancel' && error !== 'close') {
       console.error('Failed to delete rule:', error)
     }
   }
@@ -401,7 +457,7 @@ onMounted(() => {
 
   .rule-card {
     margin-bottom: var(--space-3);
-    
+
     .rule-content {
       display: flex;
       flex-direction: column;

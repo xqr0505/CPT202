@@ -284,7 +284,7 @@ public class ParallelToolAssistant implements Assistant {
         }
 
         Set<String> readOnlyNames = parallelProperties.getReadOnlyNames();
-        Map<Integer, CompletableFuture<ToolExecutionResultMessage>> asyncReadOnlyByIndex = new LinkedHashMap<>();
+        Map<Integer, PendingToolExecution> asyncReadOnlyByIndex = new LinkedHashMap<>();
 
         for (int index = 0; index < requests.size(); index++) {
             ToolExecutionRequest request = requests.get(index);
@@ -296,17 +296,18 @@ public class ParallelToolAssistant implements Assistant {
             boolean shouldParallelize = parallelProperties.isEnabled() && readOnlyNames.contains(request.name());
             if (shouldParallelize) {
                 int finalIndex = index;
-                asyncReadOnlyByIndex.put(finalIndex, CompletableFuture.supplyAsync(
+                CompletableFuture<ToolExecutionResultMessage> future = CompletableFuture.supplyAsync(
                         () -> executeSingleRequest(request, executor, memoryId, onToolExecuted),
                         parallelExecutor
-                ));
+                );
+                asyncReadOnlyByIndex.put(finalIndex, new PendingToolExecution(request, future));
                 continue;
             }
 
-            flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex);
+            flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex, onToolExecuted);
             resultsByIndex.put(index, executeSingleRequest(request, executor, memoryId, onToolExecuted));
         }
-        flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex);
+        flushReadOnlyBatch(asyncReadOnlyByIndex, resultsByIndex, onToolExecuted);
 
         List<ToolExecutionResultMessage> ordered = new ArrayList<>(requests.size());
         for (int index = 0; index < requests.size(); index++) {
@@ -319,21 +320,35 @@ public class ParallelToolAssistant implements Assistant {
     }
 
     private void flushReadOnlyBatch(
-            Map<Integer, CompletableFuture<ToolExecutionResultMessage>> asyncReadOnlyByIndex,
-            Map<Integer, ToolExecutionResultMessage> resultsByIndex
+            Map<Integer, PendingToolExecution> asyncReadOnlyByIndex,
+            Map<Integer, ToolExecutionResultMessage> resultsByIndex,
+            Consumer<ToolExecution> onToolExecuted
     ) {
         if (asyncReadOnlyByIndex.isEmpty()) {
             return;
         }
-        CompletableFuture<?>[] futures = asyncReadOnlyByIndex.values().toArray(CompletableFuture[]::new);
+        CompletableFuture<?>[] futures = asyncReadOnlyByIndex.values().stream()
+                .map(PendingToolExecution::future)
+                .toArray(CompletableFuture[]::new);
         try {
             CompletableFuture.allOf(futures).get(parallelProperties.getTimeoutMs(), TimeUnit.MILLISECONDS);
-            for (Map.Entry<Integer, CompletableFuture<ToolExecutionResultMessage>> entry : asyncReadOnlyByIndex.entrySet()) {
-                resultsByIndex.put(entry.getKey(), entry.getValue().join());
+            for (Map.Entry<Integer, PendingToolExecution> entry : asyncReadOnlyByIndex.entrySet()) {
+                resultsByIndex.put(entry.getKey(), entry.getValue().future().join());
             }
         } catch (TimeoutException e) {
             futuresCancel(futures);
-            throw new IllegalStateException("Parallel tool execution timed out after " + parallelProperties.getTimeoutMs() + " ms", e);
+            String timeoutMessage = "Parallel tool execution timed out after " + parallelProperties.getTimeoutMs() + " ms";
+            log.warn(timeoutMessage);
+            for (Map.Entry<Integer, PendingToolExecution> entry : asyncReadOnlyByIndex.entrySet()) {
+                PendingToolExecution pending = entry.getValue();
+                ToolExecutionResultMessage result;
+                if (pending.future().isDone() && !pending.future().isCompletedExceptionally() && !pending.future().isCancelled()) {
+                    result = pending.future().join();
+                } else {
+                    result = timedOutToolResult(pending.request(), timeoutMessage, onToolExecuted);
+                }
+                resultsByIndex.put(entry.getKey(), result);
+            }
         } catch (Exception e) {
             futuresCancel(futures);
             throw unwrapParallelError(e);
@@ -367,6 +382,20 @@ public class ParallelToolAssistant implements Assistant {
             onToolExecuted.accept(toolExecution);
             return ToolExecutionResultMessage.from(request, result);
         }
+    }
+
+    private ToolExecutionResultMessage timedOutToolResult(
+            ToolExecutionRequest request,
+            String timeoutMessage,
+            Consumer<ToolExecution> onToolExecuted
+    ) {
+        String result = toolFailureResult(request.name(), new TimeoutException(timeoutMessage));
+        ToolExecution toolExecution = ToolExecution.builder()
+                .request(request)
+                .result(result)
+                .build();
+        onToolExecuted.accept(toolExecution);
+        return ToolExecutionResultMessage.from(request, result);
     }
 
     private String toolFailureResult(String toolName, Exception exception) {
@@ -412,6 +441,12 @@ public class ParallelToolAssistant implements Assistant {
         for (CompletableFuture<?> future : futures) {
             future.cancel(true);
         }
+    }
+
+    private record PendingToolExecution(
+            ToolExecutionRequest request,
+            CompletableFuture<ToolExecutionResultMessage> future
+    ) {
     }
 
     @PreDestroy

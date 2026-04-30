@@ -14,6 +14,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.util.StreamUtils;
 
 import java.io.IOException;
@@ -59,16 +60,35 @@ public class RagIngestionService {
     public void rebuildKnowledgeBase() {
         try {
             Resource[] resources = resourceResolver.getResources(ragProperties.getKnowledgeLocation());
-            log.info("Rebuilding RAG knowledge index from {} resource(s): {}", resources.length, ragProperties.getKnowledgeLocation());
-            clearRedisIndex();
-
-            List<TextSegment> segments = new ArrayList<>();
+            
+            StringBuilder contentBuilder = new StringBuilder();
+            List<Object[]> pendingResources = new ArrayList<>();
             for (Resource resource : resources) {
                 if (!resource.isReadable()) {
                     log.warn("Skipping unreadable RAG resource: {}", resource);
                     continue;
                 }
                 String markdown = loadMarkdown(resource);
+                contentBuilder.append(markdown);
+                pendingResources.add(new Object[]{resource, markdown});
+            }
+            
+            String currentHash = DigestUtils.md5DigestAsHex(contentBuilder.toString().getBytes(StandardCharsets.UTF_8));
+            String hashKey = ragProperties.getRedis().getIndexName() + ":content_hash";
+            String storedHash = redisTemplate.opsForValue().get(hashKey);
+            
+            if (currentHash.equals(storedHash)) {
+                log.info("RAG knowledge index is up-to-date, skipping rebuild. Hash: {}", currentHash);
+                return;
+            }
+
+            log.info("Rebuilding RAG knowledge index from {} resource(s): {}", resources.length, ragProperties.getKnowledgeLocation());
+            clearRedisIndex();
+
+            List<TextSegment> segments = new ArrayList<>();
+            for (Object[] pair : pendingResources) {
+                Resource resource = (Resource) pair[0];
+                String markdown = (String) pair[1];
                 String source = buildSource(resource);
                 MarkdownHeadingSegmenter.DocumentMetadata metadata = segmenter.buildMetadata(source, markdown);
                 List<TextSegment> documentSegments = segmenter.split(markdown, metadata);
@@ -83,7 +103,9 @@ public class RagIngestionService {
 
             List<Embedding> embeddings = embeddingModel.embedAll(segments).content();
             embeddingStore.addAll(embeddings, segments);
-            log.info("RAG knowledge index rebuilt successfully with {} segment(s).", segments.size());
+            
+            redisTemplate.opsForValue().set(hashKey, currentHash);
+            log.info("RAG knowledge index rebuilt successfully with {} segment(s). Hash: {}", segments.size(), currentHash);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to rebuild RAG knowledge index.", ex);
         }

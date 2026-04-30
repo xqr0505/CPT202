@@ -12,6 +12,7 @@ It does not introduce new business rules. It only restructures and expands the s
 - Cancel and reschedule both use a **Quote -> Confirm** flow.
 - Cancel/reschedule eligibility can be blocked when too close to start time.
 - Only **Pending** and **Confirmed** bookings can be changed.
+- No operations (new booking, cancel, or reschedule) can be performed within **2 hours** of the start time.
 - If start time is within **2 hours**, cancel/reschedule is blocked.
 - More than **24 hours** before start is the full-refund policy window.
 - Between **2 and 24 hours** before start is the penalty policy window.
@@ -321,7 +322,10 @@ It does not introduce new business rules. It only restructures and expands the s
 **A:** Usually because status is not Pending/Confirmed, or start time is within 2 hours.
 
 **Q: What is the hard time lock for changes?**  
-**A:** If booking start is within **2 hours**, cancel/reschedule is blocked.
+**A:** If booking start is within **2 hours**, not only are cancel and reschedule operations blocked, but you also cannot make a new booking request for that slot. No operations (booking, cancellation, or rescheduling) are permitted within 2 hours of the start time.
+
+**Q: Can I create a new booking for a slot that starts in less than 2 hours?**  
+**A:** No. Any operation, including making a new booking, is prohibited if the appointment start time is within 2 hours.
 
 **Q: What is the full-refund timing window?**  
 **A:** More than **24 hours** before start time.
@@ -773,7 +777,7 @@ This closes the expanded, policy-faithful FAQ rewrite.
 **A:** Final amounts are shown in the quote-confirm step.
 
 **Q: Is there any valid path to edit booking under 2 hours before start?**  
-**A:** Normal cancel/reschedule actions are blocked within 2 hours.
+**A:** Normal cancel/reschedule actions are blocked within 2 hours. Also, new bookings for slots starting within 2 hours are not allowed.
 
 **Q: Why does my reschedule flow ask me to pick slot again?**  
 **A:** Reschedule requires selecting a new available slot for same specialist.

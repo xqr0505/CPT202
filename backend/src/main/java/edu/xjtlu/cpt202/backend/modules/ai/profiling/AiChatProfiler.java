@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Central profiler logger for AI chat pipeline stages.
  *
- * @author OpenAI
+ * @author QiranXiao
  * @since 2026/5/1
  */
 @Slf4j

@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Thread-local trace context for AI chat profiling.
  *
- * @author OpenAI
+ * @author QiranXiao
  * @since 2026/5/1
  */
 public final class AiChatTraceContext {

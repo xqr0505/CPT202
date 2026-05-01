@@ -69,6 +69,12 @@ Backend defaults:
 - URL: `http://localhost:8081`
 - API docs: `http://localhost:8081/swagger-ui/index.html`
 
+## Local Dev Scripts (Windows)
+
+- `scripts/run-local-dev.cmd` (db+redis via docker + backend + frontend)
+- `scripts/run-local-backend.cmd`
+- `scripts/run-local-frontend.cmd`
+
 ## Run the Frontend
 
 Open another terminal in the repository root and run:

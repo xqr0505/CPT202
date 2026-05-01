@@ -30,7 +30,7 @@ import java.util.Map;
 /**
  * Logs controller and service method calls with conservative argument summaries.
  *
- * @author OpenAI
+ * @author QiranXiao
  * @since 2026/5/1
  */
 @Slf4j

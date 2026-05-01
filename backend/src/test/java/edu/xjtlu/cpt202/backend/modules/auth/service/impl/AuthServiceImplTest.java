@@ -234,7 +234,7 @@ class AuthServiceImplTest {
         request.setVerificationCode("123456");
         request.setRole("CUSTOMER");
         request.setPassword("Test1234");
-        request.setConfirmPassword("Different1234");  // 不匹配
+        request.setConfirmPassword("Different1234");  
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.register(request));
@@ -444,7 +444,7 @@ class AuthServiceImplTest {
                 .role(testRole)
                 .status("ACTIVE")
                 .loginFailCount(4)
-                .firstFailTime(LocalDateTime.now().minusMinutes(1))  // 1分钟前第一次失败，仍在窗口内
+                .firstFailTime(LocalDateTime.now().minusMinutes(1))  
                 .build();
         when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
         when(passwordEncoder.matches("wrong", "encoded")).thenReturn(false);
@@ -471,7 +471,7 @@ class AuthServiceImplTest {
                 .email(testEmail)
                 .role(testRole) 
                 .status("LOCKED")
-                .lockTime(LocalDateTime.now().minusMinutes(1)) // 假设锁定5分钟，1分钟前锁定 -> 未过期
+                .lockTime(LocalDateTime.now().minusMinutes(1)) 
                 .build();
         when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(user);
 

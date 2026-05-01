@@ -3,7 +3,6 @@
     <div class="login-form-card">
       <h1 class="login-title">Appointment Platform Login</h1>
 
-      <!-- Role selection -->
       <div class="form-group">
         <label>Select Role</label>
         <div class="role-selector">
@@ -19,7 +18,6 @@
         <span v-if="errors.role" class="error-text">{{ errors.role }}</span>
       </div>
 
-      <!-- Email input -->
       <div class="form-group">
         <label>Email Address</label>
         <input
@@ -31,7 +29,6 @@
         <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
       </div>
 
-      <!-- Password input -->
       <div class="form-group">
         <label>Password</label>
         <input
@@ -139,11 +136,11 @@ const mapRoleToUserRole = (role: string) => {
 const askRememberMeChoice = async (defaultChecked: boolean): Promise<boolean> => {
   try {
     await ElMessageBox.confirm(
-      '因登录成功，是否记住密码并保持登录状态？',
-      '记住我',
+      'After successful login, will the password be remembered and the login status be maintained?',
+      'Remember Me',
       {
-        confirmButtonText: '记住',
-        cancelButtonText: '不记住',
+        confirmButtonText: 'Remember',
+        cancelButtonText: 'Not Remember',
         closeOnClickModal: false,
         closeOnPressEscape: false,
         distinguishCancelAndClose: true,

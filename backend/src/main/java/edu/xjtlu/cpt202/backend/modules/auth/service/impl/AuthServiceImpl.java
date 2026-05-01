@@ -77,7 +77,6 @@ public class AuthServiceImpl implements AuthService {
         String type = request.getType();
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         
-        // 1. 根据类型执行不同校验
         if ("REGISTER".equals(type)) {
             String role = request.getRole();
             if (StrUtil.isBlank(role)) {
@@ -88,13 +87,11 @@ public class AuthServiceImpl implements AuthService {
                 throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Only CUSTOMER role is allowed");
             }
 
-            // 注册模式：邮箱必须未被注册
             Long existingCount = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
             if (existingCount != null && existingCount > 0) {
                 throw new BusinessException(ResultCodeEnum.EMAIL_ALREADY_EXISTS.getCode(), "This email is already registered");
             }
         } else if ("RESET_PASSWORD".equals(type)) {
-            // 重置密码模式：不需要角色，但邮箱必须已注册
             Long userExists = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
             if (userExists == null || userExists == 0) {
                 throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Email is not registered.");
@@ -124,7 +121,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest request) {
-        // 8/9/10 校验
         if (StrUtil.hasBlank(request.getEmail(), request.getVerificationCode(), request.getPassword(), request.getConfirmPassword())) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "Please enter every field");
         }
@@ -194,14 +190,12 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (AccountStatusEnum.LOCKED.name().equals(user.getStatus())) {
-            // 检查锁定时间是否已过（如果 lockTime + 锁定分钟数 > 当前时间，则仍锁定）
             if (user.getLockTime() != null) {
                 LocalDateTime unlockTime = user.getLockTime().plusMinutes(SecurityConstant.ACCOUNT_LOCK_DURATION_MINUTES);
                 if (LocalDateTime.now().isBefore(unlockTime)) {
                     throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(), 
                         "Too many failed attempts. Please try again after 15 minutes.");
                 } else {
-                    // 锁定已过期，自动解锁并重置失败计数
                     user.setStatus(AccountStatusEnum.ACTIVE.name());
                     user.setLoginFailCount(0);
                     user.setLockTime(null);
@@ -209,7 +203,6 @@ public class AuthServiceImpl implements AuthService {
                     userMapper.updateById(user);
                 }
             } else {
-                // 没有 lockTime 但状态为 LOCKED，视为永久锁定（或直接抛异常）
                 throw new BusinessException(ResultCodeEnum.USER_ERROR_BLOCK.getCode(),
                         "Too many failed attempts. Please try again after 15 minutes.");
             }
@@ -247,8 +240,6 @@ public class AuthServiceImpl implements AuthService {
         user.setLoginFailCount(0);
         user.setLockTime(null);
         user.setFirstFailTime(null);
-        // 如果你有 lastLoginTime 字段，可以在这里更新
-        // user.setLastLoginTime(LocalDateTime.now());
         userMapper.updateById(user);
 
         String accessToken = JwtUtils.generateToken(user.getId(), user.getRole());
@@ -333,7 +324,6 @@ public class AuthServiceImpl implements AuthService {
     public void sendResetPasswordCode(SendResetCodeRequest request) {
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         
-        // 1. 检查邮箱是否已注册
         Long userExists = userMapper.selectCount(new QueryWrapper<User>().eq("email", email));
         if (userExists == null || userExists == 0) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), 
@@ -361,7 +351,6 @@ public class AuthServiceImpl implements AuthService {
         );
         verificationCodeService.markCodeUsed(codeRecord);
         
-        // 不返回任何数据，仅表示验证通过
     }
 
     @Override
@@ -371,19 +360,16 @@ public class AuthServiceImpl implements AuthService {
         String newPassword = request.getNewPassword();
         String confirmPassword = request.getConfirmPassword();
         
-        // 1. 校验非空（虽然 DTO 已有 @NotBlank，但防御性编程）
         if (StrUtil.hasBlank(email, verificationCode, newPassword, confirmPassword)) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), 
                 "All fields cannot be empty");
         }
         
-        // 2. 校验密码一致性
         if (!newPassword.equals(confirmPassword)) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), 
                 "Passwords do not match");
         }
         
-        // 3. 校验密码复杂度
         if (!PASSWORD_PATTERN.matcher(newPassword).matches()) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), 
                 "Password not meet complexity (at least 8 chars, uppercase, lowercase, and a number)");
@@ -391,22 +377,18 @@ public class AuthServiceImpl implements AuthService {
         
         LocalDateTime now = LocalDateTime.now();
         
-        // 4. 验证验证码（再次查询数据库，确保未被使用且未过期）
         VerificationCode codeRecord = verificationCodeMapper.selectOne(
             new QueryWrapper<VerificationCode>()
                 .eq("email", email)
                 .eq("type", "RESET_PASSWORD")
                 .eq("code", verificationCode)
-                .eq("is_used", true)          // 因为 verify 步骤已经标记为已使用，这里查 true
+                .eq("is_used", true)          
                 .ge("expires_at", now)
                 .orderByDesc("created_at")
                 .last("LIMIT 1")
         );
         
-        // 如果 verify 步骤未标记已使用，则改为 is_used = false 并增加过期检查
-        // 为了安全，我们允许两种方式：若 verify 没有标记，这里仍然可以处理
         if (codeRecord == null) {
-            // 尝试查询未使用的记录（兼容 verify 未标记的情况）
             codeRecord = verificationCodeMapper.selectOne(
                 new QueryWrapper<VerificationCode>()
                     .eq("email", email)
@@ -421,22 +403,18 @@ public class AuthServiceImpl implements AuthService {
                 throw new BusinessException(ResultCodeEnum.AUTH_ERROR_BLOCK.getCode(), 
                     "Invalid or expired verification code");
             }
-            // 标记为已使用
             codeRecord.setIsUsed(true);
             verificationCodeMapper.updateById(codeRecord);
         }
         
-        // 5. 查找用户
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("email", email));
         if (user == null) {
             throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), 
                 "Email is not registered");
         }
         
-        // 6. 更新密码
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setPasswordChangedAt(LocalDateTime.now());
-        // 可选：重置失败计数和锁定状态（因为用户成功重置密码，应解除锁定）
         user.setLoginFailCount(0);
         user.setLockTime(null);
         user.setFirstFailTime(null);

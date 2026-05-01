@@ -180,7 +180,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { createBooking, getBookingTopics } from '@/api/booking'
 import { getUser } from '@/api/request'
 import { fetchSpecialistAvailability, fetchSpecialistDetail } from '@/api/specialist'
@@ -214,6 +214,7 @@ const bookingTopics = ref<string[]>([])
 const loading = ref(false)
 const availabilityLoading = ref(false)
 const bookingSubmitting = ref(false)
+const bookingPolicyConfirming = ref(false)
 const duplicateSubmitClickCount = ref(0)
 
 const DUPLICATE_SUBMIT_CLICK_WARNING_THRESHOLD = 3
@@ -566,8 +567,31 @@ const onAiDraftEvent = (event: Event) => {
   applyAiBookingDraft(customEvent.detail)
 }
 
+const confirmBookingPolicy = async () => {
+  bookingPolicyConfirming.value = true
+  try {
+    await ElMessageBox.confirm(
+      'Cancellation or reschedule is available more than 2 hours before the start time. Changes made 24+ hours in advance are fully refundable; changes within 2-24 hours may include a 30% policy fee.',
+      'Cancellation & reschedule policy',
+      {
+        confirmButtonText: 'Continue',
+        cancelButtonText: 'Back',
+        type: 'warning',
+      },
+    )
+    return true
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('Failed to confirm booking policy:', error)
+    }
+    return false
+  } finally {
+    bookingPolicyConfirming.value = false
+  }
+}
+
 const submitBooking = async () => {
-  if (bookingSubmitting.value) {
+  if (bookingSubmitting.value || bookingPolicyConfirming.value) {
     duplicateSubmitClickCount.value += 1
     if (duplicateSubmitClickCount.value >= DUPLICATE_SUBMIT_CLICK_WARNING_THRESHOLD) {
       ElMessage.warning('You are clicking too fast. Please wait for the current booking request to finish.')
@@ -597,6 +621,11 @@ const submitBooking = async () => {
   }
   if (notesFormatError.value) {
     ElMessage.warning(notesFormatError.value)
+    return
+  }
+
+  const confirmedPolicy = await confirmBookingPolicy()
+  if (!confirmedPolicy) {
     return
   }
 

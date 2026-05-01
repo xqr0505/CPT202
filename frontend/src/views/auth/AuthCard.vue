@@ -1,7 +1,44 @@
 <template>
   <div class="auth-card-wrapper">
     <div class="auth-container" :class="{ active: isSignUp }">
-      <div class="form-container sign-in">
+      <!-- 移动端顶部切换栏（保留绿色渐变与眼球，支持上下切换动画） -->
+      <div v-if="isMobile" class="mobile-toggle-bar">
+        <div class="mobile-toggle-bg">
+          <button
+            type="button"
+            class="guest-eye mobile-guest-eye"
+            :class="[eyeDirectionClass, { blinking: isEyeBlinking }]"
+            aria-label="Continue browsing as guest"
+            @click="continueAsGuest"
+          >
+            <span class="eye-pair" aria-hidden="true">
+              <span class="eye"><span class="pupil" /></span>
+              <span class="eye"><span class="pupil" /></span>
+            </span>
+          </button>
+          <div class="switch-tabs">
+            <button
+              type="button"
+              class="switch-tab"
+              :class="{ active: !isSignUp }"
+              @click="switchToSignIn"
+            >Sign In</button>
+            <button
+              type="button"
+              class="switch-tab"
+              :class="{ active: isSignUp }"
+              @click="switchToSignUp"
+            >Sign Up</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 登录表单：桌面端始终显示（有动画控制），移动端仅在登录模式下显示 -->
+      <div
+        v-if="!isMobile || !isSignUp"
+        class="form-container sign-in"
+        :class="{ 'mobile-only': isMobile }"
+      >
         <form @submit.prevent="handleLogin">
           <h1 class="login-title">Appointment Platform Login</h1>
           <div class="form-group">
@@ -52,7 +89,12 @@
         </form>
       </div>
 
-      <div class="form-container sign-up">
+      <!-- 注册表单：桌面端始终显示（有动画控制），移动端仅在注册模式下显示 -->
+      <div
+        v-if="!isMobile || isSignUp"
+        class="form-container sign-up"
+        :class="{ 'mobile-only': isMobile }"
+      >
         <form @submit.prevent="handleRegister">
           <h1 class="register-title">Create your account</h1>
           <div class="form-group">
@@ -73,20 +115,22 @@
 
           <div class="form-group verification-group">
             <label>Verification code</label>
-            <input
-              v-model.trim="registerForm.verificationCode"
-              type="text"
-              placeholder="Enter 6-digit code"
-              maxlength="6"
-            />
-            <button
-              class="code-btn"
-              :disabled="isCodeSending || countdown > 0"
-              type="button"
-              @click="getVerificationCode"
-            >
-              {{ countdown > 0 ? `${countdown} seconds to resend` : 'Send code' }}
-            </button>
+            <div class="verification-row">
+              <input
+                v-model.trim="registerForm.verificationCode"
+                type="text"
+                placeholder="Enter 6-digit code"
+                maxlength="6"
+              />
+              <button
+                class="code-btn"
+                :disabled="isCodeSending || countdown > 0"
+                type="button"
+                @click="getVerificationCode"
+              >
+                {{ countdown > 0 ? `${countdown} seconds to resend` : 'Send code' }}
+              </button>
+            </div>
           </div>
           <span v-if="sendCodeMessage" class="hint-text">{{ sendCodeMessage }}</span>
           <span v-if="registerErrors.verificationCode" class="error-text">{{ registerErrors.verificationCode }}</span>
@@ -122,6 +166,7 @@
         </form>
       </div>
 
+      <!-- 桌面端的左右切换面板（移动端通过 CSS 隐藏） -->
       <div class="toggle-container">
         <div class="toggle">
           <div class="toggle-panel toggle-left">
@@ -188,8 +233,21 @@ const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context';
 
 const router = useRouter();
 const userStore = useUserStore();
-
+const isMobile = ref(false);
 const isSignUp = ref(false); 
+
+const checkIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768;
+};
+
+onMounted(() => {
+  checkIsMobile();
+  window.addEventListener('resize', checkIsMobile);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkIsMobile);
+});
 
 function switchToSignUp() {
   isSignUp.value = true;
@@ -288,7 +346,6 @@ const loginErrors = reactive({
   role: ''
 });
 
-function validateLoginPassword() { /* 如果需要 */ }
 function validateLoginEmail() {
   if (!loginForm.email) {
     loginErrors.email = 'Email is required';
@@ -1060,6 +1117,184 @@ onMounted(() => {
   to {
     transform: translateY(-50%) scale(1);
     opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-card-wrapper {
+    background: var(--color-bg-page); 
+  }
+
+  .auth-container {
+    width: 100%;
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-container {
+    position: relative !important;
+    width: 100% !important;
+    left: auto !important;
+    transform: none !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 2 !important;
+    padding: 20px 24px;
+    height: auto;
+    overflow-y: visible;
+    transition: none;
+  }
+
+  .sign-in,
+  .sign-up {
+    position: relative !important;
+    width: 100% !important;
+    left: auto !important;
+    transform: none !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 2 !important;
+    transition: none;
+  }
+
+  .toggle-container {
+    display: none;
+  }
+
+  .mobile-toggle-bar {
+    width: 100%;
+    background: linear-gradient(135deg, var(--color-primary-light, #5c6bc0), var(--color-primary, #512da8));
+    padding: 24px 24px 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+
+  .mobile-toggle-bg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .mobile-guest-eye {
+    display: flex;
+    margin: 0;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.12);
+    color: white;
+  }
+
+  .switch-tabs {
+    display: flex;
+    background: rgba(255,255,255,0.15);
+    border-radius: 30px;
+    padding: 4px;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .switch-tab {
+    flex: 1;
+    padding: 10px 0;
+    border-radius: 30px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.8);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+  }
+
+  .switch-tab.active {
+    background: white;
+    color: var(--color-primary, #512da8);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-group input {
+    padding: 14px 14px;
+    font-size: 16px;            
+  }
+
+  .role-selector {
+    gap: 8px;
+  }
+  .role-btn {
+    min-width: 70px;
+    padding: 12px 8px;
+    font-size: 14px;
+  }
+
+  .verification-group .verification-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .verification-group .verification-row input {
+    flex: 1;
+  }
+  .code-btn {
+    white-space: nowrap;
+    padding: 12px 10px;
+    font-size: 13px;
+  }
+
+  .login-btn,
+  .register-btn {
+    padding: 16px 24px;
+    min-height: 50px;
+    font-size: 18px;
+    margin-top: 12px;
+  }
+
+  .footer-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: 28px;
+  }
+  .footer-links a {
+    padding: 8px 0;
+    font-size: 14px;
+  }
+
+  .guest-hint {
+    display: none;
+  }
+  
+  .sign-in .footer-links,
+  .sign-up .footer-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+    padding-bottom: 20px;
+  }
+
+  .sign-in .footer-links a,
+  .sign-up .footer-links a {
+    display: inline-block;
+    padding: 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-primary);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  .sign-in .footer-links a:hover,
+  .sign-up .footer-links a:hover {
+    border-bottom-color: var(--color-primary);
   }
 }
 </style>

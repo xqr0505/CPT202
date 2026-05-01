@@ -7,8 +7,10 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.Test;
 
@@ -135,12 +137,14 @@ class ParallelToolAssistantTest {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
         StreamingChatLanguageModel streaming = mock(StreamingChatLanguageModel.class);
+        AiChatProfiler aiChatProfiler = new AiChatProfiler(new CommonProperties());
         return new ParallelToolAssistant(
                 model,
                 streaming,
                 store,
                 memoryProperties,
                 parallelProperties,
+                aiChatProfiler,
                 "system",
                 List.of(toolSource)
         );

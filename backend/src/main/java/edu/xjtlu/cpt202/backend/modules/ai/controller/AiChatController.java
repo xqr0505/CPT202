@@ -3,9 +3,12 @@ package edu.xjtlu.cpt202.backend.modules.ai.controller;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.Result;
+import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.model.dto.ChatRequestDTO;
 import edu.xjtlu.cpt202.backend.modules.ai.model.vo.ChatStreamVO;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatTraceContext;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +34,11 @@ import java.io.IOException;
 public class AiChatController {
 
     private final AiChatService aiChatService;
+    private final AiChatProfiler aiChatProfiler;
 
-    public AiChatController(AiChatService aiChatService) {
+    public AiChatController(AiChatService aiChatService, AiChatProfiler aiChatProfiler) {
         this.aiChatService = aiChatService;
+        this.aiChatProfiler = aiChatProfiler;
     }
 
     @PreAuthorize(AiConstant.AI_CHAT_ACCESS_EXPRESSION)
@@ -46,18 +51,44 @@ public class AiChatController {
     @PreAuthorize(AiConstant.AI_CHAT_ACCESS_EXPRESSION)
     @PostMapping(value = AiConstant.CHAT_PATH, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@Valid @RequestBody ChatRequestDTO chatRequestDTO) {
+        long requestStartNs = System.nanoTime();
+        Long userId = SecurityUtils.getCurrentUserId();
+        String traceId = aiChatProfiler.startTrace(
+                "controller.chat.request",
+                userId,
+                preview(chatRequestDTO.getMessage())
+        );
         SseEmitter emitter = new SseEmitter(AiConstant.SSE_TIMEOUT_MILLIS);
         try {
+            aiChatProfiler.logStage("controller.chat.toTokenStream", elapsedMs(requestStartNs), java.util.Map.of(
+                    "traceId", traceId,
+                    "userId", userId
+            ));
+            long streamStartNs = System.nanoTime();
             aiChatService.streamChat(chatRequestDTO.getMessage())
-                    .onNext(token -> sendChunkEvent(emitter, token, Boolean.FALSE))
+                    .onNext(token -> {
+                        AiChatTraceContext.restoreTraceId(traceId);
+                        sendChunkEvent(emitter, token, Boolean.FALSE);
+                    })
                     .onComplete(chatResponse -> {
+                        AiChatTraceContext.restoreTraceId(traceId);
+                        aiChatProfiler.logSummary("controller.chat.streamComplete", elapsedMs(requestStartNs), java.util.Map.of(
+                                "userId", userId
+                        ));
                         sendDoneEvent(emitter);
                         emitter.complete();
+                        aiChatProfiler.clearTrace();
                     })
-                    .onError(error -> handleStreamError(emitter, error))
+                    .onError(error -> {
+                        AiChatTraceContext.restoreTraceId(traceId);
+                        handleStreamError(emitter, error, requestStartNs, userId);
+                    })
                     .start();
+            aiChatProfiler.logStage("controller.chat.startInvoked", elapsedMs(streamStartNs), java.util.Map.of(
+                    "userId", userId
+            ));
         } catch (Exception exception) {
-            handleStreamError(emitter, exception);
+            handleStreamError(emitter, exception, requestStartNs, userId);
         }
         return emitter;
     }
@@ -87,11 +118,17 @@ public class AiChatController {
         sendEvent(emitter, AiConstant.CHAT_STREAM_DONE_EVENT, payload);
     }
 
-    private void handleStreamError(SseEmitter emitter, Throwable throwable) {
+    private void handleStreamError(SseEmitter emitter, Throwable throwable, long requestStartNs, Long userId) {
         log.error("AI chat stream failed", throwable);
+        aiChatProfiler.logSummary("controller.chat.streamError", elapsedMs(requestStartNs), java.util.Map.of(
+                "userId", userId,
+                "errorType", throwable.getClass().getSimpleName(),
+                "errorMessage", throwable.getMessage()
+        ));
         Result<ChatStreamVO> payload = toErrorPayload(throwable);
         sendEvent(emitter, AiConstant.CHAT_STREAM_DONE_EVENT, payload);
         emitter.complete();
+        aiChatProfiler.clearTrace();
     }
 
     private Result<ChatStreamVO> toErrorPayload(Throwable throwable) {
@@ -109,5 +146,16 @@ public class AiChatController {
         } catch (IOException e) {
             emitter.complete();
         }
+    }
+
+    private long elapsedMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
+    }
+
+    private String preview(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= 80 ? value : value.substring(0, 80) + "...(" + value.length() + ")";
     }
 }

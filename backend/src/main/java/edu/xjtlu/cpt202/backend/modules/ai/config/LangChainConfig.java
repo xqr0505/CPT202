@@ -33,7 +33,11 @@ import java.util.List;
  * @since 2026/4/15
  */
 @Configuration
-@EnableConfigurationProperties({AiChatMemoryProperties.class, AiToolParallelProperties.class})
+@EnableConfigurationProperties({
+        AiChatMemoryProperties.class,
+        AiToolParallelProperties.class,
+        AiRagRewriteProperties.class
+})
 public class LangChainConfig {
 
     @Bean

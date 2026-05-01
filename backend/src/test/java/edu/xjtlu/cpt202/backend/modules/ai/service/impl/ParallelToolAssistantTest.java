@@ -1,11 +1,14 @@
 package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.output.Response;
+import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
@@ -18,9 +21,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 class ParallelToolAssistantTest {
@@ -133,6 +140,75 @@ class ParallelToolAssistantTest {
         assertThat(tool.receivedStartDate()).isEqualTo("2026-04-22");
     }
 
+    @Test
+    void shouldStreamDirectlyWithoutSyncProbeWhenNoToolsNeeded() throws InterruptedException {
+        NoToolModel model = new NoToolModel();
+        RecordingStreamingModel streamingModel = new RecordingStreamingModel(List.of("hello", " world"), AiMessage.from("hello world"));
+        Assistant assistant = buildAssistant(new TestReadOnlyTools(false), Setups.defaultParallelProperties(), model, streamingModel);
+
+        List<String> chunks = new CopyOnWriteArrayList<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        TokenStream tokenStream = assistant.streamChat(1001L, "query");
+        tokenStream.onNext(chunks::add)
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.invocationCount()).isZero();
+        assertThat(streamingModel.invocationCount()).isEqualTo(1);
+        assertThat(chunks).containsExactly("hello", " world");
+    }
+
+    @Test
+    void shouldExecuteToolsAndThenStreamFinalAnswer() throws InterruptedException {
+        SingleToolRoundModel model = new SingleToolRoundModel(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        ));
+        RecordingStreamingModel streamingModel = new RecordingStreamingModel(List.of(), AiMessage.from(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        )));
+        streamingModel.enqueue(List.of("done"), AiMessage.from("done"));
+        Assistant assistant = buildAssistant(new TestReadOnlyTools(false), Setups.defaultParallelProperties(), model, streamingModel);
+
+        List<String> chunks = new CopyOnWriteArrayList<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        TokenStream tokenStream = assistant.streamChat(1001L, "query");
+        tokenStream.onNext(chunks::add)
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.invocationCount()).isEqualTo(1);
+        assertThat(streamingModel.invocationCount()).isEqualTo(1);
+        assertThat(chunks).containsExactly("done");
+    }
+
+    @Test
+    void shouldEmitSyncFinalAnswerAfterToolExecutionWithoutRestartingStreaming() throws InterruptedException {
+        SingleToolRoundModel model = new SingleToolRoundModel(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        ));
+        RecordingStreamingModel streamingModel = new RecordingStreamingModel(List.of(), AiMessage.from(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        )));
+        Assistant assistant = buildAssistant(new TestReadOnlyTools(false), Setups.defaultParallelProperties(), model, streamingModel);
+
+        List<String> chunks = new CopyOnWriteArrayList<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        TokenStream tokenStream = assistant.streamChat(1001L, "query");
+        tokenStream.onNext(chunks::add)
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.invocationCount()).isEqualTo(1);
+        assertThat(streamingModel.invocationCount()).isEqualTo(1);
+        assertThat(String.join("", chunks)).isEqualTo("done");
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
@@ -141,6 +217,27 @@ class ParallelToolAssistantTest {
         return new ParallelToolAssistant(
                 model,
                 streaming,
+                store,
+                memoryProperties,
+                parallelProperties,
+                aiChatProfiler,
+                "system",
+                List.of(toolSource)
+        );
+    }
+
+    private Assistant buildAssistant(
+            Object toolSource,
+            AiToolParallelProperties parallelProperties,
+            ChatLanguageModel model,
+            StreamingChatLanguageModel streamingModel
+    ) {
+        AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
+        InMemoryStore store = new InMemoryStore();
+        AiChatProfiler aiChatProfiler = new AiChatProfiler(new CommonProperties());
+        return new ParallelToolAssistant(
+                model,
+                streamingModel,
                 store,
                 memoryProperties,
                 parallelProperties,
@@ -201,6 +298,97 @@ class ParallelToolAssistantTest {
             }
             return Response.from(AiMessage.from("done"));
         }
+
+        private int invocationCount() {
+            return invocationCount;
+        }
+    }
+
+    private static class NoToolModel implements ChatLanguageModel {
+        private int invocationCount = 0;
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            return Response.from(AiMessage.from("unused"));
+        }
+
+        private int invocationCount() {
+            return invocationCount;
+        }
+    }
+
+    private static class SingleToolRoundModel implements ChatLanguageModel {
+        private final List<ToolExecutionRequest> firstRoundRequests;
+        private int invocationCount = 0;
+
+        private SingleToolRoundModel(List<ToolExecutionRequest> firstRoundRequests) {
+            this.firstRoundRequests = firstRoundRequests;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            long resultCount = messages.stream()
+                    .filter(message -> message instanceof dev.langchain4j.data.message.ToolExecutionResultMessage)
+                    .count();
+            if (resultCount > 0) {
+                return Response.from(AiMessage.from("done"));
+            }
+            return Response.from(AiMessage.from(firstRoundRequests));
+        }
+
+        private int invocationCount() {
+            return invocationCount;
+        }
+    }
+
+    private static class RecordingStreamingModel implements StreamingChatLanguageModel {
+        private final List<StreamingRound> rounds = new ArrayList<>();
+        private int invocationCount = 0;
+
+        private RecordingStreamingModel(List<String> tokens, AiMessage message) {
+            rounds.add(new StreamingRound(tokens, message));
+        }
+
+        private void enqueue(List<String> tokens, AiMessage message) {
+            rounds.add(new StreamingRound(tokens, message));
+        }
+
+        @Override
+        public void generate(List<ChatMessage> messages, StreamingResponseHandler<AiMessage> handler) {
+            StreamingRound round = rounds.get(invocationCount++);
+            for (String token : round.tokens()) {
+                handler.onNext(token);
+            }
+            handler.onComplete(Response.from(round.message()));
+        }
+
+        @Override
+        public void generate(
+                List<ChatMessage> messages,
+                List<ToolSpecification> toolSpecifications,
+                StreamingResponseHandler<AiMessage> handler
+        ) {
+            generate(messages, handler);
+        }
+
+        private int invocationCount() {
+            return invocationCount;
+        }
+    }
+
+    private record StreamingRound(List<String> tokens, AiMessage message) {
     }
 
     private static class CaptureToolResultOrderModel extends TwoStepToolThenAnswerModel {

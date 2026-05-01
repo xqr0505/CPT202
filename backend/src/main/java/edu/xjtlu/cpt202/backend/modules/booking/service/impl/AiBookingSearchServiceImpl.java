@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Set;
 import java.util.List;
 
 
@@ -26,6 +27,14 @@ import java.util.List;
 public class AiBookingSearchServiceImpl implements AiBookingSearchService {
 
     private static final int DEFAULT_LIMIT = 10;
+    private static final Set<String> TIME_RANGE_VALUES = Set.of(
+            "TODAY",
+            "THIS_WEEK",
+            "THIS_MONTH",
+            "LAST_MONTH",
+            "UPCOMING",
+            "HISTORY"
+    );
 
     private final BookingMapper bookingMapper;
 
@@ -77,10 +86,16 @@ public class AiBookingSearchServiceImpl implements AiBookingSearchService {
         }
         normalized.setExpertName(trimToNull(queryDTO.getExpertName()));
         normalized.setCategoryName(trimToNull(queryDTO.getCategoryName()));
-        normalized.setStatus(normalizeUpperCase(queryDTO.getStatus()));
+        String normalizedStatus = normalizeUpperCase(queryDTO.getStatus());
+        String normalizedTimeRangeType = normalizeUpperCase(queryDTO.getTimeRangeType());
+        if (normalizedTimeRangeType == null && normalizedStatus != null && TIME_RANGE_VALUES.contains(normalizedStatus)) {
+            normalizedTimeRangeType = normalizedStatus;
+            normalizedStatus = null;
+        }
+        normalized.setStatus(normalizedStatus);
         normalized.setStartDate(queryDTO.getStartDate());
         normalized.setEndDate(queryDTO.getEndDate());
-        normalized.setTimeRangeType(normalizeUpperCase(queryDTO.getTimeRangeType()));
+        normalized.setTimeRangeType(normalizedTimeRangeType);
         return normalized;
     }
 

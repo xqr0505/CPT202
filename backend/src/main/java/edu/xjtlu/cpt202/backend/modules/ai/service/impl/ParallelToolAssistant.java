@@ -258,7 +258,7 @@ public class ParallelToolAssistant implements Assistant {
             StreamingResponseHandler<AiMessage> handler
     ) {
         List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
-        streamingChatLanguageModel.generate(sanitizedMessages, handler);
+        streamingChatLanguageModel.generate(sanitizedMessages, toolSpecifications, handler);
     }
 
     private void ensureSystemMessage(List<ChatMessage> messages) {
@@ -762,15 +762,19 @@ public class ParallelToolAssistant implements Assistant {
                     ensureSystemMessage(messages);
                     addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
-                    long probeStartNs = System.nanoTime();
-                    Response<AiMessage> probeResponse = invokeModel(messages);
-                    aiChatProfiler.logStage("assistant.stream.invokeModel.first", elapsedMs(probeStartNs), Map.of(
-                            "memoryId", memoryId,
-                            "messageCount", messages.size()
-                    ));
-                    AiMessage probeAiMessage = probeResponse.content();
-
                     int rounds = 0;
+                    ProbeStreamResult probeResult = runStreamingRound(
+                            messages,
+                            memoryId,
+                            traceId,
+                            totalStartNs,
+                            "assistant.stream.streamingProbe",
+                            true,
+                            this.onNext
+                    );
+                    AiMessage probeAiMessage = probeResult.response().content();
+                    Response<AiMessage> finalModelResponseAfterTools = null;
+
                     while (probeAiMessage != null && probeAiMessage.hasToolExecutionRequests()) {
                         addMessageToWindow(messages, probeAiMessage);
                         rounds++;
@@ -790,12 +794,15 @@ public class ParallelToolAssistant implements Assistant {
                         }
 
                         long invokeStartNs = System.nanoTime();
-                        probeResponse = invokeModel(messages);
+                        Response<AiMessage> probeResponse = invokeModel(messages);
                         aiChatProfiler.logStage("assistant.stream.invokeModel.round" + rounds, elapsedMs(invokeStartNs), Map.of(
                                 "memoryId", memoryId,
                                 "messageCount", messages.size()
                         ));
                         probeAiMessage = probeResponse.content();
+                        if (probeAiMessage != null && !probeAiMessage.hasToolExecutionRequests()) {
+                            finalModelResponseAfterTools = probeResponse;
+                        }
                     }
 
                     aiChatProfiler.logStage("assistant.stream.preStreamingTotal", elapsedMs(totalStartNs), Map.of(
@@ -803,57 +810,39 @@ public class ParallelToolAssistant implements Assistant {
                             "toolRounds", rounds
                     ));
 
-                    AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
-                    CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+                    Response<AiMessage> streamedResponse;
+                    if (rounds == 0) {
+                        streamedResponse = probeResult.response();
+                    } else if (finalModelResponseAfterTools != null && finalModelResponseAfterTools.content() != null
+                            && finalModelResponseAfterTools.content().text() != null
+                            && !finalModelResponseAfterTools.content().text().isBlank()) {
+                        AiMessage finalAiMessage = finalModelResponseAfterTools.content();
+                        emitTextChunks(finalAiMessage.text(), this.onNext, traceId, totalStartNs, memoryId);
+                        streamedResponse = finalModelResponseAfterTools;
+                    } else {
+                        ProbeStreamResult finalAnswerResult = runStreamingRound(
+                                messages,
+                                memoryId,
+                                traceId,
+                                totalStartNs,
+                                "assistant.stream.streamingAnswer",
+                                true,
+                                this.onNext
+                        );
+                        streamedResponse = finalAnswerResult.response();
+                    }
 
-                    long streamingInvokeStartNs = System.nanoTime();
-                    invokeStreamingModel(messages, new StreamingResponseHandler<>() {
-                        private long firstTokenMarkerNs = -1L;
-
-                        @Override
-                        public void onNext(String token) {
-                            // Streaming callbacks may occur on a different thread (e.g. OkHttp dispatcher).
-                            // Rebind traceId so logs remain correlated.
-                            AiChatTraceContext.restoreTraceId(traceId);
-                            if (firstTokenMarkerNs < 0) {
-                                firstTokenMarkerNs = System.nanoTime();
-                                aiChatProfiler.logStage("assistant.stream.timeToFirstToken", elapsedMs(totalStartNs), Map.of(
-                                        "memoryId", memoryId
-                                ));
-                            }
-                            onNext.accept(token);
-                        }
-
-                        @Override
-                        public void onComplete(Response<AiMessage> response) {
-                            AiChatTraceContext.restoreTraceId(traceId);
-                            streamedResponseRef.set(response);
-                            streamedResponseFuture.complete(response);
-                        }
-
-                        @Override
-                        public void onError(Throwable error) {
-                            AiChatTraceContext.restoreTraceId(traceId);
-                            streamedResponseFuture.completeExceptionally(error);
-                        }
-                    });
-                    aiChatProfiler.logStage("assistant.stream.invokeStreamingModel", elapsedMs(streamingInvokeStartNs), Map.of(
-                            "memoryId", memoryId
-                    ));
-
-                    Response<AiMessage> streamedResponse = streamedResponseFuture.join();
                     AiMessage streamedAiMessage = streamedResponse.content();
                     if (streamedAiMessage != null) {
                         addMessageToWindow(messages, streamedAiMessage);
                     }
                     chatMemoryStore.updateMessages(memoryId, messages);
-                    Response<AiMessage> completedResponse = streamedResponseRef.get();
                     aiChatProfiler.logSummary("assistant.stream.completed", elapsedMs(totalStartNs), Map.of(
                             "memoryId", memoryId,
                             "toolRounds", rounds,
                             "finalMessageCount", messages.size()
                     ));
-                    onComplete.accept(completedResponse == null ? streamedResponse : completedResponse);
+                    onComplete.accept(streamedResponse);
                 } catch (Throwable throwable) {
                     if (ignoreErrors) {
                         return;
@@ -867,6 +856,87 @@ public class ParallelToolAssistant implements Assistant {
                 }
             });
         }
+    }
+
+    private ProbeStreamResult runStreamingRound(
+            List<ChatMessage> messages,
+            Long memoryId,
+            String traceId,
+            long totalStartNs,
+            String stageName,
+            boolean emitTokens,
+            Consumer<String> tokenConsumer
+    ) {
+        AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
+        CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+        long streamingInvokeStartNs = System.nanoTime();
+        AtomicReference<Boolean> firstTokenLogged = new AtomicReference<>(Boolean.FALSE);
+
+        invokeStreamingModel(messages, new StreamingResponseHandler<>() {
+            @Override
+            public void onNext(String token) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                if (firstTokenLogged.compareAndSet(Boolean.FALSE, Boolean.TRUE)) {
+                    aiChatProfiler.logStage("assistant.stream.timeToFirstToken", elapsedMs(totalStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "streamStage", stageName
+                    ));
+                }
+                if (emitTokens) {
+                    tokenConsumer.accept(token);
+                }
+            }
+
+            @Override
+            public void onComplete(Response<AiMessage> response) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                streamedResponseRef.set(response);
+                streamedResponseFuture.complete(response);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                streamedResponseFuture.completeExceptionally(error);
+            }
+        });
+
+        aiChatProfiler.logStage(stageName, elapsedMs(streamingInvokeStartNs), Map.of(
+                "memoryId", memoryId
+        ));
+
+        Response<AiMessage> response = streamedResponseFuture.join();
+        return new ProbeStreamResult(response);
+    }
+
+    private void emitTextChunks(
+            String text,
+            Consumer<String> tokenConsumer,
+            String traceId,
+            long totalStartNs,
+            Long memoryId
+    ) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        boolean firstChunk = true;
+        for (int index = 0; index < text.length(); index += STREAM_CHUNK_SIZE) {
+            AiChatTraceContext.restoreTraceId(traceId);
+            if (firstChunk) {
+                aiChatProfiler.logStage("assistant.stream.timeToFirstToken", elapsedMs(totalStartNs), Map.of(
+                        "memoryId", memoryId,
+                        "streamStage", "assistant.stream.finalModelText"
+                ));
+                firstChunk = false;
+            }
+            int endIndex = Math.min(index + STREAM_CHUNK_SIZE, text.length());
+            tokenConsumer.accept(text.substring(index, endIndex));
+        }
+    }
+
+    private record ProbeStreamResult(
+            Response<AiMessage> response
+    ) {
     }
 
     private long elapsedMs(long startNs) {

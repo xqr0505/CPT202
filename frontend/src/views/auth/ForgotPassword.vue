@@ -3,7 +3,6 @@
     <div class="card">
       <h1 class="title">Reset Password</h1>
 
-      <!-- 步骤指示器 -->
       <div class="steps">
         <div :class="['step', { active: currentStep >= 1, completed: currentStep > 1 }]">
           <span class="step-number">1</span>
@@ -19,7 +18,6 @@
         </div>
       </div>
 
-      <!-- Step 1: 输入邮箱 -->
       <div v-if="currentStep === 1" class="step-content">
         <div class="form-group">
           <label>Email Address</label>
@@ -39,7 +37,6 @@
         </div>
       </div>
 
-      <!-- Step 2: 输入验证码 -->
       <div v-if="currentStep === 2" class="step-content">
         <div class="form-group">
           <label>Verification Code</label>
@@ -67,7 +64,6 @@
         </div>
       </div>
 
-      <!-- Step 3: 设置新密码 -->
       <div v-if="currentStep === 3" class="step-content">
         <div class="form-group">
           <label>New Password</label>
@@ -159,7 +155,7 @@ async function sendCode() {
   try {
     await sendVerificationCode({
       email: email.value,
-      type: 'RESET_PASSWORD'   // 关键：类型为 RESET_PASSWORD
+      type: 'RESET_PASSWORD'   
     });
     ElMessage.success('Verification code sent to your email');
     currentStep.value = 2;

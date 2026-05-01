@@ -1,7 +1,6 @@
 <template>
   <div class="auth-card-wrapper">
     <div class="auth-container" :class="{ active: isSignUp }">
-      <!-- 移动端顶部切换栏（保留绿色渐变与眼球，支持上下切换动画） -->
       <div v-if="isMobile" class="mobile-toggle-bar">
         <div class="mobile-toggle-bg">
           <button
@@ -33,7 +32,6 @@
         </div>
       </div>
 
-      <!-- 登录表单：桌面端始终显示（有动画控制），移动端仅在登录模式下显示 -->
       <div
         v-if="!isMobile || !isSignUp"
         class="form-container sign-in"
@@ -89,7 +87,6 @@
         </form>
       </div>
 
-      <!-- 注册表单：桌面端始终显示（有动画控制），移动端仅在注册模式下显示 -->
       <div
         v-if="!isMobile || isSignUp"
         class="form-container sign-up"
@@ -166,7 +163,6 @@
         </form>
       </div>
 
-      <!-- 桌面端的左右切换面板（移动端通过 CSS 隐藏） -->
       <div class="toggle-container">
         <div class="toggle">
           <div class="toggle-panel toggle-left">

@@ -2,7 +2,7 @@
 <template>
   <header class="mobile-header">
     <div class="header-content">
-      <img src="@/assets/images/ELicon.png" class="logo-icon" alt="Logo" />
+      <img :src="logoSrc" class="logo-icon" alt="Logo" />
       <span class="platform-name">ExpertLink</span>
       <div class="header-spacer"></div>
       <el-dropdown trigger="click" placement="bottom-end">
@@ -23,13 +23,18 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
+import lightLogo from '@/assets/images/ELicon.png'
+import darkLogo from '@/assets/images/ELiconDark.png'
+import { getCurrentThemeMode, THEME_MODE_EVENT_NAME, type ThemeMode } from '@/utils/theme'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const isDarkTheme = ref(getCurrentThemeMode() === 'dark')
+const logoSrc = computed(() => (isDarkTheme.value ? darkLogo : lightLogo))
 
 const displayName = computed(() => {
   const nickname = userStore.userInfo?.nickname?.trim()
@@ -76,6 +81,18 @@ const handleLogout = async (): Promise<void> => {
     // closed dialog -> do nothing
   }
 }
+
+function handleThemeChange(event: CustomEvent<ThemeMode>): void {
+  isDarkTheme.value = event.detail === 'dark'
+}
+
+onMounted(() => {
+  window.addEventListener(THEME_MODE_EVENT_NAME, handleThemeChange as EventListener)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(THEME_MODE_EVENT_NAME, handleThemeChange as EventListener)
+})
 </script>
 
 <style scoped lang="scss">

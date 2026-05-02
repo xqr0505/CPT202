@@ -1,7 +1,7 @@
-package edu.xjtlu.cpt202.backend.common.controller;
+package edu.xjtlu.cpt202.backend.modules.upload.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
-import edu.xjtlu.cpt202.backend.common.service.FileUploadService;
+import edu.xjtlu.cpt202.backend.modules.upload.service.FileUploadService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

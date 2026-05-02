@@ -2,6 +2,8 @@ package edu.xjtlu.cpt202.backend.modules.ai.config;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
@@ -35,6 +37,8 @@ class LangChainConfigTest {
             .withBean(AiBookingSubmitTool.class, () -> mock(AiBookingSubmitTool.class))
             .withBean(AiSpecialistAvailabilityTool.class, () -> mock(AiSpecialistAvailabilityTool.class))
             .withBean(KnowledgeTools.class, () -> mock(KnowledgeTools.class))
+            .withBean(CommonProperties.class, CommonProperties::new)
+            .withBean(AiChatProfiler.class, () -> new AiChatProfiler(new CommonProperties()))
             .withPropertyValues(
                     "ai.openai.api-key=test-openai-key",
                     "ai.openai.model-name=gpt-4o-mini"

@@ -5,9 +5,8 @@ const routes = [
   {
     path: '/auth',
     name: 'Auth',
-    component: () => import('../views/auth/AuthCard.vue')  // 直接指向新组件
+    component: () => import('../views/auth/AuthCard.vue') 
   },
-  // 保留旧路径重定向
   {
     path: '/login',
     redirect: '/auth'

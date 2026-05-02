@@ -2,6 +2,7 @@
   <div class="auth-card-wrapper">
     <div class="auth-container" :class="{ active: isSignUp }">
       <!-- 移动端顶部切换栏（保留绿色渐变与眼球，支持上下切换动画） -->
+
       <div v-if="isMobile" class="mobile-toggle-bar">
         <div class="mobile-toggle-bg">
           <button

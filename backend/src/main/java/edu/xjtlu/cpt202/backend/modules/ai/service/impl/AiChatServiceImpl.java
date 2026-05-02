@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.springframework.stereotype.Service;
@@ -23,21 +24,39 @@ public class AiChatServiceImpl implements AiChatService {
 
     private final Assistant assistant;
     private final ChatMemoryStore chatMemoryStore;
+    private final AiChatProfiler aiChatProfiler;
 
-    public AiChatServiceImpl(Assistant assistant, ChatMemoryStore chatMemoryStore) {
+    public AiChatServiceImpl(
+            Assistant assistant,
+            ChatMemoryStore chatMemoryStore,
+            AiChatProfiler aiChatProfiler
+    ) {
         this.assistant = assistant;
         this.chatMemoryStore = chatMemoryStore;
+        this.aiChatProfiler = aiChatProfiler;
     }
 
     @Override
     public String chat(String userMessage) {
-        return assistant.chat(currentUserId(), normalizeUserMessage(userMessage));
+        long startNs = System.nanoTime();
+        Long userId = currentUserId();
+        String normalizedUserMessage = normalizeUserMessage(userMessage);
+        aiChatProfiler.logStage("service.chat.normalize", elapsedMs(startNs), java.util.Map.of(
+                "userId", userId,
+                "messageLength", normalizedUserMessage.length()
+        ));
+        return assistant.chat(userId, normalizedUserMessage);
     }
 
     @Override
     public TokenStream streamChat(String userMessage) {
+        long startNs = System.nanoTime();
         Long memoryId = currentUserId();
         String normalizedUserMessage = normalizeUserMessage(userMessage);
+        aiChatProfiler.logStage("service.streamChat.normalize", elapsedMs(startNs), java.util.Map.of(
+                "memoryId", memoryId,
+                "messageLength", normalizedUserMessage.length()
+        ));
         return assistant.streamChat(memoryId, normalizedUserMessage);
     }
 
@@ -60,6 +79,10 @@ public class AiChatServiceImpl implements AiChatService {
                 User message:
                 %s
                 """.formatted(currentSystemTime, normalizedMessage);
+    }
+
+    private long elapsedMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
     }
 
 }

@@ -4,6 +4,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageSerializer;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
 import org.springframework.data.redis.core.RedisTemplate;
 
@@ -22,44 +23,73 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final AiChatMemoryProperties memoryProperties;
+    private final AiChatProfiler aiChatProfiler;
 
     public RedisChatMemoryStore(
             RedisTemplate<String, String> redisTemplate,
-            AiChatMemoryProperties memoryProperties
+            AiChatMemoryProperties memoryProperties,
+            AiChatProfiler aiChatProfiler
     ) {
         this.redisTemplate = redisTemplate;
         this.memoryProperties = memoryProperties;
+        this.aiChatProfiler = aiChatProfiler;
     }
 
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
+        long startNs = System.nanoTime();
         String key = buildKey(memoryId);
         String payload = redisTemplate.opsForValue().get(key);
         if (payload == null || payload.isBlank()) {
+            aiChatProfiler.logStage("memory.getMessages", elapsedMs(startNs), java.util.Map.of(
+                    "memoryId", memoryId,
+                    "hit", false
+            ));
             return Collections.emptyList();
         }
 
         refreshTtl(key);
-        return ChatMessageDeserializer.messagesFromJson(payload);
+        List<ChatMessage> messages = ChatMessageDeserializer.messagesFromJson(payload);
+        aiChatProfiler.logStage("memory.getMessages", elapsedMs(startNs), java.util.Map.of(
+                "memoryId", memoryId,
+                "hit", true,
+                "messageCount", messages.size()
+        ));
+        return messages;
     }
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
+        long startNs = System.nanoTime();
         String key = buildKey(memoryId);
         String payload = ChatMessageSerializer.messagesToJson(messages);
         Duration ttl = resolveTtl();
 
         if (ttl != null) {
             redisTemplate.opsForValue().set(key, payload, ttl);
+            aiChatProfiler.logStage("memory.updateMessages", elapsedMs(startNs), java.util.Map.of(
+                    "memoryId", memoryId,
+                    "messageCount", messages.size(),
+                    "ttlSeconds", ttl.toSeconds()
+            ));
             return;
         }
 
         redisTemplate.opsForValue().set(key, payload);
+        aiChatProfiler.logStage("memory.updateMessages", elapsedMs(startNs), java.util.Map.of(
+                "memoryId", memoryId,
+                "messageCount", messages.size(),
+                "ttlSeconds", null
+        ));
     }
 
     @Override
     public void deleteMessages(Object memoryId) {
+        long startNs = System.nanoTime();
         redisTemplate.delete(buildKey(memoryId));
+        aiChatProfiler.logStage("memory.deleteMessages", elapsedMs(startNs), java.util.Map.of(
+                "memoryId", memoryId
+        ));
     }
 
     private String buildKey(Object memoryId) {
@@ -78,5 +108,9 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
                 .filter(ttlSeconds -> ttlSeconds > 0)
                 .map(Duration::ofSeconds)
                 .orElse(null);
+    }
+
+    private long elapsedMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
     }
 }

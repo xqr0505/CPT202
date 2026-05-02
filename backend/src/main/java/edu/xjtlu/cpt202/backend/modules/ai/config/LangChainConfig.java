@@ -9,6 +9,7 @@ import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
@@ -32,7 +33,11 @@ import java.util.List;
  * @since 2026/4/15
  */
 @Configuration
-@EnableConfigurationProperties({AiChatMemoryProperties.class, AiToolParallelProperties.class})
+@EnableConfigurationProperties({
+        AiChatMemoryProperties.class,
+        AiToolParallelProperties.class,
+        AiRagRewriteProperties.class
+})
 public class LangChainConfig {
 
     @Bean
@@ -85,9 +90,10 @@ public class LangChainConfig {
     @Bean
     public ChatMemoryStore chatMemoryStore(
             RedisTemplate<String, String> redisTemplate,
-            AiChatMemoryProperties aiChatMemoryProperties
+            AiChatMemoryProperties aiChatMemoryProperties,
+            AiChatProfiler aiChatProfiler
     ) {
-        return new RedisChatMemoryStore(redisTemplate, aiChatMemoryProperties);
+        return new RedisChatMemoryStore(redisTemplate, aiChatMemoryProperties, aiChatProfiler);
     }
 
     @Bean
@@ -97,6 +103,7 @@ public class LangChainConfig {
             ChatMemoryStore chatMemoryStore,
             AiChatMemoryProperties aiChatMemoryProperties,
             AiToolParallelProperties aiToolParallelProperties,
+            AiChatProfiler aiChatProfiler,
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
@@ -116,6 +123,7 @@ public class LangChainConfig {
                 chatMemoryStore,
                 aiChatMemoryProperties,
                 aiToolParallelProperties,
+                aiChatProfiler,
                 AiConstant.AI_SYSTEM_PROMPT,
                 tools
         );

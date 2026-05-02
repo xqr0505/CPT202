@@ -1,8 +1,9 @@
 @echo off
 setlocal
 
+rem Keep %~dp0 pointing at repository root\scripts\
 echo Starting Docker services: db + redis
-docker compose -f "%~dp0docker-compose.dev.yml" up -d db redis
+docker compose -f "%~dp0..\\docker-compose.dev.yml" up -d db redis
 if errorlevel 1 exit /b 1
 
 echo.

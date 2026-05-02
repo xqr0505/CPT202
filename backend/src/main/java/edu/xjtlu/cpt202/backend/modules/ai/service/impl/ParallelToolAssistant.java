@@ -23,9 +23,11 @@ import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import dev.langchain4j.service.tool.ToolExecutor;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatTraceContext;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.util.ToolArgumentSanitizer;
 import org.slf4j.Logger;
@@ -75,6 +77,7 @@ public class ParallelToolAssistant implements Assistant {
     private final ChatMemoryStore chatMemoryStore;
     private final AiChatMemoryProperties chatMemoryProperties;
     private final AiToolParallelProperties parallelProperties;
+    private final AiChatProfiler aiChatProfiler;
     private final String systemPrompt;
     private final List<ToolSpecification> toolSpecifications;
     private final Map<String, ToolExecutor> toolExecutors;
@@ -86,6 +89,7 @@ public class ParallelToolAssistant implements Assistant {
             ChatMemoryStore chatMemoryStore,
             AiChatMemoryProperties chatMemoryProperties,
             AiToolParallelProperties parallelProperties,
+            AiChatProfiler aiChatProfiler,
             String systemPrompt,
             List<Object> toolSources
     ) {
@@ -94,6 +98,7 @@ public class ParallelToolAssistant implements Assistant {
         this.chatMemoryStore = chatMemoryStore;
         this.chatMemoryProperties = chatMemoryProperties;
         this.parallelProperties = parallelProperties;
+        this.aiChatProfiler = aiChatProfiler;
         this.systemPrompt = systemPrompt;
         this.toolSpecifications = collectSpecifications(toolSources);
         this.toolExecutors = collectExecutors(toolSources);
@@ -131,14 +136,24 @@ public class ParallelToolAssistant implements Assistant {
             String userMessage,
             Consumer<ToolExecution> onToolExecuted
     ) {
+        long totalStartNs = System.nanoTime();
         List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
         ensureSystemMessage(messages);
         addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
+        long firstInvokeStartNs = System.nanoTime();
         Response<AiMessage> response = invokeModel(messages);
+        aiChatProfiler.logStage("assistant.invokeModel.first", elapsedMs(firstInvokeStartNs), Map.of(
+                "memoryId", memoryId,
+                "messageCount", messages.size()
+        ));
         AiMessage aiMessage = response.content();
         if (aiMessage == null) {
             chatMemoryStore.updateMessages(memoryId, messages);
+            aiChatProfiler.logSummary("assistant.chat.completed", elapsedMs(totalStartNs), Map.of(
+                    "memoryId", memoryId,
+                    "toolRounds", 0
+            ));
             return response;
         }
         addMessageToWindow(messages, aiMessage);
@@ -150,13 +165,23 @@ public class ParallelToolAssistant implements Assistant {
                 throw new IllegalStateException("Too many tool execution rounds: " + rounds);
             }
 
+            long toolRoundStartNs = System.nanoTime();
             List<ToolExecutionResultMessage> results = executeToolRequests(aiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+            aiChatProfiler.logStage("assistant.executeToolRequests.round" + rounds, elapsedMs(toolRoundStartNs), Map.of(
+                    "memoryId", memoryId,
+                    "toolCount", aiMessage.toolExecutionRequests().size()
+            ));
             for (ToolExecutionResultMessage result : results) {
                 addMessageToWindow(messages, result);
             }
 
             try {
+                long invokeStartNs = System.nanoTime();
                 response = invokeModel(messages);
+                aiChatProfiler.logStage("assistant.invokeModel.round" + rounds, elapsedMs(invokeStartNs), Map.of(
+                        "memoryId", memoryId,
+                        "messageCount", messages.size()
+                ));
             } catch (RuntimeException exception) {
                 AiMessage fallbackMessage = bookingSubmitFallbackMessage(results);
                 if (fallbackMessage == null) {
@@ -165,6 +190,10 @@ public class ParallelToolAssistant implements Assistant {
                 addMessageToWindow(messages, fallbackMessage);
                 chatMemoryStore.updateMessages(memoryId, messages);
                 log.warn("AI final response failed after booking submit tool; returned structured tool result", exception);
+                aiChatProfiler.logSummary("assistant.chat.fallback", elapsedMs(totalStartNs), Map.of(
+                        "memoryId", memoryId,
+                        "toolRounds", rounds
+                ));
                 return Response.from(fallbackMessage);
             }
             aiMessage = response.content();
@@ -177,6 +206,10 @@ public class ParallelToolAssistant implements Assistant {
         }
 
         chatMemoryStore.updateMessages(memoryId, messages);
+        aiChatProfiler.logSummary("assistant.chat.completed", elapsedMs(totalStartNs), Map.of(
+                "memoryId", memoryId,
+                "toolRounds", rounds
+        ));
         return response;
     }
 
@@ -225,7 +258,7 @@ public class ParallelToolAssistant implements Assistant {
             StreamingResponseHandler<AiMessage> handler
     ) {
         List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
-        streamingChatLanguageModel.generate(sanitizedMessages, handler);
+        streamingChatLanguageModel.generate(sanitizedMessages, toolSpecifications, handler);
     }
 
     private void ensureSystemMessage(List<ChatMessage> messages) {
@@ -330,8 +363,13 @@ public class ParallelToolAssistant implements Assistant {
         CompletableFuture<?>[] futures = asyncReadOnlyByIndex.values().stream()
                 .map(PendingToolExecution::future)
                 .toArray(CompletableFuture[]::new);
+        long waitStartNs = System.nanoTime();
         try {
             CompletableFuture.allOf(futures).get(parallelProperties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+            aiChatProfiler.logStage("assistant.toolBatch.wait", elapsedMs(waitStartNs), Map.of(
+                    "batchSize", asyncReadOnlyByIndex.size(),
+                    "timedOut", false
+            ));
             for (Map.Entry<Integer, PendingToolExecution> entry : asyncReadOnlyByIndex.entrySet()) {
                 resultsByIndex.put(entry.getKey(), entry.getValue().future().join());
             }
@@ -339,6 +377,10 @@ public class ParallelToolAssistant implements Assistant {
             futuresCancel(futures);
             String timeoutMessage = "Parallel tool execution timed out after " + parallelProperties.getTimeoutMs() + " ms";
             log.warn(timeoutMessage);
+            aiChatProfiler.logStage("assistant.toolBatch.wait", elapsedMs(waitStartNs), Map.of(
+                    "batchSize", asyncReadOnlyByIndex.size(),
+                    "timedOut", true
+            ));
             for (Map.Entry<Integer, PendingToolExecution> entry : asyncReadOnlyByIndex.entrySet()) {
                 PendingToolExecution pending = entry.getValue();
                 ToolExecutionResultMessage result;
@@ -364,7 +406,12 @@ public class ParallelToolAssistant implements Assistant {
             Consumer<ToolExecution> onToolExecuted
     ) {
         try {
+            long startNs = System.nanoTime();
             String result = executor.execute(request, memoryId);
+            aiChatProfiler.logStage("assistant.tool." + request.name(), elapsedMs(startNs), Map.of(
+                    "toolName", request.name(),
+                    "success", true
+            ));
             ToolExecution toolExecution = ToolExecution.builder()
                     .request(request)
                     .result(result)
@@ -374,6 +421,11 @@ public class ParallelToolAssistant implements Assistant {
         } catch (Exception exception) {
             String errorMessage = "Tool execution failed for " + request.name();
             log.warn(errorMessage, exception);
+            aiChatProfiler.logEvent("assistant.tool." + request.name() + ".error", Map.of(
+                    "toolName", request.name(),
+                    "errorType", exception.getClass().getSimpleName(),
+                    "errorMessage", rootCauseMessage(exception)
+            ));
             String result = toolFailureResult(request.name(), exception);
             ToolExecution toolExecution = ToolExecution.builder()
                     .request(request)
@@ -692,17 +744,37 @@ public class ParallelToolAssistant implements Assistant {
 
         @Override
         public void start() {
+            String traceId = AiChatTraceContext.getTraceId();
             CompletableFuture.runAsync(() -> {
+                AiChatTraceContext.restoreTraceId(traceId);
+                long totalStartNs = System.nanoTime();
                 try {
                     onRetrieved.accept(List.of());
+                    aiChatProfiler.logEvent("assistant.stream.start", Map.of(
+                            "memoryId", memoryId
+                    ));
+                    long memoryLoadStartNs = System.nanoTime();
                     List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
+                    aiChatProfiler.logStage("assistant.stream.memoryLoad", elapsedMs(memoryLoadStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "messageCount", messages.size()
+                    ));
                     ensureSystemMessage(messages);
                     addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
-                    Response<AiMessage> probeResponse = invokeModel(messages);
-                    AiMessage probeAiMessage = probeResponse.content();
-
                     int rounds = 0;
+                    ProbeStreamResult probeResult = runStreamingRound(
+                            messages,
+                            memoryId,
+                            traceId,
+                            totalStartNs,
+                            "assistant.stream.streamingProbe",
+                            true,
+                            this.onNext
+                    );
+                    AiMessage probeAiMessage = probeResult.response().content();
+                    Response<AiMessage> finalModelResponseAfterTools = null;
+
                     while (probeAiMessage != null && probeAiMessage.hasToolExecutionRequests()) {
                         addMessageToWindow(messages, probeAiMessage);
                         rounds++;
@@ -710,52 +782,164 @@ public class ParallelToolAssistant implements Assistant {
                             throw new IllegalStateException("Too many tool execution rounds: " + rounds);
                         }
 
+                        long toolRoundStartNs = System.nanoTime();
                         List<ToolExecutionResultMessage> results =
                                 executeToolRequests(probeAiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+                        aiChatProfiler.logStage("assistant.stream.executeToolRequests.round" + rounds, elapsedMs(toolRoundStartNs), Map.of(
+                                "memoryId", memoryId,
+                                "toolCount", probeAiMessage.toolExecutionRequests().size()
+                        ));
                         for (ToolExecutionResultMessage result : results) {
                             addMessageToWindow(messages, result);
                         }
 
-                        probeResponse = invokeModel(messages);
+                        long invokeStartNs = System.nanoTime();
+                        Response<AiMessage> probeResponse = invokeModel(messages);
+                        aiChatProfiler.logStage("assistant.stream.invokeModel.round" + rounds, elapsedMs(invokeStartNs), Map.of(
+                                "memoryId", memoryId,
+                                "messageCount", messages.size()
+                        ));
                         probeAiMessage = probeResponse.content();
+                        if (probeAiMessage != null && !probeAiMessage.hasToolExecutionRequests()) {
+                            finalModelResponseAfterTools = probeResponse;
+                        }
                     }
 
-                    AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
-                    CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+                    aiChatProfiler.logStage("assistant.stream.preStreamingTotal", elapsedMs(totalStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "toolRounds", rounds
+                    ));
 
-                    invokeStreamingModel(messages, new StreamingResponseHandler<>() {
-                        @Override
-                        public void onNext(String token) {
-                            onNext.accept(token);
-                        }
+                    Response<AiMessage> streamedResponse;
+                    if (rounds == 0) {
+                        streamedResponse = probeResult.response();
+                    } else if (finalModelResponseAfterTools != null && finalModelResponseAfterTools.content() != null
+                            && finalModelResponseAfterTools.content().text() != null
+                            && !finalModelResponseAfterTools.content().text().isBlank()) {
+                        AiMessage finalAiMessage = finalModelResponseAfterTools.content();
+                        emitTextChunks(finalAiMessage.text(), this.onNext, traceId, totalStartNs, memoryId);
+                        streamedResponse = finalModelResponseAfterTools;
+                    } else {
+                        ProbeStreamResult finalAnswerResult = runStreamingRound(
+                                messages,
+                                memoryId,
+                                traceId,
+                                totalStartNs,
+                                "assistant.stream.streamingAnswer",
+                                true,
+                                this.onNext
+                        );
+                        streamedResponse = finalAnswerResult.response();
+                    }
 
-                        @Override
-                        public void onComplete(Response<AiMessage> response) {
-                            streamedResponseRef.set(response);
-                            streamedResponseFuture.complete(response);
-                        }
-
-                        @Override
-                        public void onError(Throwable error) {
-                            streamedResponseFuture.completeExceptionally(error);
-                        }
-                    });
-
-                    Response<AiMessage> streamedResponse = streamedResponseFuture.join();
                     AiMessage streamedAiMessage = streamedResponse.content();
                     if (streamedAiMessage != null) {
                         addMessageToWindow(messages, streamedAiMessage);
                     }
                     chatMemoryStore.updateMessages(memoryId, messages);
-                    Response<AiMessage> completedResponse = streamedResponseRef.get();
-                    onComplete.accept(completedResponse == null ? streamedResponse : completedResponse);
+                    aiChatProfiler.logSummary("assistant.stream.completed", elapsedMs(totalStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "toolRounds", rounds,
+                            "finalMessageCount", messages.size()
+                    ));
+                    onComplete.accept(streamedResponse);
                 } catch (Throwable throwable) {
                     if (ignoreErrors) {
                         return;
                     }
+                    aiChatProfiler.logSummary("assistant.stream.failed", elapsedMs(totalStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "errorType", throwable.getClass().getSimpleName(),
+                            "errorMessage", rootCauseMessage(throwable)
+                    ));
                     onError.accept(throwable);
                 }
             });
         }
+    }
+
+    private ProbeStreamResult runStreamingRound(
+            List<ChatMessage> messages,
+            Long memoryId,
+            String traceId,
+            long totalStartNs,
+            String stageName,
+            boolean emitTokens,
+            Consumer<String> tokenConsumer
+    ) {
+        AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
+        CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
+        long streamingInvokeStartNs = System.nanoTime();
+        AtomicReference<Boolean> firstTokenLogged = new AtomicReference<>(Boolean.FALSE);
+
+        invokeStreamingModel(messages, new StreamingResponseHandler<>() {
+            @Override
+            public void onNext(String token) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                if (firstTokenLogged.compareAndSet(Boolean.FALSE, Boolean.TRUE)) {
+                    aiChatProfiler.logStage("assistant.stream.timeToFirstToken", elapsedMs(totalStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "streamStage", stageName
+                    ));
+                }
+                if (emitTokens) {
+                    tokenConsumer.accept(token);
+                }
+            }
+
+            @Override
+            public void onComplete(Response<AiMessage> response) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                streamedResponseRef.set(response);
+                streamedResponseFuture.complete(response);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                AiChatTraceContext.restoreTraceId(traceId);
+                streamedResponseFuture.completeExceptionally(error);
+            }
+        });
+
+        aiChatProfiler.logStage(stageName, elapsedMs(streamingInvokeStartNs), Map.of(
+                "memoryId", memoryId
+        ));
+
+        Response<AiMessage> response = streamedResponseFuture.join();
+        return new ProbeStreamResult(response);
+    }
+
+    private void emitTextChunks(
+            String text,
+            Consumer<String> tokenConsumer,
+            String traceId,
+            long totalStartNs,
+            Long memoryId
+    ) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        boolean firstChunk = true;
+        for (int index = 0; index < text.length(); index += STREAM_CHUNK_SIZE) {
+            AiChatTraceContext.restoreTraceId(traceId);
+            if (firstChunk) {
+                aiChatProfiler.logStage("assistant.stream.timeToFirstToken", elapsedMs(totalStartNs), Map.of(
+                        "memoryId", memoryId,
+                        "streamStage", "assistant.stream.finalModelText"
+                ));
+                firstChunk = false;
+            }
+            int endIndex = Math.min(index + STREAM_CHUNK_SIZE, text.length());
+            tokenConsumer.accept(text.substring(index, endIndex));
+        }
+    }
+
+    private record ProbeStreamResult(
+            Response<AiMessage> response
+    ) {
+    }
+
+    private long elapsedMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
     }
 }

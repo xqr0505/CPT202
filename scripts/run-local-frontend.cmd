@@ -15,7 +15,7 @@ echo Starting frontend with:
 echo   VITE_API_BASE_URL=%VITE_API_BASE_URL%
 echo.
 
-cd /d "%~dp0frontend"
+cd /d "%~dp0..\\frontend"
 npm.cmd run dev
 
 endlocal

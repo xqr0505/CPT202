@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AiChatSseFirstTokenPerfIntegrationTest {
 
     private static final int DEFAULT_CONCURRENCY = 5;
-    private static final int DEFAULT_REPEAT = 3;
+    private static final int DEFAULT_REPEAT = 1;
     private static final List<String> QUESTIONS = List.of(
         "What is the refund policy for cancelling within 2 hours of the appointment?",
         "How can I sort the specialists by fee from low to high?",

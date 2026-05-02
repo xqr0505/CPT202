@@ -7,6 +7,7 @@ import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.redis.RedisEmbeddingStore;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiSemanticCacheProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -23,7 +24,7 @@ import java.util.List;
  */
 @Configuration
 @ConditionalOnProperty(prefix = "ai.rag", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties({RagProperties.class, DashScopeEmbeddingProperties.class})
+@EnableConfigurationProperties({RagProperties.class, DashScopeEmbeddingProperties.class, AiSemanticCacheProperties.class})
 public class RagConfig {
 
     @Bean

@@ -17,6 +17,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StreamUtils;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -42,6 +43,7 @@ public class RagIngestionService {
     private final EmbeddingModel embeddingModel;
     private final MarkdownHeadingSegmenter segmenter;
     private final RedisTemplate<String, String> redisTemplate;
+    private final AiSemanticCacheService semanticCacheService;
     private final PathMatchingResourcePatternResolver resourceResolver = new PathMatchingResourcePatternResolver();
 
     public RagIngestionService(
@@ -49,13 +51,15 @@ public class RagIngestionService {
             EmbeddingStore<TextSegment> embeddingStore,
             EmbeddingModel embeddingModel,
             MarkdownHeadingSegmenter segmenter,
-            RedisTemplate<String, String> redisTemplate
+            RedisTemplate<String, String> redisTemplate,
+            AiSemanticCacheService semanticCacheService
     ) {
         this.ragProperties = ragProperties;
         this.embeddingStore = embeddingStore;
         this.embeddingModel = embeddingModel;
         this.segmenter = segmenter;
         this.redisTemplate = redisTemplate;
+        this.semanticCacheService = semanticCacheService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -105,8 +109,9 @@ public class RagIngestionService {
 
             List<Embedding> embeddings = embeddingModel.embedAll(segments).content();
             embeddingStore.addAll(embeddings, segments);
-            
+
             redisTemplate.opsForValue().set(hashKey, currentHash);
+            semanticCacheService.clearAll();
             log.info("RAG knowledge index rebuilt successfully with {} segment(s). Hash: {}", segments.size(), currentHash);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to rebuild RAG knowledge index.", ex);

@@ -42,7 +42,8 @@ import java.util.Map;
         AiModelProperties.class,
         AiChatMemoryProperties.class,
         AiToolParallelProperties.class,
-        AiRagRewriteProperties.class
+        AiRagRewriteProperties.class,
+        AiIntentRouterProperties.class
 })
 public class LangChainConfig {
 
@@ -114,6 +115,7 @@ public class LangChainConfig {
             AiChatMemoryProperties aiChatMemoryProperties,
             AiToolParallelProperties aiToolParallelProperties,
             AiChatProfiler aiChatProfiler,
+            AiIntentRouterService intentRouterService,
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
@@ -126,7 +128,6 @@ public class LangChainConfig {
         tools.add(aiBookingSubmitTool);
         tools.add(aiSpecialistAvailabilityTool);
         knowledgeToolsProvider.ifAvailable(tools::add);
-        AiIntentRouterService intentRouterService = intentRouterService(chatLanguageModel);
 
         Map<AiIntent, List<Object>> groupedTools = new EnumMap<>(AiIntent.class);
         groupedTools.put(
@@ -163,7 +164,10 @@ public class LangChainConfig {
     }
 
     @Bean
-    public AiIntentRouterService intentRouterService(ChatLanguageModel chatLanguageModel) {
-        return new LightModelAiIntentRouterService(chatLanguageModel);
+    public AiIntentRouterService intentRouterService(
+            ChatLanguageModel chatLanguageModel,
+            AiIntentRouterProperties aiIntentRouterProperties
+    ) {
+        return new LightModelAiIntentRouterService(chatLanguageModel, aiIntentRouterProperties);
     }
 }

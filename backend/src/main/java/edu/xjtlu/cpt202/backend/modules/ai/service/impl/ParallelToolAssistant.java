@@ -69,8 +69,10 @@ public class ParallelToolAssistant implements Assistant {
     private static final Logger log = LoggerFactory.getLogger(ParallelToolAssistant.class);
     private static final int MAX_TOOL_ROUNDS = 8;
     private static final int STREAM_CHUNK_SIZE = 24;
+    private static final long FAKE_STREAM_CHUNK_DELAY_MS = 24L;
     private static final String BOOKING_SUBMIT_TOOL_NAME = "submitCurrentCustomerBooking";
     private static final String BOOKING_PREVIEW_MARKER = "AI_BOOKING_PREVIEW:";
+    private static final String USER_MESSAGE_MARKER = "User message:";
     private static final ObjectMapper TOOL_ARGUMENT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -354,10 +356,14 @@ public class ParallelToolAssistant implements Assistant {
 
         for (int index = 0; index < requests.size(); index++) {
             ToolExecutionRequest request = requests.get(index);
-            ToolExecutor executor = activeExecutors.get(request.name());
-            if (executor == null) {
-                throw new IllegalStateException("No tool executor found for: " + request.name());
+            ToolExecutor selectedExecutor = activeExecutors.get(request.name());
+            if (selectedExecutor == null) {
+                selectedExecutor = this.toolExecutors.get(request.name());
+                if (selectedExecutor == null) {
+                    throw new IllegalStateException("No tool executor found for: " + request.name());
+                }
             }
+            ToolExecutor executor = selectedExecutor;
 
             boolean shouldParallelize = parallelProperties.isEnabled() && readOnlyNames.contains(request.name());
             if (shouldParallelize) {
@@ -796,7 +802,8 @@ public class ParallelToolAssistant implements Assistant {
                     addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
                     long routerStartNs = System.nanoTime();
-                    AiIntent intent = intentRouterService.resolveIntent(userMessage);
+                    String originalUserMessage = extractOriginalUserMessage(userMessage);
+                    AiIntent intent = intentRouterService.resolveIntent(memoryId, originalUserMessage);
                     boolean routerFallback = intent == null;
                     if (intent == null) {
                         intent = AiIntent.KNOWLEDGE;
@@ -984,6 +991,14 @@ public class ParallelToolAssistant implements Assistant {
             }
             int endIndex = Math.min(index + STREAM_CHUNK_SIZE, text.length());
             tokenConsumer.accept(text.substring(index, endIndex));
+            if (endIndex < text.length()) {
+                try {
+                    Thread.sleep(FAKE_STREAM_CHUNK_DELAY_MS);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
     }
 
@@ -1009,5 +1024,17 @@ public class ParallelToolAssistant implements Assistant {
 
     private long elapsedMs(long startNs) {
         return (System.nanoTime() - startNs) / 1_000_000;
+    }
+
+    static String extractOriginalUserMessage(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return "";
+        }
+        int markerIndex = candidate.indexOf(USER_MESSAGE_MARKER);
+        if (markerIndex < 0) {
+            return candidate.trim();
+        }
+        String extracted = candidate.substring(markerIndex + USER_MESSAGE_MARKER.length()).trim();
+        return extracted.isBlank() ? candidate.trim() : extracted;
     }
 }

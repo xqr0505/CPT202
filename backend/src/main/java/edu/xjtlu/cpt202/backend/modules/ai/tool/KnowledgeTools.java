@@ -7,6 +7,8 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.KnowledgeQueryRewriteService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -28,13 +30,16 @@ public class KnowledgeTools {
 
     private final ContentRetriever contentRetriever;
     private final KnowledgeQueryRewriteService queryRewriteService;
+    private final AiSemanticCacheService semanticCacheService;
 
     public KnowledgeTools(
             ContentRetriever contentRetriever,
-            KnowledgeQueryRewriteService queryRewriteService
+            KnowledgeQueryRewriteService queryRewriteService,
+            AiSemanticCacheService semanticCacheService
     ) {
         this.contentRetriever = contentRetriever;
         this.queryRewriteService = queryRewriteService;
+        this.semanticCacheService = semanticCacheService;
     }
 
     @Tool("Search the platform's knowledge base for policies, guides.")
@@ -42,15 +47,22 @@ public class KnowledgeTools {
             @P("A concise natural-language search query about ExpertLink platform policies, guides, booking, cancellation, refund, or reschedule rules.") String query
     ) {
         String normalizedQuery = query == null ? "" : query.trim();
+        var cacheHit = semanticCacheService.get(normalizedQuery, AiIntent.KNOWLEDGE);
+        if (cacheHit.isPresent()) {
+            return cacheHit.get().answer();
+        }
+
         List<Content> contents = retrieveWithRewriteFallback(normalizedQuery);
         if (contents.isEmpty()) {
             return AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE;
         }
 
-        return contents.stream()
+        String response = contents.stream()
                 .map(Content::textSegment)
                 .map(this::formatSegment)
                 .collect(Collectors.joining("\n---\n"));
+        semanticCacheService.putAsync(normalizedQuery, response, AiIntent.KNOWLEDGE);
+        return response;
     }
 
     private List<Content> retrieveWithRewriteFallback(String query) {

@@ -12,6 +12,7 @@ import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiIntentRouterProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
@@ -30,8 +31,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 class ParallelToolAssistantTest {
 
@@ -226,7 +230,7 @@ class ParallelToolAssistantTest {
                 Setups.defaultParallelProperties(),
                 model,
                 streamingModel,
-                message -> AiIntent.DASHBOARD,
+                (memoryId, message) -> AiIntent.DASHBOARD,
                 groupedToolsForCombined(combinedTools)
         );
 
@@ -243,6 +247,70 @@ class ParallelToolAssistantTest {
         assertThat(model.capturedToolNames()).doesNotContain("submitCurrentCustomerBooking");
     }
 
+    @Test
+    void shouldExtractOriginalUserMessageWhenSystemTimePrefixExists() {
+        String wrappedMessage = """
+                Current system time: 2026-05-03 00:00:00 CST
+                Use this as the authoritative current time when interpreting relative dates such as today, tomorrow, upcoming, this week, and history.
+
+                User message:
+                show my bookings history
+                """;
+
+        String extracted = ParallelToolAssistant.extractOriginalUserMessage(wrappedMessage);
+        assertThat(extracted).isEqualTo("show my bookings history");
+    }
+
+    @Test
+    void shouldUseRuleBasedChitchatIntentWithoutCallingModel() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L, "hello");
+
+        assertThat(intent).isEqualTo(AiIntent.CHITCHAT);
+        verify(model, times(0)).generate(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void shouldResolveKnowledgeForAmbiguousBookingQuestion() {
+        CountingIntentModel model = new CountingIntentModel("BOOKING");
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent first = routerService.resolveIntent(1001L, "Need help with complex expert selection");
+        AiIntent second = routerService.resolveIntent(1001L, "Need help with complex expert selection");
+
+        assertThat(first).isEqualTo(AiIntent.KNOWLEDGE);
+        assertThat(second).isEqualTo(AiIntent.KNOWLEDGE);
+        assertThat(model.invocationCount()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldPreferKnowledgeForPolicyLikeBookingQuestion() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L,
+                "If I book a specialist but need to change the time later, will it be Confirmed automatically?");
+
+        assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
+    }
+
+    @Test
+    void shouldPreferKnowledgeForUnsupportedCharactersQuestion() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L,
+                "I submitted my notes, but it says 'unsupported characters'. What should I do?");
+
+        assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
@@ -257,7 +325,7 @@ class ParallelToolAssistantTest {
                 aiChatProfiler,
                 "system",
                 List.of(toolSource),
-                message -> AiIntent.DASHBOARD,
+                (memoryId, message) -> AiIntent.DASHBOARD,
                 defaultGroupedTools(toolSource)
         );
     }
@@ -280,7 +348,7 @@ class ParallelToolAssistantTest {
                 aiChatProfiler,
                 "system",
                 List.of(toolSource),
-                message -> AiIntent.DASHBOARD,
+                (memoryId, message) -> AiIntent.DASHBOARD,
                 defaultGroupedTools(toolSource)
         );
     }
@@ -493,6 +561,31 @@ class ParallelToolAssistantTest {
 
         private List<String> capturedToolNames() {
             return capturedToolNames;
+        }
+    }
+
+    private static class CountingIntentModel implements ChatLanguageModel {
+        private final String responseText;
+        private int invocationCount;
+
+        private CountingIntentModel(String responseText) {
+            this.responseText = responseText;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            invocationCount++;
+            return Response.from(AiMessage.from(responseText));
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            return Response.from(AiMessage.from(responseText));
+        }
+
+        private int invocationCount() {
+            return invocationCount;
         }
     }
 

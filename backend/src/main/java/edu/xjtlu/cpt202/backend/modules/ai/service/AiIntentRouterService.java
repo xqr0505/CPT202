@@ -8,5 +8,5 @@ package edu.xjtlu.cpt202.backend.modules.ai.service;
  */
 public interface AiIntentRouterService {
 
-    AiIntent resolveIntent(String userMessage);
+    AiIntent resolveIntent(Long memoryId, String userMessage);
 }

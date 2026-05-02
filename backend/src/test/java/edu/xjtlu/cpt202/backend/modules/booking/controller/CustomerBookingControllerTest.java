@@ -1,45 +1,66 @@
 package edu.xjtlu.cpt202.backend.modules.booking.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.xjtlu.cpt202.backend.common.exception.GlobalExceptionHandler;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCancelQuoteVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleConfirmVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingCreateVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.mockito.Mockito;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.Authentication;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import static org.mockito.ArgumentMatchers.eq;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
 public class CustomerBookingControllerTest {
 
-    @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
     private BookingService bookingService;
 
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    @BeforeEach
+    void setUp() {
+        bookingService = Mockito.mock(BookingService.class);
+
+        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+        validator.afterPropertiesSet();
+
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(new CustomerBookingController(bookingService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .setValidator(validator)
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
+                .build();
+        SecurityContextHolder.getContext().setAuthentication(customerAuthentication());
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     public void createBooking_Success() throws Exception {
@@ -47,7 +68,6 @@ public class CustomerBookingControllerTest {
                 .thenReturn(new BookingCreateVO(101L, "PENDING"));
 
         mockMvc.perform(post("/api/v1/customer/bookings")
-                        .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -66,7 +86,6 @@ public class CustomerBookingControllerTest {
     @Test
     public void createBooking_ValidationError() throws Exception {
         mockMvc.perform(post("/api/v1/customer/bookings")
-                        .with(authentication(customerAuthentication()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -94,8 +113,7 @@ public class CustomerBookingControllerTest {
                 .build();
         when(bookingService.customerCancellationQuote(eq(55L), anyLong())).thenReturn(vo);
 
-        mockMvc.perform(post("/api/v1/customer/bookings/55/cancel/quote")
-                        .with(authentication(customerAuthentication())))
+        mockMvc.perform(post("/api/v1/customer/bookings/55/cancel/quote"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.allowed").value(true))
@@ -118,7 +136,6 @@ public class CustomerBookingControllerTest {
         when(bookingService.customerRescheduleQuote(eq(55L), eq(77L), anyLong())).thenReturn(vo);
 
         mockMvc.perform(post("/api/v1/customer/bookings/55/reschedule/quote")
-                        .with(authentication(customerAuthentication()))
                         .param("newSlotId", "77"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -139,8 +156,7 @@ public class CustomerBookingControllerTest {
                 .build();
         when(bookingService.customerCancellationConfirm(eq(55L), anyLong())).thenReturn(vo);
 
-        mockMvc.perform(post("/api/v1/customer/bookings/55/cancel/confirm")
-                        .with(authentication(customerAuthentication())))
+        mockMvc.perform(post("/api/v1/customer/bookings/55/cancel/confirm"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.bookingId").value(55))
@@ -163,7 +179,6 @@ public class CustomerBookingControllerTest {
         when(bookingService.customerRescheduleConfirm(eq(55L), eq(77L), anyLong())).thenReturn(vo);
 
         mockMvc.perform(post("/api/v1/customer/bookings/55/reschedule/confirm")
-                        .with(authentication(customerAuthentication()))
                         .param("newSlotId", "77"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))

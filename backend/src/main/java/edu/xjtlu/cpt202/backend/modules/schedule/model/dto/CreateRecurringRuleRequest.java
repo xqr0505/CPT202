@@ -20,6 +20,8 @@ public class CreateRecurringRuleRequest {
     @Max(value = 7, message = "Day of week must be between 1 and 7")
     private Integer dayOfWeek;
 
+    private LocalDate effectiveStartDate;
+
     @NotNull(message = "Start time is required")
     private LocalTime startTime;
 

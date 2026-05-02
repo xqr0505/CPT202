@@ -33,6 +33,7 @@ export interface UpdateSlotRequest {
 export interface RecurringRuleVO {
   id: number
   specialistId: number
+  effectiveStartDate: string
   dayOfWeek: number
   dayOfWeekDesc: string
   startTime: string
@@ -45,6 +46,7 @@ export interface RecurringRuleVO {
 
 export interface CreateRecurringRuleRequest {
   dayOfWeek: number
+  effectiveStartDate?: string | null
   startTime: string
   endTime: string
   effectiveEndDate?: string | null

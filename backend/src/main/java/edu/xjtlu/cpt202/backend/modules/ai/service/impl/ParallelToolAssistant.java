@@ -31,6 +31,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatTraceContext;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.util.ToolArgumentSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,6 +86,7 @@ public class ParallelToolAssistant implements Assistant {
     private final AiChatProfiler aiChatProfiler;
     private final String systemPrompt;
     private final AiIntentRouterService intentRouterService;
+    private final AiSemanticCacheService semanticCacheService;
     private final List<ToolSpecification> toolSpecifications;
     private final Map<String, ToolExecutor> toolExecutors;
     private final Map<AiIntent, ToolBox> intentToolBoxes;
@@ -100,7 +102,8 @@ public class ParallelToolAssistant implements Assistant {
             String systemPrompt,
             List<Object> toolSources,
             AiIntentRouterService intentRouterService,
-            Map<AiIntent, List<Object>> toolGroups
+            Map<AiIntent, List<Object>> toolGroups,
+            AiSemanticCacheService semanticCacheService
     ) {
         this.chatLanguageModel = chatLanguageModel;
         this.streamingChatLanguageModel = streamingChatLanguageModel;
@@ -110,6 +113,7 @@ public class ParallelToolAssistant implements Assistant {
         this.aiChatProfiler = aiChatProfiler;
         this.systemPrompt = systemPrompt;
         this.intentRouterService = intentRouterService;
+        this.semanticCacheService = semanticCacheService;
         this.toolSpecifications = collectSpecifications(toolSources);
         this.toolExecutors = collectExecutors(toolSources);
         this.intentToolBoxes = collectIntentToolBoxes(toolGroups);
@@ -128,8 +132,20 @@ public class ParallelToolAssistant implements Assistant {
 
     @Override
     public String chat(Long memoryId, String userMessage) {
+        String originalUserMessage = extractOriginalUserMessage(userMessage);
+        AiIntent intent = intentRouterService.resolveIntent(memoryId, originalUserMessage);
+        if (intent == null) {
+            intent = AiIntent.KNOWLEDGE;
+        }
+        String normalizedOriginalUserMessage = normalizeQueryForCache(originalUserMessage);
+        if (intent == AiIntent.KNOWLEDGE) {
+            var cacheHit = semanticCacheService.get(normalizedOriginalUserMessage, AiIntent.KNOWLEDGE);
+            if (cacheHit.isPresent()) {
+                return cacheHit.get().answer();
+            }
+        }
         Response<AiMessage> response = runConversation(memoryId, userMessage, ignored -> {
-        });
+        }, intent, normalizedOriginalUserMessage);
         AiMessage content = response.content();
         if (content == null || content.text() == null) {
             return AiConstant.EMPTY_CONTENT;
@@ -145,7 +161,9 @@ public class ParallelToolAssistant implements Assistant {
     private Response<AiMessage> runConversation(
             Long memoryId,
             String userMessage,
-            Consumer<ToolExecution> onToolExecuted
+            Consumer<ToolExecution> onToolExecuted,
+            AiIntent intent,
+            String originalUserMessage
     ) {
         long totalStartNs = System.nanoTime();
         List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
@@ -221,7 +239,41 @@ public class ParallelToolAssistant implements Assistant {
                 "memoryId", memoryId,
                 "toolRounds", rounds
         ));
+        cacheFinalKnowledgeAnswerIfEligible(intent, originalUserMessage, response);
         return response;
+    }
+
+    private void cacheFinalKnowledgeAnswerIfEligible(AiIntent intent, String originalUserMessage, Response<AiMessage> response) {
+        if (intent != AiIntent.KNOWLEDGE) {
+            return;
+        }
+        String normalizedQuery = normalizeQueryForCache(originalUserMessage);
+        if (normalizedQuery.isBlank()) {
+            return;
+        }
+        if (response == null || response.content() == null || response.content().text() == null) {
+            return;
+        }
+        String answer = response.content().text().trim();
+        if (answer.isBlank()) {
+            return;
+        }
+        if (answer.contains(BOOKING_PREVIEW_MARKER) || looksLikeStructuredToolPayload(answer)) {
+            return;
+        }
+        semanticCacheService.putAsync(normalizedQuery, answer, intent);
+    }
+
+    private boolean looksLikeStructuredToolPayload(String text) {
+        String trimmed = text.trim();
+        return trimmed.startsWith("{") || trimmed.startsWith("[");
+    }
+
+    private String normalizeQueryForCache(String query) {
+        if (query == null) {
+            return "";
+        }
+        return query.trim().replaceAll("\\s+", " ");
     }
 
     private AiMessage bookingSubmitFallbackMessage(List<ToolExecutionResultMessage> results) {
@@ -808,6 +860,24 @@ public class ParallelToolAssistant implements Assistant {
                     if (intent == null) {
                         intent = AiIntent.KNOWLEDGE;
                     }
+                    String normalizedOriginalUserMessage = normalizeQueryForCache(originalUserMessage);
+                    if (intent == AiIntent.KNOWLEDGE) {
+                        var cacheHit = semanticCacheService.get(normalizedOriginalUserMessage, AiIntent.KNOWLEDGE);
+                        if (cacheHit.isPresent()) {
+                            String cachedAnswer = cacheHit.get().answer();
+                            emitTextChunks(cachedAnswer, this.onNext, traceId, totalStartNs, memoryId);
+                            addMessageToWindow(messages, AiMessage.from(cachedAnswer));
+                            chatMemoryStore.updateMessages(memoryId, messages);
+                            aiChatProfiler.logSummary("assistant.stream.completed", elapsedMs(totalStartNs), Map.of(
+                                    "memoryId", memoryId,
+                                    "toolRounds", 0,
+                                    "finalMessageCount", messages.size(),
+                                    "cacheHit", true
+                            ));
+                            onComplete.accept(Response.from(AiMessage.from(cachedAnswer)));
+                            return;
+                        }
+                    }
                     ToolBox toolBox = intentToolBoxes.getOrDefault(intent, intentToolBoxes.get(AiIntent.KNOWLEDGE));
                     aiChatProfiler.logStage("assistant.stream.intentRouter", elapsedMs(routerStartNs), Map.of(
                             "memoryId", memoryId,
@@ -895,6 +965,7 @@ public class ParallelToolAssistant implements Assistant {
                     if (streamedAiMessage != null) {
                         addMessageToWindow(messages, streamedAiMessage);
                     }
+                    cacheFinalKnowledgeAnswerIfEligible(intent, normalizedOriginalUserMessage, streamedResponse);
                     chatMemoryStore.updateMessages(memoryId, messages);
                     aiChatProfiler.logSummary("assistant.stream.completed", elapsedMs(totalStartNs), Map.of(
                             "memoryId", memoryId,

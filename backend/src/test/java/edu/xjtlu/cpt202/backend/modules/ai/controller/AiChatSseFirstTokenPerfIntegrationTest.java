@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = BackendApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
-// @Disabled("Real AI perf test; requires model/tool credentials and local infra, run manually.")
+@Disabled("Real AI perf test; requires model/tool credentials and local infra, run manually.")
 class AiChatSseFirstTokenPerfIntegrationTest {
 
     private static final int DEFAULT_CONCURRENCY = 5;
@@ -73,18 +73,14 @@ class AiChatSseFirstTokenPerfIntegrationTest {
     static void loadDotenv(DynamicPropertyRegistry registry) {
         var dotenv = DotenvTestSupport.loadRepoRootDotenv();
 
-        // Streaming can take a while; avoid MockMvc async timeouts in perf runs.
         registry.add("spring.mvc.async.request-timeout", () -> "60000");
-
-        // Prefer real process env vars; fall back to repo-root .env for local runs.
         registry.add("ai.openai.api-key", () -> firstNonBlankOrNull(System.getenv("OPENAI_API_KEY"), dotenv.get("OPENAI_API_KEY")));
         registry.add("ai.openai.model-name", () -> firstNonBlankOrNull(System.getenv("OPENAI_MODEL_NAME"), dotenv.get("OPENAI_MODEL_NAME")));
         registry.add("ai.openai.base-url", () -> firstNonBlankOrNull(System.getenv("OPENAI_BASE_URL"), dotenv.get("OPENAI_BASE_URL")));
 
         registry.add("DASHSCOPE_API_KEY", () -> firstNonBlankOrNull(System.getenv("DASHSCOPE_API_KEY"), dotenv.get("DASHSCOPE_API_KEY")));
 
-        // Avoid registering DB_HOST/DB_PORT as empty values (it breaks ${DB_HOST:...} defaults).
-        // Instead set the final datasource url directly, falling back to dev defaults when absent.
+
         String dbHost = resolveHost(
                 System.getenv("DB_HOST"),
                 dotenv.get("DB_HOST"),
@@ -106,7 +102,6 @@ class AiChatSseFirstTokenPerfIntegrationTest {
         registry.add("spring.datasource.username", () -> firstNonBlank(System.getenv("DB_USERNAME"), dotenv.get("DB_USERNAME"), "root"));
         registry.add("spring.datasource.password", () -> firstNonBlank(System.getenv("DB_PASSWORD"), dotenv.get("DB_PASSWORD"), "Root@123"));
 
-        // Redis host/port may differ between docker-network and localhost.
         String redisHost = resolveHost(
                 System.getenv("REDIS_HOST"),
                 dotenv.get("REDIS_HOST"),
@@ -357,7 +352,6 @@ class AiChatSseFirstTokenPerfIntegrationTest {
             List<Integer> candidates,
             String fallback
     ) {
-        // If caller explicitly set process env, trust it.
         if (envPort != null && !envPort.isBlank()) {
             return envPort;
         }

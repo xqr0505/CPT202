@@ -17,6 +17,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +35,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ParallelToolAssistantTest {
 
@@ -311,7 +314,79 @@ class ParallelToolAssistantTest {
         assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
     }
 
+    @Test
+    void shouldReturnFinalAnswerFromCacheWhenKnowledgeCacheHits() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE))
+                .thenReturn(java.util.Optional.of(new AiSemanticCacheService.CacheHit("cache-1", "cached final answer", true, 1.0D)));
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo("cached final answer");
+        assertThat(tools.executionThreads()).isEmpty();
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
+    @Test
+    void shouldWriteFinalAnswerToCacheWhenKnowledgeMisses() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE))
+                .thenReturn(java.util.Optional.empty());
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo("done");
+        await().atMost(2, TimeUnit.SECONDS).untilAsserted(() ->
+                verify(semanticCacheService).putAsync("refund policy", "done", AiIntent.KNOWLEDGE)
+        );
+    }
+
+    @Test
+    void shouldNotUseKnowledgeCacheForNonKnowledgeIntent() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.DASHBOARD
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nmy dashboard");
+
+        assertThat(reply).isEqualTo("done");
+        verify(semanticCacheService, never()).get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
+        return buildAssistantWithCache(toolSource, parallelProperties, model, mock(AiSemanticCacheService.class), (memoryId, message) -> AiIntent.DASHBOARD);
+    }
+
+    private Assistant buildAssistantWithCache(
+            Object toolSource,
+            AiToolParallelProperties parallelProperties,
+            ChatLanguageModel model,
+            AiSemanticCacheService semanticCacheService,
+            AiIntentRouterService routerService
+    ) {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
         StreamingChatLanguageModel streaming = mock(StreamingChatLanguageModel.class);
@@ -325,8 +400,9 @@ class ParallelToolAssistantTest {
                 aiChatProfiler,
                 "system",
                 List.of(toolSource),
-                (memoryId, message) -> AiIntent.DASHBOARD,
-                defaultGroupedTools(toolSource)
+                routerService,
+                defaultGroupedTools(toolSource),
+                semanticCacheService
         );
     }
 
@@ -349,7 +425,8 @@ class ParallelToolAssistantTest {
                 "system",
                 List.of(toolSource),
                 (memoryId, message) -> AiIntent.DASHBOARD,
-                defaultGroupedTools(toolSource)
+                defaultGroupedTools(toolSource),
+                mock(AiSemanticCacheService.class)
         );
     }
 
@@ -374,7 +451,8 @@ class ParallelToolAssistantTest {
                 "system",
                 List.of(toolSource),
                 routerService,
-                groups
+                groups,
+                mock(AiSemanticCacheService.class)
         );
     }
 

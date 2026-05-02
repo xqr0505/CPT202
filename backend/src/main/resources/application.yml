@@ -56,8 +56,8 @@ ai:
   cache:
     qa:
       enabled: ${AI_CACHE_QA_ENABLED:true}
-      exact-prefix: ${AI_CACHE_QA_EXACT_PREFIX:ai:cache:qa:exact:}
-      doc-prefix: ${AI_CACHE_QA_DOC_PREFIX:ai:cache:qa:}
+      exact-prefix: ${AI_CACHE_QA_EXACT_PREFIX:expertlink:ai:cache:qa:exact:}
+      doc-prefix: ${AI_CACHE_QA_DOC_PREFIX:expertlink:ai:cache:qa:}
       index-name: ${AI_CACHE_QA_INDEX_NAME:expertlink:qa:cache}
       semantic-enabled: ${AI_CACHE_QA_SEMANTIC_ENABLED:false}
       similarity-threshold: ${AI_CACHE_QA_SIMILARITY_THRESHOLD:0.96}

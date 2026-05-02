@@ -13,6 +13,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.LightModelAiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
@@ -116,6 +117,7 @@ public class LangChainConfig {
             AiToolParallelProperties aiToolParallelProperties,
             AiChatProfiler aiChatProfiler,
             AiIntentRouterService intentRouterService,
+            AiSemanticCacheService semanticCacheService,
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
@@ -159,7 +161,8 @@ public class LangChainConfig {
                 AiConstant.AI_SYSTEM_PROMPT,
                 tools,
                 intentRouterService,
-                groupedTools
+                groupedTools,
+                semanticCacheService
         );
     }
 

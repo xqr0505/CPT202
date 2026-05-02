@@ -3,7 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service;
 import java.util.Optional;
 
 /**
- * Semantic cache for knowledge QA results.
+ * Final-answer cache for knowledge QA results.
  *
  * @author QiranXiao
  * @since 2026/5/2

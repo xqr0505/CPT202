@@ -45,17 +45,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = BackendApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
-@Disabled("Real AI perf test; requires model/tool credentials and local infra, run manually.")
+// @Disabled("Real AI perf test; requires model/tool credentials and local infra, run manually.")
 class AiChatSseFirstTokenPerfIntegrationTest {
 
     private static final int DEFAULT_CONCURRENCY = 5;
     private static final int DEFAULT_REPEAT = 3;
     private static final List<String> QUESTIONS = List.of(
-        "What is the refund policy if I cancel my appointment within 5 hours of the start time?",
-        "Are there any penalty fees if I reschedule my booking last minute?",
-        "I need to move my booking to another time. Does this require the specialist to approve it again?",
-        "If I want to avoid all cancellation fees, how long before the appointment should I cancel?",
-        "Is it possible to reschedule an appointment that is scheduled to start in 1 hour?"
+        "What is the refund policy for cancelling within 2 hours of the appointment?",
+        "How can I sort the specialists by fee from low to high?",
+        "What does 'Pending' status mean in my bookings?",
+        "Can I reschedule my appointment to a different specialist?",
+        "My search results are empty. How can I fix this quickly?",
+        "Why is the 'Cancel' button greyed out on my booking?",
+        "I clicked 'Confirm' but got a 'Time slot already booked' error. Why?",
+        "I submitted my notes, but it says 'unsupported characters'. What should I do?",
+        "If I book a specialist but need to change the time later, will it be Confirmed automatically?",
+        "I need the cheapest specialist available this coming Saturday. What is the best search order?"
     );
 
     @Autowired
@@ -143,6 +148,7 @@ class AiChatSseFirstTokenPerfIntegrationTest {
         int repeat = Integer.getInteger("ai.chat.perf.repeat", DEFAULT_REPEAT);
         ExecutorService executor = Executors.newFixedThreadPool(concurrency);
         try {
+            long suiteStartNs = System.nanoTime();
             List<CompletableFuture<RunResult>> futures = new ArrayList<>();
             for (int round = 1; round <= repeat; round++) {
                 int currentRound = round;
@@ -157,20 +163,56 @@ class AiChatSseFirstTokenPerfIntegrationTest {
             List<RunResult> results = futures.stream()
                     .map(CompletableFuture::join)
                     .toList();
+            long suiteElapsedMs = Duration.ofNanos(System.nanoTime() - suiteStartNs).toMillis();
 
             printPerRequestResults(results);
             printSummary(results, concurrency, repeat);
+            printThroughput(results, suiteElapsedMs, concurrency, repeat);
 
             long successCount = results.stream().filter(RunResult::success).count();
             if (successCount == 0) {
-                // Observability/perf test: don't fail the build just because streaming didn't yield a chat event.
-                // The debug snippets above should show what the endpoint returned.
+
                 System.out.println("[ai-chat-ttft] no successful samples (successCount=0)");
             }
         } finally {
             executor.shutdownNow();
             executor.awaitTermination(3, TimeUnit.SECONDS);
         }
+    }
+
+    private void printThroughput(List<RunResult> results, long suiteElapsedMs, int concurrency, int repeat) {
+        long total = results.size();
+        long success = results.stream().filter(RunResult::success).count();
+        long fail = total - success;
+
+        if (suiteElapsedMs <= 0) {
+            System.out.printf(
+                    "[ai-chat-throughput] elapsedMs=%d total=%d success=%d fail=%d concurrency=%d repeat=%d%n",
+                    suiteElapsedMs,
+                    total,
+                    success,
+                    fail,
+                    concurrency,
+                    repeat
+            );
+            return;
+        }
+
+        double elapsedSeconds = suiteElapsedMs / 1000.0;
+        double rpsTotal = total / elapsedSeconds;
+        double rpsSuccess = success / elapsedSeconds;
+
+        System.out.printf(
+                "[ai-chat-throughput] elapsedMs=%d total=%d success=%d fail=%d rpsTotal=%.2f rpsSuccess=%.2f concurrency=%d repeat=%d%n",
+                suiteElapsedMs,
+                total,
+                success,
+                fail,
+                rpsTotal,
+                rpsSuccess,
+                concurrency,
+                repeat
+        );
     }
 
     private RunResult runSingleQuestion(String question, int round) {
@@ -187,8 +229,7 @@ class AiChatSseFirstTokenPerfIntegrationTest {
                     .andExpect(request().asyncStarted())
                     .andReturn();
 
-            // Block until the async request completes (or times out) so we don't get:
-            // IllegalStateException: Async result for handler ... was not set ...
+
             startResult.getAsyncResult(60_000);
 
             String payload = mockMvc.perform(asyncDispatch(startResult))
@@ -267,7 +308,7 @@ class AiChatSseFirstTokenPerfIntegrationTest {
     }
 
     private void requireExternalDependencies() {
-        // This test is meant to be run locally with real credentials. We support both:
+        //support both:
         // 1) process env vars, and 2) repo-root .env (loaded via DotenvTestSupport).
         var dotenv = DotenvTestSupport.loadRepoRootDotenv();
         Assumptions.assumeTrue(

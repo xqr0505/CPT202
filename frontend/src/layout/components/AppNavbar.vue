@@ -2,7 +2,7 @@
   <header class="app-sidebar">
     <div class="sidebar-inner desktop-only">
       <div class="sidebar-header" @click="goHome">
-        <img src="@/assets/images/ELicon.png" class="logo-mark" alt="Logo" />
+        <img :src="logoSrc" class="logo-mark" alt="Logo" />
         <span class="system-name">ExpertLink</span>
       </div>
 
@@ -82,6 +82,9 @@ import { useAiChatStore } from '@/stores/aiChat'
 import { AI_NAV_MENU_KEY, AI_NAV_MENU_LABEL } from '@/constants/ai'
 import { ElMessageBox } from 'element-plus'
 import { getPendingBookingRequests, type SpecialistPendingBookingVO } from '@/api/booking'
+import lightLogo from '@/assets/images/ELicon.png'
+import darkLogo from '@/assets/images/ELiconDark.png'
+import { getCurrentThemeMode, THEME_MODE_EVENT_NAME, type ThemeMode } from '@/utils/theme'
 
 const router = useRouter()
 const route = useRoute()
@@ -89,6 +92,8 @@ const userStore = useUserStore()
 const aiChatStore = useAiChatStore()
 const approvalPendingCount = ref(0)
 const urgentApprovalCount = ref(0)
+const isDarkTheme = ref(getCurrentThemeMode() === 'dark')
+const logoSrc = computed(() => (isDarkTheme.value ? darkLogo : lightLogo))
 
 interface NavMenuItem {
   name: string
@@ -243,11 +248,17 @@ const handleLogout = async (): Promise<void> => {
 onMounted(() => {
   refreshApprovalBadge()
   window.addEventListener('specialist-approval-queue-updated', refreshApprovalBadge)
+  window.addEventListener(THEME_MODE_EVENT_NAME, handleThemeChange as EventListener)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('specialist-approval-queue-updated', refreshApprovalBadge)
+  window.removeEventListener(THEME_MODE_EVENT_NAME, handleThemeChange as EventListener)
 })
+
+function handleThemeChange(event: CustomEvent<ThemeMode>): void {
+  isDarkTheme.value = event.detail === 'dark'
+}
 </script>
 
 <style lang="scss">

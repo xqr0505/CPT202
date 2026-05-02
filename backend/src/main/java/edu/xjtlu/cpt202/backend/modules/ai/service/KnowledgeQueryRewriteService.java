@@ -5,9 +5,9 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.output.Response;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiRagRewriteProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -18,9 +18,11 @@ import java.util.stream.Collectors;
  * @author QiranXiao
  * @since 2026/4/22
  */
+@Slf4j
 @Service
 public class KnowledgeQueryRewriteService {
 
+    private static final int MIN_WORDS_FOR_REWRITE = 10;
     private final ChatLanguageModel chatLanguageModel;
     private final AiRagRewriteProperties rewriteProperties;
 
@@ -38,6 +40,12 @@ public class KnowledgeQueryRewriteService {
         }
 
         String normalizedQuery = userQuery.trim();
+        int wordCount = wordCount(normalizedQuery);
+        if (wordCount < MIN_WORDS_FOR_REWRITE) {
+            log.debug("Skip query rewrite due to short input. words={}", wordCount);
+            return List.of();
+        }
+
         if (!rewriteProperties.isEnabled() || rewriteProperties.modeEnum() == AiRagRewriteProperties.RewriteMode.OFF) {
             return List.of();
         }
@@ -51,28 +59,46 @@ public class KnowledgeQueryRewriteService {
             Response<dev.langchain4j.data.message.AiMessage> response =
                     chatLanguageModel.generate(List.of(UserMessage.userMessage(prompt)));
             String raw = response == null || response.content() == null ? "" : response.content().text();
-            return limitQueries(parseThreeQueries(raw), normalizedQuery);
+            List<String> parsed = parseRewriteQueries(raw);
+            log.debug("Rewrite model output parsed. parsedCount={}", parsed.size());
+            if (parsed.isEmpty()) {
+                return List.of();
+            }
+            return limitQueries(parsed, normalizedQuery);
         } catch (RuntimeException ignored) {
             return List.of();
         }
     }
 
-    List<String> parseThreeQueries(String rawOutput) {
+    List<String> parseRewriteQueries(String rawOutput) {
         if (rawOutput == null || rawOutput.isBlank()) {
             return List.of();
         }
 
-        List<String> parsed = Arrays.stream(rawOutput.split(","))
+        String normalized = rawOutput
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replaceAll("(?i)^\\s*here are\\s+(the\\s+)?queries\\s*:\\s*", "")
+                .replaceAll("(?i)^\\s*queries\\s*:\\s*", "");
+
+        return List.of(normalized.split("[,;\\n]+")).stream()
                 .map(String::trim)
+                .map(value -> value.replaceAll("^\\s*(?:[-*]\\s*)?(?:\\d+\\s*[\\.)、:-]\\s*)+", ""))
+                .map(value -> value.replaceAll("(?i)^query\\s*\\d*\\s*[:\\-]\\s*", ""))
+                .map(value -> value.replaceAll("^\"|\"$", ""))
+                .map(value -> value.replaceAll("^'|'$", ""))
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
+    }
 
-        if (parsed.size() != 3) {
-            return List.of();
+    private int wordCount(String query) {
+        if (query == null || query.isBlank()) {
+            return 0;
         }
-
-        return parsed;
+        return (int) List.of(query.trim().split("\\s+")).stream()
+                .filter(token -> !token.isBlank())
+                .count();
     }
 
     private List<String> ruleRewrite(String userQuery) {

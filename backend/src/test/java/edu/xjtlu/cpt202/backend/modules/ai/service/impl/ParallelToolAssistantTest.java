@@ -14,10 +14,13 @@ import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -209,6 +212,37 @@ class ParallelToolAssistantTest {
         assertThat(String.join("", chunks)).isEqualTo("done");
     }
 
+    @Test
+    void shouldInjectDashboardToolBoxForStreaming() throws InterruptedException {
+        IntentAwareToolSelectionModel model = new IntentAwareToolSelectionModel(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        ));
+        RecordingStreamingModel streamingModel = new RecordingStreamingModel(List.of(), AiMessage.from(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        )));
+        CombinedTools combinedTools = new CombinedTools();
+        Assistant assistant = buildAssistantWithGroups(
+                combinedTools,
+                Setups.defaultParallelProperties(),
+                model,
+                streamingModel,
+                message -> AiIntent.DASHBOARD,
+                groupedToolsForCombined(combinedTools)
+        );
+
+        CountDownLatch latch = new CountDownLatch(1);
+        assistant.streamChat(1001L, "query")
+                .onNext(ignored -> { })
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.capturedToolNames()).contains("searchCurrentCustomerBookings");
+        assertThat(model.capturedToolNames()).doesNotContain("searchKnowledgeBase");
+        assertThat(model.capturedToolNames()).doesNotContain("submitCurrentCustomerBooking");
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
@@ -222,7 +256,9 @@ class ParallelToolAssistantTest {
                 parallelProperties,
                 aiChatProfiler,
                 "system",
-                List.of(toolSource)
+                List.of(toolSource),
+                message -> AiIntent.DASHBOARD,
+                defaultGroupedTools(toolSource)
         );
     }
 
@@ -243,8 +279,51 @@ class ParallelToolAssistantTest {
                 parallelProperties,
                 aiChatProfiler,
                 "system",
-                List.of(toolSource)
+                List.of(toolSource),
+                message -> AiIntent.DASHBOARD,
+                defaultGroupedTools(toolSource)
         );
+    }
+
+    private Assistant buildAssistantWithGroups(
+            Object toolSource,
+            AiToolParallelProperties parallelProperties,
+            ChatLanguageModel model,
+            StreamingChatLanguageModel streamingModel,
+            AiIntentRouterService routerService,
+            Map<AiIntent, List<Object>> groups
+    ) {
+        AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
+        InMemoryStore store = new InMemoryStore();
+        AiChatProfiler aiChatProfiler = new AiChatProfiler(new CommonProperties());
+        return new ParallelToolAssistant(
+                model,
+                streamingModel,
+                store,
+                memoryProperties,
+                parallelProperties,
+                aiChatProfiler,
+                "system",
+                List.of(toolSource),
+                routerService,
+                groups
+        );
+    }
+
+    private Map<AiIntent, List<Object>> defaultGroupedTools(Object toolSource) {
+        Map<AiIntent, List<Object>> groups = new EnumMap<>(AiIntent.class);
+        groups.put(AiIntent.KNOWLEDGE, List.of(toolSource));
+        groups.put(AiIntent.BOOKING, List.of(toolSource));
+        groups.put(AiIntent.DASHBOARD, List.of(toolSource));
+        return groups;
+    }
+
+    private Map<AiIntent, List<Object>> groupedToolsForCombined(CombinedTools combinedTools) {
+        Map<AiIntent, List<Object>> groups = new EnumMap<>(AiIntent.class);
+        groups.put(AiIntent.KNOWLEDGE, List.of(new KnowledgeOnlyToolProxy(combinedTools)));
+        groups.put(AiIntent.BOOKING, List.of(new BookingOnlyToolProxy(combinedTools)));
+        groups.put(AiIntent.DASHBOARD, List.of(new DashboardOnlyToolProxy(combinedTools)));
+        return groups;
     }
 
     private static ToolExecutionRequest request(String id, String name) {
@@ -385,6 +464,91 @@ class ParallelToolAssistantTest {
 
         private int invocationCount() {
             return invocationCount;
+        }
+    }
+
+    private static class IntentAwareToolSelectionModel implements ChatLanguageModel {
+        private final List<ToolExecutionRequest> firstRoundRequests;
+        private List<String> capturedToolNames = List.of();
+        private int invocationCount = 0;
+
+        private IntentAwareToolSelectionModel(List<ToolExecutionRequest> firstRoundRequests) {
+            this.firstRoundRequests = firstRoundRequests;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            capturedToolNames = toolSpecifications.stream().map(ToolSpecification::name).toList();
+            if (invocationCount == 1) {
+                return Response.from(AiMessage.from(firstRoundRequests));
+            }
+            return Response.from(AiMessage.from("done"));
+        }
+
+        private List<String> capturedToolNames() {
+            return capturedToolNames;
+        }
+    }
+
+    private static class CombinedTools {
+        @dev.langchain4j.agent.tool.Tool
+        public String searchCurrentCustomerBookings() {
+            return "bookings";
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchKnowledgeBase() {
+            return "knowledge";
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String submitCurrentCustomerBooking() {
+            return "submit";
+        }
+    }
+
+    private static class KnowledgeOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private KnowledgeOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchKnowledgeBase() {
+            return delegate.searchKnowledgeBase();
+        }
+    }
+
+    private static class BookingOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private BookingOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String submitCurrentCustomerBooking() {
+            return delegate.submitCurrentCustomerBooking();
+        }
+    }
+
+    private static class DashboardOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private DashboardOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchCurrentCustomerBookings() {
+            return delegate.searchCurrentCustomerBookings();
         }
     }
 

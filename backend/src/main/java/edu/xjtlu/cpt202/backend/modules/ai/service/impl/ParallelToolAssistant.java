@@ -29,6 +29,8 @@ import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatTraceContext;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.util.ToolArgumentSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,8 +82,10 @@ public class ParallelToolAssistant implements Assistant {
     private final AiToolParallelProperties parallelProperties;
     private final AiChatProfiler aiChatProfiler;
     private final String systemPrompt;
+    private final AiIntentRouterService intentRouterService;
     private final List<ToolSpecification> toolSpecifications;
     private final Map<String, ToolExecutor> toolExecutors;
+    private final Map<AiIntent, ToolBox> intentToolBoxes;
     private final ExecutorService parallelExecutor;
 
     public ParallelToolAssistant(
@@ -91,7 +96,9 @@ public class ParallelToolAssistant implements Assistant {
             AiToolParallelProperties parallelProperties,
             AiChatProfiler aiChatProfiler,
             String systemPrompt,
-            List<Object> toolSources
+            List<Object> toolSources,
+            AiIntentRouterService intentRouterService,
+            Map<AiIntent, List<Object>> toolGroups
     ) {
         this.chatLanguageModel = chatLanguageModel;
         this.streamingChatLanguageModel = streamingChatLanguageModel;
@@ -100,8 +107,10 @@ public class ParallelToolAssistant implements Assistant {
         this.parallelProperties = parallelProperties;
         this.aiChatProfiler = aiChatProfiler;
         this.systemPrompt = systemPrompt;
+        this.intentRouterService = intentRouterService;
         this.toolSpecifications = collectSpecifications(toolSources);
         this.toolExecutors = collectExecutors(toolSources);
+        this.intentToolBoxes = collectIntentToolBoxes(toolGroups);
         this.parallelExecutor = Executors.newFixedThreadPool(
                 parallelProperties.getMaxConcurrency(),
                 runnable -> {
@@ -253,12 +262,27 @@ public class ParallelToolAssistant implements Assistant {
         return ToolArgumentSanitizer.sanitizeResponse(response, toolSpecifications);
     }
 
+    private Response<AiMessage> invokeModel(List<ChatMessage> messages, ToolBox toolBox) {
+        List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
+        Response<AiMessage> response = chatLanguageModel.generate(sanitizedMessages, toolBox.specifications());
+        return ToolArgumentSanitizer.sanitizeResponse(response, toolBox.specifications());
+    }
+
     private void invokeStreamingModel(
             List<ChatMessage> messages,
             StreamingResponseHandler<AiMessage> handler
     ) {
         List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
         streamingChatLanguageModel.generate(sanitizedMessages, toolSpecifications, handler);
+    }
+
+    private void invokeStreamingModel(
+            List<ChatMessage> messages,
+            StreamingResponseHandler<AiMessage> handler,
+            ToolBox toolBox
+    ) {
+        List<ChatMessage> sanitizedMessages = ToolArgumentSanitizer.sanitizeMessages(messages);
+        streamingChatLanguageModel.generate(sanitizedMessages, toolBox.specifications(), handler);
     }
 
     private void ensureSystemMessage(List<ChatMessage> messages) {
@@ -311,6 +335,15 @@ public class ParallelToolAssistant implements Assistant {
             Long memoryId,
             Consumer<ToolExecution> onToolExecuted
     ) {
+        return executeToolRequests(requests, memoryId, onToolExecuted, this.toolExecutors);
+    }
+
+    private List<ToolExecutionResultMessage> executeToolRequests(
+            List<ToolExecutionRequest> requests,
+            Long memoryId,
+            Consumer<ToolExecution> onToolExecuted,
+            Map<String, ToolExecutor> activeExecutors
+    ) {
         Map<Integer, ToolExecutionResultMessage> resultsByIndex = new LinkedHashMap<>();
         if (requests.isEmpty()) {
             return List.of();
@@ -321,7 +354,7 @@ public class ParallelToolAssistant implements Assistant {
 
         for (int index = 0; index < requests.size(); index++) {
             ToolExecutionRequest request = requests.get(index);
-            ToolExecutor executor = toolExecutors.get(request.name());
+            ToolExecutor executor = activeExecutors.get(request.name());
             if (executor == null) {
                 throw new IllegalStateException("No tool executor found for: " + request.name());
             }
@@ -762,6 +795,23 @@ public class ParallelToolAssistant implements Assistant {
                     ensureSystemMessage(messages);
                     addMessageToWindow(messages, UserMessage.userMessage(userMessage));
 
+                    long routerStartNs = System.nanoTime();
+                    AiIntent intent = intentRouterService.resolveIntent(userMessage);
+                    boolean routerFallback = intent == null;
+                    if (intent == null) {
+                        intent = AiIntent.KNOWLEDGE;
+                    }
+                    ToolBox toolBox = intentToolBoxes.getOrDefault(intent, intentToolBoxes.get(AiIntent.KNOWLEDGE));
+                    aiChatProfiler.logStage("assistant.stream.intentRouter", elapsedMs(routerStartNs), Map.of(
+                            "memoryId", memoryId,
+                            "intent", intent.name(),
+                            "fallback", routerFallback
+                    ));
+                    aiChatProfiler.logEvent("assistant.stream.intent", Map.of(
+                            "memoryId", memoryId,
+                            "intent", intent.name()
+                    ));
+
                     int rounds = 0;
                     ProbeStreamResult probeResult = runStreamingRound(
                             messages,
@@ -770,7 +820,8 @@ public class ParallelToolAssistant implements Assistant {
                             totalStartNs,
                             "assistant.stream.streamingProbe",
                             true,
-                            this.onNext
+                            this.onNext,
+                            toolBox
                     );
                     AiMessage probeAiMessage = probeResult.response().content();
                     Response<AiMessage> finalModelResponseAfterTools = null;
@@ -784,7 +835,7 @@ public class ParallelToolAssistant implements Assistant {
 
                         long toolRoundStartNs = System.nanoTime();
                         List<ToolExecutionResultMessage> results =
-                                executeToolRequests(probeAiMessage.toolExecutionRequests(), memoryId, onToolExecuted);
+                                executeToolRequests(probeAiMessage.toolExecutionRequests(), memoryId, onToolExecuted, toolBox.executors());
                         aiChatProfiler.logStage("assistant.stream.executeToolRequests.round" + rounds, elapsedMs(toolRoundStartNs), Map.of(
                                 "memoryId", memoryId,
                                 "toolCount", probeAiMessage.toolExecutionRequests().size()
@@ -794,7 +845,7 @@ public class ParallelToolAssistant implements Assistant {
                         }
 
                         long invokeStartNs = System.nanoTime();
-                        Response<AiMessage> probeResponse = invokeModel(messages);
+                        Response<AiMessage> probeResponse = invokeModel(messages, toolBox);
                         aiChatProfiler.logStage("assistant.stream.invokeModel.round" + rounds, elapsedMs(invokeStartNs), Map.of(
                                 "memoryId", memoryId,
                                 "messageCount", messages.size()
@@ -827,7 +878,8 @@ public class ParallelToolAssistant implements Assistant {
                                 totalStartNs,
                                 "assistant.stream.streamingAnswer",
                                 true,
-                                this.onNext
+                                this.onNext,
+                                toolBox
                         );
                         streamedResponse = finalAnswerResult.response();
                     }
@@ -865,7 +917,8 @@ public class ParallelToolAssistant implements Assistant {
             long totalStartNs,
             String stageName,
             boolean emitTokens,
-            Consumer<String> tokenConsumer
+            Consumer<String> tokenConsumer,
+            ToolBox toolBox
     ) {
         AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
         CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
@@ -899,7 +952,7 @@ public class ParallelToolAssistant implements Assistant {
                 AiChatTraceContext.restoreTraceId(traceId);
                 streamedResponseFuture.completeExceptionally(error);
             }
-        });
+        }, toolBox);
 
         aiChatProfiler.logStage(stageName, elapsedMs(streamingInvokeStartNs), Map.of(
                 "memoryId", memoryId
@@ -936,6 +989,21 @@ public class ParallelToolAssistant implements Assistant {
 
     private record ProbeStreamResult(
             Response<AiMessage> response
+    ) {
+    }
+
+    private Map<AiIntent, ToolBox> collectIntentToolBoxes(Map<AiIntent, List<Object>> toolGroups) {
+        Map<AiIntent, ToolBox> map = new EnumMap<>(AiIntent.class);
+        for (AiIntent intent : AiIntent.values()) {
+            List<Object> sources = toolGroups == null ? List.of() : toolGroups.getOrDefault(intent, List.of());
+            map.put(intent, new ToolBox(collectSpecifications(sources), collectExecutors(sources)));
+        }
+        return Map.copyOf(map);
+    }
+
+    private record ToolBox(
+            List<ToolSpecification> specifications,
+            Map<String, ToolExecutor> executors
     ) {
     }
 

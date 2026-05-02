@@ -11,6 +11,9 @@ import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.impl.LightModelAiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
@@ -26,7 +29,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author QiranXiao
@@ -34,6 +39,7 @@ import java.util.List;
  */
 @Configuration
 @EnableConfigurationProperties({
+        AiModelProperties.class,
         AiChatMemoryProperties.class,
         AiToolParallelProperties.class,
         AiRagRewriteProperties.class
@@ -44,7 +50,8 @@ public class LangChainConfig {
     public ChatLanguageModel chatLanguageModel(
             @Value("${ai.openai.api-key}") String apiKey,
             @Value("${ai.openai.model-name}") String modelName,
-            @Value("${ai.openai.base-url:}") String baseUrl
+            @Value("${ai.openai.base-url:}") String baseUrl,
+            AiModelProperties aiModelProperties
     ) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(AiConstant.OPENAI_API_KEY_REQUIRED_MESSAGE);
@@ -55,7 +62,8 @@ public class LangChainConfig {
 
         var builder = OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(modelName);
+                .modelName(modelName)
+                .maxTokens(aiModelProperties.getMaxOutputTokens());
 
         if (baseUrl != null) {
             String trimmedBaseUrl = baseUrl.trim();
@@ -71,11 +79,13 @@ public class LangChainConfig {
     public StreamingChatLanguageModel streamingChatLanguageModel(
             @Value("${ai.openai.api-key}") String apiKey,
             @Value("${ai.openai.model-name}") String modelName,
-            @Value("${ai.openai.base-url:}") String baseUrl
+            @Value("${ai.openai.base-url:}") String baseUrl,
+            AiModelProperties aiModelProperties
     ) {
         var builder = OpenAiStreamingChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(modelName);
+                .modelName(modelName)
+                .maxTokens(aiModelProperties.getMaxOutputTokens());
 
         if (baseUrl != null) {
             String trimmedBaseUrl = baseUrl.trim();
@@ -116,6 +126,27 @@ public class LangChainConfig {
         tools.add(aiBookingSubmitTool);
         tools.add(aiSpecialistAvailabilityTool);
         knowledgeToolsProvider.ifAvailable(tools::add);
+        AiIntentRouterService intentRouterService = intentRouterService(chatLanguageModel);
+
+        Map<AiIntent, List<Object>> groupedTools = new EnumMap<>(AiIntent.class);
+        groupedTools.put(
+                AiIntent.KNOWLEDGE,
+                knowledgeToolsProvider.getIfAvailable() == null
+                        ? List.of()
+                        : List.of(knowledgeToolsProvider.getIfAvailable())
+        );
+        groupedTools.put(
+                AiIntent.BOOKING,
+                List.of(aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
+        );
+        groupedTools.put(
+                AiIntent.DASHBOARD,
+                List.of(aiBookingSearchTool)
+        );
+        groupedTools.put(
+                AiIntent.CHITCHAT,
+                List.of()
+        );
 
         return new ParallelToolAssistant(
                 chatLanguageModel,
@@ -125,7 +156,14 @@ public class LangChainConfig {
                 aiToolParallelProperties,
                 aiChatProfiler,
                 AiConstant.AI_SYSTEM_PROMPT,
-                tools
+                tools,
+                intentRouterService,
+                groupedTools
         );
+    }
+
+    @Bean
+    public AiIntentRouterService intentRouterService(ChatLanguageModel chatLanguageModel) {
+        return new LightModelAiIntentRouterService(chatLanguageModel);
     }
 }

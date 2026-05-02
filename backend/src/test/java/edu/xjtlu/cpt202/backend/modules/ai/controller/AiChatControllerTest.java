@@ -8,6 +8,8 @@ import dev.langchain4j.service.TokenStream;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.config.SecurityConfig;
 import edu.xjtlu.cpt202.backend.common.exception.GlobalExceptionHandler;
+import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
@@ -338,7 +340,7 @@ class AiChatControllerTest {
             DruidDataSourceAutoConfigure.class,
             MybatisPlusAutoConfiguration.class
     })
-    @Import({AiChatController.class, SecurityConfig.class, GlobalExceptionHandler.class})
+    @Import({AiChatController.class, SecurityConfig.class, GlobalExceptionHandler.class, AiChatProfiler.class, CommonProperties.class})
     static class TestApplication {
     }
 }

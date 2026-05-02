@@ -24,7 +24,7 @@ echo   DB    = %DB_HOST%:%DB_PORT%
 echo   Redis = %REDIS_HOST%:%REDIS_PORT%
 echo.
 
-cd /d "%~dp0backend"
+cd /d "%~dp0..\\backend"
 mvn.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 
 endlocal

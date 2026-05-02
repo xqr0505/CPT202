@@ -6,6 +6,8 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
+import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AiChatServiceImplTest {
 
+    private final AiChatProfiler aiChatProfiler = new AiChatProfiler(new CommonProperties());
+
     @AfterEach
     void tearDown() {
         UserContextHolder.clear();
@@ -34,7 +38,8 @@ class AiChatServiceImplTest {
         InMemoryChatMemoryStore chatMemoryStore = new InMemoryChatMemoryStore();
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new MemoryAwareAssistant(chatMemoryStore),
-                chatMemoryStore
+                chatMemoryStore,
+                aiChatProfiler
         );
 
         UserContextHolder.setUserId(1001L);
@@ -57,7 +62,11 @@ class AiChatServiceImplTest {
     @Test
     void shouldIncludeCurrentSystemTimeInPrompt() {
         EchoAssistant echoAssistant = new EchoAssistant();
-        AiChatServiceImpl aiChatService = new AiChatServiceImpl(echoAssistant, new InMemoryChatMemoryStore());
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                echoAssistant,
+                new InMemoryChatMemoryStore(),
+                aiChatProfiler
+        );
 
         UserContextHolder.setUserId(1001L);
         String prompt = aiChatService.chat("Check upcoming bookings");

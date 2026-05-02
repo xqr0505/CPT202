@@ -1,0 +1,8 @@
+expertlink:
+  logging:
+    enabled: true
+    arg-max-length: 64
+    ai-chat-profiling-enabled: true
+    slow-threshold:
+      controller-ms: 1
+      service-ms: 1

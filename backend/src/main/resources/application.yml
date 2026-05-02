@@ -35,6 +35,13 @@ expertlink:
     access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
     bucket-name: ${OSS_BUCKET:}
     base-url: ${OSS_BASE_URL:}
+  logging:
+    enabled: ${COMMON_LOGGING_ENABLED:true}
+    arg-max-length: ${COMMON_LOGGING_ARG_MAX_LENGTH:120}
+    ai-chat-profiling-enabled: ${COMMON_LOGGING_AI_CHAT_PROFILING_ENABLED:true}
+    slow-threshold:
+      controller-ms: ${COMMON_LOGGING_SLOW_THRESHOLD_CONTROLLER_MS:800}
+      service-ms: ${COMMON_LOGGING_SLOW_THRESHOLD_SERVICE_MS:500}
 
 ai:
   openai:
@@ -49,6 +56,12 @@ ai:
   rag:
     enabled: ${AI_RAG_ENABLED:true}
     knowledge-location: ${AI_RAG_KNOWLEDGE_LOCATION:classpath*:/knowledge/**/*.md}
+    rewrite:
+      enabled: ${AI_RAG_REWRITE_ENABLED:true}
+      mode: ${AI_RAG_REWRITE_MODE:rule}
+      timeout-ms: ${AI_RAG_REWRITE_TIMEOUT_MS:1500}
+      max-queries: ${AI_RAG_REWRITE_MAX_QUERIES:2}
+      light-model-name: ${AI_RAG_REWRITE_LIGHT_MODEL_NAME:qwen-turbo}
     redis:
       host: ${AI_RAG_REDIS_HOST:${REDIS_HOST:127.0.0.1}}
       port: ${AI_RAG_REDIS_PORT:${REDIS_PORT:6379}}
@@ -60,7 +73,7 @@ ai:
     min-score: ${AI_RAG_MIN_SCORE:0.65}
   chat:
     memory:
-      max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:20}
+      max-messages: ${AI_CHAT_MEMORY_MAX_MESSAGES:8}
       ttl-seconds: ${AI_CHAT_MEMORY_TTL_SECONDS:86400}
       key-prefix: ${AI_CHAT_MEMORY_KEY_PREFIX:expertlink:ai:memory}
   tools:

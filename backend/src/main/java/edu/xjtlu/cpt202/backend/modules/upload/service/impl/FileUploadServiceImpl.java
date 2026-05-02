@@ -1,11 +1,11 @@
-package edu.xjtlu.cpt202.backend.common.service.impl;
+package edu.xjtlu.cpt202.backend.modules.upload.service.impl;
 
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
-import edu.xjtlu.cpt202.backend.common.service.FileUploadService;
+import edu.xjtlu.cpt202.backend.modules.upload.service.FileUploadService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 

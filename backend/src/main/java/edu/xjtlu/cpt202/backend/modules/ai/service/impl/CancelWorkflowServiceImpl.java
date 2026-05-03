@@ -42,6 +42,8 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
     static final String TRIGGER_CANCEL_MODAL_PREFIX = "[TRIGGER_CANCEL_MODAL:";
 
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,18})\\b");
+    private static final int STREAM_CHUNK_SIZE = 24;
+    private static final long STREAM_CHUNK_DELAY_MS = 24L;
     private static final Pattern CANCEL_INTENT_PATTERN = Pattern.compile(
             "(\\bcancel\\b|\\bcancellation\\b|\\bvoid\\b|\\bcall off\\b|取消|撤销|取消预约|退订)",
             Pattern.CASE_INSENSITIVE
@@ -293,8 +295,11 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
     private String buildCandidatePrompt(List<BookingItemVO> candidates) {
         List<String> lines = new ArrayList<>();
         lines.add("I found multiple cancellable bookings. Please reply with the booking ID you want to cancel:");
+        lines.add("");
+        lines.add("| Booking ID | Specialist | Service | Appointment Time | Status |");
+        lines.add("| --- | --- | --- | --- | --- |");
         for (BookingItemVO item : candidates) {
-            lines.add("- ID %s | %s | %s | %s | %s".formatted(
+            lines.add("| %s | %s | %s | %s | %s |".formatted(
                     safeText(item.getId()),
                     safeText(item.getSpecialistName()),
                     safeText(item.getServiceName()),
@@ -382,7 +387,7 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
         @Override
         public void start() {
             try {
-                onNext.accept(reply);
+                emitTextChunks(reply);
                 onComplete.accept(Response.from(dev.langchain4j.data.message.AiMessage.from(reply)));
             } catch (Throwable throwable) {
                 onError.accept(throwable);
@@ -393,6 +398,24 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
         public TokenStream onNext(java.util.function.Consumer<String> consumer) {
             this.onNext = consumer;
             return this;
+        }
+
+        private void emitTextChunks(String text) {
+            if (text == null || text.isBlank()) {
+                return;
+            }
+            for (int index = 0; index < text.length(); index += STREAM_CHUNK_SIZE) {
+                int endIndex = Math.min(index + STREAM_CHUNK_SIZE, text.length());
+                onNext.accept(text.substring(index, endIndex));
+                if (endIndex < text.length()) {
+                    try {
+                        Thread.sleep(STREAM_CHUNK_DELAY_MS);
+                    } catch (InterruptedException interruptedException) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }
         }
     }
 }

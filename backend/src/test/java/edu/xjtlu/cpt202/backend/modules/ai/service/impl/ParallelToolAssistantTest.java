@@ -14,6 +14,7 @@ import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiIntentRouterProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
@@ -376,6 +377,25 @@ class ParallelToolAssistantTest {
         verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
     }
 
+    @Test
+    void shouldNotCacheKnowledgeFallbackMessage() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE)).thenReturn(java.util.Optional.empty());
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new FixedAnswerModel(AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo(AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE);
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
         return buildAssistantWithCache(toolSource, parallelProperties, model, mock(AiSemanticCacheService.class), (memoryId, message) -> AiIntent.DASHBOARD);
     }
@@ -664,6 +684,24 @@ class ParallelToolAssistantTest {
 
         private int invocationCount() {
             return invocationCount;
+        }
+    }
+
+    private static class FixedAnswerModel implements ChatLanguageModel {
+        private final String answer;
+
+        private FixedAnswerModel(String answer) {
+            this.answer = answer;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            return Response.from(AiMessage.from(answer));
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            return Response.from(AiMessage.from(answer));
         }
     }
 

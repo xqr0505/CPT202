@@ -258,6 +258,9 @@ public class ParallelToolAssistant implements Assistant {
         if (answer.isBlank()) {
             return;
         }
+        if (AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE.equals(answer)) {
+            return;
+        }
         if (answer.contains(BOOKING_PREVIEW_MARKER) || looksLikeStructuredToolPayload(answer)) {
             return;
         }

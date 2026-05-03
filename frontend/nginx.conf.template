@@ -12,7 +12,12 @@ server {
         # Rendered by nginx docker entrypoint via envsubst.
         # Override in docker-compose with `API_UPSTREAM`, e.g. `backend:8080`.
         proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off;
+        proxy_cache off;
+        add_header X-Accel-Buffering no;
     }
 }

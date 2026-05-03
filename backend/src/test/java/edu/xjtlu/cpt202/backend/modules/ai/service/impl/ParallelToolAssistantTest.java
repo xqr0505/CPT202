@@ -12,12 +12,18 @@ import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiChatMemoryProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiIntentRouterProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.config.AiToolParallelProperties;
+import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,8 +33,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ParallelToolAssistantTest {
 
@@ -209,7 +220,193 @@ class ParallelToolAssistantTest {
         assertThat(String.join("", chunks)).isEqualTo("done");
     }
 
+    @Test
+    void shouldInjectDashboardToolBoxForStreaming() throws InterruptedException {
+        IntentAwareToolSelectionModel model = new IntentAwareToolSelectionModel(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        ));
+        RecordingStreamingModel streamingModel = new RecordingStreamingModel(List.of(), AiMessage.from(List.of(
+                request("id-1", "searchCurrentCustomerBookings")
+        )));
+        CombinedTools combinedTools = new CombinedTools();
+        Assistant assistant = buildAssistantWithGroups(
+                combinedTools,
+                Setups.defaultParallelProperties(),
+                model,
+                streamingModel,
+                (memoryId, message) -> AiIntent.DASHBOARD,
+                groupedToolsForCombined(combinedTools)
+        );
+
+        CountDownLatch latch = new CountDownLatch(1);
+        assistant.streamChat(1001L, "query")
+                .onNext(ignored -> { })
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.capturedToolNames()).contains("searchCurrentCustomerBookings");
+        assertThat(model.capturedToolNames()).doesNotContain("searchKnowledgeBase");
+        assertThat(model.capturedToolNames()).doesNotContain("submitCurrentCustomerBooking");
+    }
+
+    @Test
+    void shouldExtractOriginalUserMessageWhenSystemTimePrefixExists() {
+        String wrappedMessage = """
+                Current system time: 2026-05-03 00:00:00 CST
+                Use this as the authoritative current time when interpreting relative dates such as today, tomorrow, upcoming, this week, and history.
+
+                User message:
+                show my bookings history
+                """;
+
+        String extracted = ParallelToolAssistant.extractOriginalUserMessage(wrappedMessage);
+        assertThat(extracted).isEqualTo("show my bookings history");
+    }
+
+    @Test
+    void shouldUseRuleBasedChitchatIntentWithoutCallingModel() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L, "hello");
+
+        assertThat(intent).isEqualTo(AiIntent.CHITCHAT);
+        verify(model, times(0)).generate(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void shouldResolveKnowledgeForAmbiguousBookingQuestion() {
+        CountingIntentModel model = new CountingIntentModel("BOOKING");
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent first = routerService.resolveIntent(1001L, "Need help with complex expert selection");
+        AiIntent second = routerService.resolveIntent(1001L, "Need help with complex expert selection");
+
+        assertThat(first).isEqualTo(AiIntent.KNOWLEDGE);
+        assertThat(second).isEqualTo(AiIntent.KNOWLEDGE);
+        assertThat(model.invocationCount()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldPreferKnowledgeForPolicyLikeBookingQuestion() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L,
+                "If I book a specialist but need to change the time later, will it be Confirmed automatically?");
+
+        assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
+    }
+
+    @Test
+    void shouldPreferKnowledgeForUnsupportedCharactersQuestion() {
+        ChatLanguageModel model = mock(ChatLanguageModel.class);
+        AiIntentRouterProperties properties = new AiIntentRouterProperties();
+        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
+
+        AiIntent intent = routerService.resolveIntent(1001L,
+                "I submitted my notes, but it says 'unsupported characters'. What should I do?");
+
+        assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
+    }
+
+    @Test
+    void shouldReturnFinalAnswerFromCacheWhenKnowledgeCacheHits() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE))
+                .thenReturn(java.util.Optional.of(new AiSemanticCacheService.CacheHit("cache-1", "cached final answer", true, 1.0D)));
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo("cached final answer");
+        assertThat(tools.executionThreads()).isEmpty();
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
+    @Test
+    void shouldWriteFinalAnswerToCacheWhenKnowledgeMisses() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE))
+                .thenReturn(java.util.Optional.empty());
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo("done");
+        await().atMost(2, TimeUnit.SECONDS).untilAsserted(() ->
+                verify(semanticCacheService).putAsync("refund policy", "done", AiIntent.KNOWLEDGE)
+        );
+    }
+
+    @Test
+    void shouldNotUseKnowledgeCacheForNonKnowledgeIntent() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.DASHBOARD
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nmy dashboard");
+
+        assertThat(reply).isEqualTo("done");
+        verify(semanticCacheService, never()).get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
+    @Test
+    void shouldNotCacheKnowledgeFallbackMessage() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        when(semanticCacheService.get("refund policy", AiIntent.KNOWLEDGE)).thenReturn(java.util.Optional.empty());
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new FixedAnswerModel(AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE),
+                semanticCacheService,
+                (memoryId, message) -> AiIntent.KNOWLEDGE
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo(AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE);
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
     private Assistant buildAssistant(Object toolSource, AiToolParallelProperties parallelProperties, ChatLanguageModel model) {
+        return buildAssistantWithCache(toolSource, parallelProperties, model, mock(AiSemanticCacheService.class), (memoryId, message) -> AiIntent.DASHBOARD);
+    }
+
+    private Assistant buildAssistantWithCache(
+            Object toolSource,
+            AiToolParallelProperties parallelProperties,
+            ChatLanguageModel model,
+            AiSemanticCacheService semanticCacheService,
+            AiIntentRouterService routerService
+    ) {
         AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
         InMemoryStore store = new InMemoryStore();
         StreamingChatLanguageModel streaming = mock(StreamingChatLanguageModel.class);
@@ -222,7 +419,10 @@ class ParallelToolAssistantTest {
                 parallelProperties,
                 aiChatProfiler,
                 "system",
-                List.of(toolSource)
+                List.of(toolSource),
+                routerService,
+                defaultGroupedTools(toolSource),
+                semanticCacheService
         );
     }
 
@@ -243,8 +443,53 @@ class ParallelToolAssistantTest {
                 parallelProperties,
                 aiChatProfiler,
                 "system",
-                List.of(toolSource)
+                List.of(toolSource),
+                (memoryId, message) -> AiIntent.DASHBOARD,
+                defaultGroupedTools(toolSource),
+                mock(AiSemanticCacheService.class)
         );
+    }
+
+    private Assistant buildAssistantWithGroups(
+            Object toolSource,
+            AiToolParallelProperties parallelProperties,
+            ChatLanguageModel model,
+            StreamingChatLanguageModel streamingModel,
+            AiIntentRouterService routerService,
+            Map<AiIntent, List<Object>> groups
+    ) {
+        AiChatMemoryProperties memoryProperties = new AiChatMemoryProperties();
+        InMemoryStore store = new InMemoryStore();
+        AiChatProfiler aiChatProfiler = new AiChatProfiler(new CommonProperties());
+        return new ParallelToolAssistant(
+                model,
+                streamingModel,
+                store,
+                memoryProperties,
+                parallelProperties,
+                aiChatProfiler,
+                "system",
+                List.of(toolSource),
+                routerService,
+                groups,
+                mock(AiSemanticCacheService.class)
+        );
+    }
+
+    private Map<AiIntent, List<Object>> defaultGroupedTools(Object toolSource) {
+        Map<AiIntent, List<Object>> groups = new EnumMap<>(AiIntent.class);
+        groups.put(AiIntent.KNOWLEDGE, List.of(toolSource));
+        groups.put(AiIntent.BOOKING, List.of(toolSource));
+        groups.put(AiIntent.DASHBOARD, List.of(toolSource));
+        return groups;
+    }
+
+    private Map<AiIntent, List<Object>> groupedToolsForCombined(CombinedTools combinedTools) {
+        Map<AiIntent, List<Object>> groups = new EnumMap<>(AiIntent.class);
+        groups.put(AiIntent.KNOWLEDGE, List.of(new KnowledgeOnlyToolProxy(combinedTools)));
+        groups.put(AiIntent.BOOKING, List.of(new BookingOnlyToolProxy(combinedTools)));
+        groups.put(AiIntent.DASHBOARD, List.of(new DashboardOnlyToolProxy(combinedTools)));
+        return groups;
     }
 
     private static ToolExecutionRequest request(String id, String name) {
@@ -385,6 +630,134 @@ class ParallelToolAssistantTest {
 
         private int invocationCount() {
             return invocationCount;
+        }
+    }
+
+    private static class IntentAwareToolSelectionModel implements ChatLanguageModel {
+        private final List<ToolExecutionRequest> firstRoundRequests;
+        private List<String> capturedToolNames = List.of();
+        private int invocationCount = 0;
+
+        private IntentAwareToolSelectionModel(List<ToolExecutionRequest> firstRoundRequests) {
+            this.firstRoundRequests = firstRoundRequests;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            capturedToolNames = toolSpecifications.stream().map(ToolSpecification::name).toList();
+            if (invocationCount == 1) {
+                return Response.from(AiMessage.from(firstRoundRequests));
+            }
+            return Response.from(AiMessage.from("done"));
+        }
+
+        private List<String> capturedToolNames() {
+            return capturedToolNames;
+        }
+    }
+
+    private static class CountingIntentModel implements ChatLanguageModel {
+        private final String responseText;
+        private int invocationCount;
+
+        private CountingIntentModel(String responseText) {
+            this.responseText = responseText;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            invocationCount++;
+            return Response.from(AiMessage.from(responseText));
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            invocationCount++;
+            return Response.from(AiMessage.from(responseText));
+        }
+
+        private int invocationCount() {
+            return invocationCount;
+        }
+    }
+
+    private static class FixedAnswerModel implements ChatLanguageModel {
+        private final String answer;
+
+        private FixedAnswerModel(String answer) {
+            this.answer = answer;
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages) {
+            return Response.from(AiMessage.from(answer));
+        }
+
+        @Override
+        public Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications) {
+            return Response.from(AiMessage.from(answer));
+        }
+    }
+
+    private static class CombinedTools {
+        @dev.langchain4j.agent.tool.Tool
+        public String searchCurrentCustomerBookings() {
+            return "bookings";
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchKnowledgeBase() {
+            return "knowledge";
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String submitCurrentCustomerBooking() {
+            return "submit";
+        }
+    }
+
+    private static class KnowledgeOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private KnowledgeOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchKnowledgeBase() {
+            return delegate.searchKnowledgeBase();
+        }
+    }
+
+    private static class BookingOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private BookingOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String submitCurrentCustomerBooking() {
+            return delegate.submitCurrentCustomerBooking();
+        }
+    }
+
+    private static class DashboardOnlyToolProxy {
+        private final CombinedTools delegate;
+
+        private DashboardOnlyToolProxy(CombinedTools delegate) {
+            this.delegate = delegate;
+        }
+
+        @dev.langchain4j.agent.tool.Tool
+        public String searchCurrentCustomerBookings() {
+            return delegate.searchCurrentCustomerBookings();
         }
     }
 

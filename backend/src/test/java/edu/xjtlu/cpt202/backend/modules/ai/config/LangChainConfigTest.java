@@ -72,4 +72,14 @@ class LangChainConfigTest {
                     assertThat(properties.getKeyPrefix()).isEqualTo("test:ai:memory");
                 });
     }
+
+    @Test
+    void shouldOverrideModelProperties() {
+        contextRunner
+                .withPropertyValues("ai.model.max-output-tokens=256")
+                .run(context -> {
+                    AiModelProperties properties = context.getBean(AiModelProperties.class);
+                    assertThat(properties.getMaxOutputTokens()).isEqualTo(256);
+                });
+    }
 }

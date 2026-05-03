@@ -486,12 +486,11 @@ const emitCancelModal = (assistantContent: string): string => {
     return assistantContent
   }
   const bookingId = extractCancelModalBookingId(assistantContent)
-  if (!bookingId) {
-    return assistantContent
+  if (bookingId) {
+    window.dispatchEvent(new CustomEvent<AiBookingCancelModalPayload>(AI_BOOKING_CANCEL_MODAL_EVENT, {
+      detail: { bookingId }
+    }))
   }
-  window.dispatchEvent(new CustomEvent<AiBookingCancelModalPayload>(AI_BOOKING_CANCEL_MODAL_EVENT, {
-    detail: { bookingId }
-  }))
   return stripCancelModalMarker(assistantContent)
 }
 

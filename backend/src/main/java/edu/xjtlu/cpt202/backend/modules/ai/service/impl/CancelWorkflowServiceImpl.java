@@ -42,6 +42,14 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
     static final String TRIGGER_CANCEL_MODAL_PREFIX = "[TRIGGER_CANCEL_MODAL:";
 
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,18})\\b");
+    private static final Pattern CANCEL_INTENT_PATTERN = Pattern.compile(
+            "(\\bcancel\\b|\\bcancellation\\b|\\bvoid\\b|\\bcall off\\b|取消|撤销|取消预约|退订)",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern BOOKING_HINT_PATTERN = Pattern.compile(
+            "(\\bbooking\\b|\\bappointment\\b|预约|订单|单号|id)",
+            Pattern.CASE_INSENSITIVE
+    );
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Set<String> ABORT_PHRASES = Set.of(
             "forget it",
@@ -77,6 +85,9 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
 
     @Override
     public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+        if (looksLikeCancelRequest(originalUserMessage)) {
+            return true;
+        }
         return aiIntentRouterService.resolveIntent(userId, originalUserMessage) == AiIntent.CANCEL;
     }
 
@@ -317,6 +328,17 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
             return "";
         }
         return userMessage.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    }
+
+    private boolean looksLikeCancelRequest(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = message.trim();
+        if (!CANCEL_INTENT_PATTERN.matcher(normalized).find()) {
+            return false;
+        }
+        return BOOKING_HINT_PATTERN.matcher(normalized).find() || normalized.contains("取消");
     }
 
     private static class SingleReplyTokenStream implements TokenStream {

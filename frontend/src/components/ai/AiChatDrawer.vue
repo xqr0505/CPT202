@@ -95,6 +95,11 @@
         </span>
       </template>
     </el-dialog>
+    <BookingCancelDialog
+      v-model="showCancelDialog"
+      :booking-id="selectedCancelBookingId"
+      @success="handleCancelSuccess"
+    />
   </el-drawer>
 </template>
 
@@ -114,12 +119,14 @@ import {
   AI_DRAWER_SIZE,
   AI_DRAWER_TITLE
 } from '@/constants/ai'
+import BookingCancelDialog from '@/components/business/BookingCancelDialog.vue'
 import AiComposer from './AiComposer.vue'
 import AiMessageList from './AiMessageList.vue'
 
 const aiChatStore = useAiChatStore()
 const router = useRouter()
 const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
+const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 
 interface AiBookingSubmitPreviewPayload {
@@ -133,6 +140,10 @@ interface AiBookingSubmitPreviewPayload {
   topic: string
   customerNotes?: string | null
   warnings?: string[]
+}
+
+interface AiBookingCancelModalPayload {
+  bookingId: number
 }
 
 interface StoredSessionUser {
@@ -174,6 +185,8 @@ const bookingConfirmDialogVisible = ref(false)
 const manualBookingNotes = ref('')
 const lastPreviewKey = ref('')
 const dismissedPreviewKeys = new Set<string>()
+const showCancelDialog = ref(false)
+const selectedCancelBookingId = ref<number | null>(null)
 
 const isMobile = ref(window.innerWidth <= 640)
 
@@ -1095,9 +1108,26 @@ const confirmBookingFromPreview = async () => {
   }
 }
 
+const openCancelModalFromAi = async (bookingId: number) => {
+  if (!bookingId || bookingId <= 0) {
+    return
+  }
+  selectedCancelBookingId.value = bookingId
+  showCancelDialog.value = true
+}
+
+const resetCancelDialogState = () => {
+  selectedCancelBookingId.value = null
+}
+
+const handleCancelSuccess = () => {
+  resetCancelDialogState()
+}
+
 onMounted(() => {
   window.addEventListener('resize', updateMobileState)
   window.addEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
+  window.addEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
 })
 
 watch(
@@ -1137,12 +1167,24 @@ watch(
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateMobileState)
   window.removeEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
+  window.removeEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
   bookingConfirmDialogVisible.value = false
+  showCancelDialog.value = false
   bookingPreview.value = null
   bookingSubmitting.value = false
   manualBookingNotes.value = ''
   lastPreviewKey.value = ''
+  resetCancelDialogState()
 })
+
+const onAiBookingCancelModal = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingCancelModalPayload>
+  const bookingId = Number(customEvent.detail?.bookingId || 0)
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return
+  }
+  void openCancelModalFromAi(bookingId)
+}
 
 const drawerVisible = computed<boolean>({
   get: () => aiChatStore.isDrawerOpen,
@@ -1154,9 +1196,11 @@ const drawerVisible = computed<boolean>({
 
     aiChatStore.closeDrawer()
     bookingConfirmDialogVisible.value = false
+    showCancelDialog.value = false
     bookingPreview.value = null
     manualBookingNotes.value = ''
     lastPreviewKey.value = ''
+    resetCancelDialogState()
   }
 })
 </script>

@@ -9,6 +9,7 @@ import dev.langchain4j.service.TokenStream;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.AiChatServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +49,7 @@ class AiChatProfilerIntegrationTest {
         AiChatProfiler profiler = new AiChatProfiler(commonProperties);
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new StubAssistant(profiler),
+                new NoOpCancelWorkflowService(),
                 new NoopChatMemoryStore(),
                 profiler
         );
@@ -153,6 +155,29 @@ class AiChatProfilerIntegrationTest {
 
         @Override
         public void deleteMessages(Object memoryId) {
+        }
+    }
+
+    private static class NoOpCancelWorkflowService implements CancelWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return normalizedUserMessage;
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            throw new UnsupportedOperationException();
         }
     }
 }

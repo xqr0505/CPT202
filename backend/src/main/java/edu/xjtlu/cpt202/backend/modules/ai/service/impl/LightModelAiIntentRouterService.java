@@ -27,32 +27,35 @@ import java.util.regex.Pattern;
 public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private static final Logger log = LoggerFactory.getLogger(LightModelAiIntentRouterService.class);
-    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "BOOKING", "DASHBOARD", "CHITCHAT");
+    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "BOOKING", "DASHBOARD", "CHITCHAT");
     private static final String ROUTER_PROMPT = """
         You are an intent router for ExpertLink. 
         Classify the user message into exactly ONE label:
 
         KNOWLEDGE
+        CANCEL
         BOOKING
         DASHBOARD
         CHITCHAT
 
         Definitions:
+        - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
         - BOOKING: user wants to do appointment workflow actions, such as:
-        booking a specialist, checking a specialist's availability/time slots, rescheduling, canceling, submitting booking details.
+        booking a specialist, checking a specialist's availability/time slots, rescheduling, submitting booking details.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
         - CHITCHAT: pure small talk only (greeting/thanks/self-introduction) with no product task.
 
         Priority rules:
         1) If message asks for own records/history/status list/overview -> DASHBOARD.
-        2) Else if message asks to book/reschedule/cancel/check specialist availability/time -> BOOKING.
-        3) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
-        4) If mixed or unclear, choose KNOWLEDGE by default.
-        5) Do NOT choose CHITCHAT unless it is pure small talk and contains no product request.
+        2) Else if message asks to cancel an existing booking -> CANCEL.
+        3) Else if message asks to book/check specialist availability/time -> BOOKING.
+        4) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
+        5) If mixed or unclear, choose KNOWLEDGE by default.
+        6) Do NOT choose CHITCHAT unless it is pure small talk and contains no product request.
 
         Output rules:
-        - Output exactly one word from: KNOWLEDGE, BOOKING, DASHBOARD, CHITCHAT
+        - Output exactly one word from: KNOWLEDGE, CANCEL, BOOKING, DASHBOARD, CHITCHAT
         - No extra text.
 
         User message:
@@ -79,8 +82,12 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     private static final Set<String> BOOKING_ACTION_HINTS = Set.of(
             "i want to book", "book for me", "book a specialist", "book specialist",
             "check availability", "specialist availability", "available time", "time slot",
-            "reschedule my booking", "cancel my booking", "submit booking",
+            "reschedule my booking", "submit booking",
             "schedule an appointment", "make a booking"
+    );
+    private static final Set<String> CANCEL_ACTION_HINTS = Set.of(
+            "cancel my booking", "cancel booking", "cancel appointment",
+            "cancel my appointment", "i want to cancel", "help me cancel"
     );
 
     private final ChatLanguageModel lightModel;
@@ -140,6 +147,9 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         }
         if (containsAny(normalizedMessage, KNOWLEDGE_HINTS.toArray(String[]::new))) {
             return AiIntent.KNOWLEDGE;
+        }
+        if (containsAny(normalizedMessage, CANCEL_ACTION_HINTS.toArray(String[]::new))) {
+            return AiIntent.CANCEL;
         }
         if (containsAny(normalizedMessage, DASHBOARD_HINTS.toArray(String[]::new))) {
             return AiIntent.DASHBOARD;

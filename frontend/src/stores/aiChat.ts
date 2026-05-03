@@ -18,7 +18,9 @@ import {
 
 const AI_BOOKING_DRAFT_EVENT = 'ai-booking-form-draft'
 const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
+const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
+const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
 
 interface StoredSessionUser {
   userId?: number | string | null
@@ -45,6 +47,10 @@ interface AiBookingSubmitPreviewPayload {
   topic: string
   customerNotes?: string | null
   warnings?: string[]
+}
+
+interface AiBookingCancelModalPayload {
+  bookingId: number
 }
 
 const resolveErrorMessage = (error: unknown): string => {
@@ -459,6 +465,36 @@ const emitBookingSubmitPreview = (assistantContent: string): void => {
   }))
 }
 
+const extractCancelModalBookingId = (content: string): number | null => {
+  const matched = content.match(CANCEL_MODAL_PATTERN)
+  if (!matched?.[1]) {
+    return null
+  }
+  const parsed = Number(matched[1])
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+  return Math.trunc(parsed)
+}
+
+const stripCancelModalMarker = (content: string): string => {
+  return content.replace(CANCEL_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const emitCancelModal = (assistantContent: string): string => {
+  if (typeof window === 'undefined') {
+    return assistantContent
+  }
+  const bookingId = extractCancelModalBookingId(assistantContent)
+  if (!bookingId) {
+    return assistantContent
+  }
+  window.dispatchEvent(new CustomEvent<AiBookingCancelModalPayload>(AI_BOOKING_CANCEL_MODAL_EVENT, {
+    detail: { bookingId }
+  }))
+  return stripCancelModalMarker(assistantContent)
+}
+
 interface AiBookingPageContext {
   specialistId?: number
   specialistName?: string
@@ -630,8 +666,9 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
   const finalizeAssistantMessage = (messageId: string): void => {
     updateMessage(messageId, message => {
-      message.content = message.content.trim()
-        ? message.content
+      const normalizedContent = emitCancelModal(message.content.trim())
+      message.content = normalizedContent.trim()
+        ? normalizedContent
         : AI_CHAT_EMPTY_RESPONSE_TEXT
       message.status = AI_CHAT_MESSAGE_STATUS.done
       emitBookingDraft(message.content)
@@ -715,10 +752,14 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
         removeMessage(assistantMessageId)
       } else {
         updateMessage(assistantMessageId, currentMessage => {
+          currentMessage.content = emitCancelModal(currentMessage.content)
           currentMessage.status = AI_CHAT_MESSAGE_STATUS.done
         })
-        emitBookingDraft(assistantMessage.content)
-        emitBookingSubmitPreview(assistantMessage.content)
+        const finalAssistantMessage = messages.value.find(messageItem => messageItem.id === assistantMessageId)
+        if (finalAssistantMessage) {
+          emitBookingDraft(finalAssistantMessage.content)
+          emitBookingSubmitPreview(finalAssistantMessage.content)
+        }
       }
       errorMessage.value = resolveErrorMessage(error)
       state.value = AI_CHAT_STATE.error

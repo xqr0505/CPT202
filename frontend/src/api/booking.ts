@@ -1,5 +1,6 @@
 import request from './request'
 import type { BookingStatus } from '@/constants/booking.ts'
+import type { AxiosRequestConfig } from 'axios'
 
 export interface UpcomingBookingResponse {
   id: string
@@ -220,14 +221,17 @@ export const getCustomerDashboardStatistics = (params?: DashboardStatisticsQuery
 }
 
 export const getBookingTopics = (): Promise<string[]> => {
-  return request.get<any, string[]>('/v1/booking-topics')
+  return request.get<unknown, string[]>('/v1/booking-topics')
 }
 
 export const createBooking = (data: CreateBookingRequest, suppressErrorMessage = false) => {
-  return request.post<any, CreateBookingResponse>(
+  const requestConfig = suppressErrorMessage
+    ? ({ suppressErrorMessage: true } as AxiosRequestConfig)
+    : undefined
+  return request.post<unknown, CreateBookingResponse>(
     '/v1/customer/bookings',
     data,
-    suppressErrorMessage ? ({ suppressErrorMessage: true } as any) : undefined
+    requestConfig
   )
 }
 
@@ -235,31 +239,33 @@ export const getBookingList = (params: BookingListQuery) => {
   return request.get<BookingListResponse>('/v1/customer/bookings/list', { params })
 }
 
-export const getBookingDetail = (bookingId: number | string) => {
-  return request.get<BookingDetail>(`/v1/customer/bookings/${bookingId}`)
+export const getBookingDetail = (bookingId: number | string): Promise<BookingDetail> => {
+  return request.get<unknown, BookingDetail>(`/v1/customer/bookings/${bookingId}`)
 }
 
 export const getBookingCancelQuote = (bookingId: number | string) => {
-  return request.post<any, BookingCancelQuote>(`/v1/customer/bookings/${bookingId}/cancel/quote`)
+  return request.post<unknown, BookingCancelQuote>(`/v1/customer/bookings/${bookingId}/cancel/quote`)
 }
 
 export const confirmBookingCancel = (bookingId: number | string) => {
-  return request.post<any, BookingCancelConfirm>(`/v1/customer/bookings/${bookingId}/cancel/confirm`)
+  return request.post<unknown, BookingCancelConfirm>(`/v1/customer/bookings/${bookingId}/cancel/confirm`)
 }
 
 export const getBookingRescheduleQuote = (bookingId: number | string, newSlotId: number | string) => {
-  return request.post<any, BookingRescheduleQuote>(
+  const requestConfig = { params: { newSlotId } }
+  return request.post<unknown, BookingRescheduleQuote>(
     `/v1/customer/bookings/${bookingId}/reschedule/quote`,
     null,
-    { params: { newSlotId } } as any
+    requestConfig
   )
 }
 
 export const confirmBookingReschedule = (bookingId: number | string, newSlotId: number | string) => {
-  return request.post<any, BookingRescheduleConfirm>(
+  const requestConfig = { params: { newSlotId } }
+  return request.post<unknown, BookingRescheduleConfirm>(
     `/v1/customer/bookings/${bookingId}/reschedule/confirm`,
     null,
-    { params: { newSlotId } } as any
+    requestConfig
   )
 }
 

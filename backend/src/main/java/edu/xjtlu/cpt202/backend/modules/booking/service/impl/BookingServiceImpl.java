@@ -712,12 +712,16 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         }
 
         LocalDateTime slotStart = resolveSlotStart(slot);
-        return customerBookingChangePolicyService.customerCancellationQuote(
+        BookingCancelQuoteVO quote = customerBookingChangePolicyService.customerCancellationQuote(
                 booking.getStatus(),
                 slotStart,
                 LocalDateTime.now(),
                 booking.getPrice()
         );
+        if (!quote.isAllowed()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
+        }
+        return quote;
     }
 
     @Override
@@ -762,13 +766,17 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         BigDecimal newPrice = resolvePrice(specialist.getConsultationFee());
 
         LocalDateTime slotStart = resolveSlotStart(currentSlot);
-        return customerBookingChangePolicyService.customerRescheduleQuote(
+        BookingRescheduleQuoteVO quote = customerBookingChangePolicyService.customerRescheduleQuote(
                 booking.getStatus(),
                 slotStart,
                 now,
                 booking.getPrice(),
                 newPrice
         );
+        if (!quote.isAllowed()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), quote.getMessage());
+        }
+        return quote;
     }
 
     @Override

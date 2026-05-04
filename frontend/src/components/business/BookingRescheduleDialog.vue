@@ -88,7 +88,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { confirmBookingReschedule, getBookingRescheduleQuote } from '@/api/booking'
+import { confirmBookingReschedule, getBookingDetail, getBookingRescheduleQuote } from '@/api/booking'
 import type { BookingListItem, BookingRescheduleQuote } from '@/api/booking'
 import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
@@ -98,6 +98,9 @@ import type { SpecialistAvailabilitySlot } from '@/types/specialist'
 const props = defineProps<{
   modelValue: boolean
   booking?: BookingListItem | null
+  bookingId?: number | null
+  prefillDate?: string
+  prefillSlotId?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -115,7 +118,7 @@ const selectedRescheduleSlotId = ref<number | null>(null)
 const rescheduleQuote = ref<BookingRescheduleQuote | null>(null)
 
 const resolvedBookingId = computed(() => {
-  const raw = props.booking?.id
+  const raw = resolvedBooking.value?.id ?? props.bookingId
   if (!raw) {
     return ''
   }
@@ -131,25 +134,55 @@ watch(visible, value => {
 })
 
 watch(
-  () => [visible.value, props.booking?.id] as const,
-  async ([isVisible, bookingId]) => {
-    if (!isVisible || !bookingId || !props.booking) {
+  () => [visible.value, props.booking?.id, props.bookingId, props.prefillDate, props.prefillSlotId] as const,
+  async ([isVisible, bookingRowId, bookingId, prefillDate, prefillSlotId]) => {
+    if (!isVisible || (!bookingRowId && !bookingId)) {
       return
     }
-    rescheduleDate.value = toLocalDate(props.booking.appointmentDateTime)
+    if (!props.booking && bookingId) {
+      try {
+        const detail = await getBookingDetail(bookingId)
+        hydratedBooking.value = {
+          id: String(detail.bookingId),
+          specialistId: String(detail.specialistId),
+          specialistName: detail.specialistName,
+          specialistAvatar: detail.specialistAvatar,
+          appointmentDateTime: `${detail.slotDate} ${detail.startTime}`,
+          serviceName: detail.topic || 'Consultation',
+          status: String(detail.status || ''),
+          amount: Number(detail.price ?? 0)
+        }
+      } catch {
+        hydratedBooking.value = null
+        ElMessage.error('Failed to load booking details.')
+        return
+      }
+    }
+    const booking = resolvedBooking.value
+    if (!booking) {
+      return
+    }
+    rescheduleDate.value = prefillDate || toLocalDate(booking.appointmentDateTime)
     await loadRescheduleAvailability()
+    if (prefillSlotId && rescheduleAvailability.value.some(slot => slot.id === prefillSlotId)) {
+      await handleRescheduleSlotSelect(prefillSlotId)
+    }
   },
   { immediate: true }
 )
 
+const hydratedBooking = ref<BookingListItem | null>(null)
+
+const resolvedBooking = computed(() => props.booking || hydratedBooking.value)
+
 const loadRescheduleAvailability = async () => {
-  if (!props.booking || !rescheduleDate.value) {
+  if (!resolvedBooking.value || !rescheduleDate.value) {
     rescheduleAvailability.value = []
     return
   }
   rescheduleAvailabilityLoading.value = true
   try {
-    const slots = await fetchSpecialistAvailability(Number(props.booking.specialistId), rescheduleDate.value)
+    const slots = await fetchSpecialistAvailability(Number(resolvedBooking.value.specialistId), rescheduleDate.value)
     rescheduleAvailability.value = (slots || []).filter(
       slot => slot.status === 'AVAILABLE' && slotStartsAfterTwoHours(slot),
     )
@@ -199,6 +232,7 @@ const confirmReschedule = async () => {
 }
 
 const resetState = () => {
+  hydratedBooking.value = null
   rescheduleDate.value = ''
   rescheduleAvailability.value = []
   selectedRescheduleSlotId.value = null

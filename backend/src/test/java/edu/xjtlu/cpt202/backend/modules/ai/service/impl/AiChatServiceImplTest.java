@@ -11,6 +11,7 @@ import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +43,7 @@ class AiChatServiceImplTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new MemoryAwareAssistant(chatMemoryStore),
                 new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
                 chatMemoryStore,
                 aiChatProfiler
         );
@@ -69,6 +71,7 @@ class AiChatServiceImplTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 echoAssistant,
                 new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
                 aiChatProfiler
         );
@@ -89,6 +92,7 @@ class AiChatServiceImplTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
                 cancelWorkflowService,
+                new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
                 aiChatProfiler
         );
@@ -107,6 +111,7 @@ class AiChatServiceImplTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
                 cancelWorkflowService,
+                new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
                 aiChatProfiler
         );
@@ -125,6 +130,7 @@ class AiChatServiceImplTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
                 cancelWorkflowService,
+                new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
                 aiChatProfiler
         );
@@ -177,6 +183,29 @@ class AiChatServiceImplTest {
     }
 
     private static class NoOpCancelWorkflowService implements CancelWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return normalizedUserMessage;
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            return new SimpleTokenStream(normalizedUserMessage);
+        }
+    }
+
+    private static class NoOpRescheduleWorkflowService implements RescheduleWorkflowService {
 
         @Override
         public boolean hasActiveTask(Long userId) {

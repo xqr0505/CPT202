@@ -10,6 +10,7 @@ import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.AiChatServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +51,7 @@ class AiChatProfilerIntegrationTest {
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new StubAssistant(profiler),
                 new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
                 new NoopChatMemoryStore(),
                 profiler
         );
@@ -159,6 +161,29 @@ class AiChatProfilerIntegrationTest {
     }
 
     private static class NoOpCancelWorkflowService implements CancelWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return normalizedUserMessage;
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static class NoOpRescheduleWorkflowService implements RescheduleWorkflowService {
 
         @Override
         public boolean hasActiveTask(Long userId) {

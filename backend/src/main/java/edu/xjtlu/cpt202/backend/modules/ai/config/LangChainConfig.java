@@ -16,6 +16,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowAssistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.LightModelAiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
@@ -176,6 +177,13 @@ public class LangChainConfig {
     @Bean
     public CancelWorkflowAssistant cancelWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
         return AiServices.builder(CancelWorkflowAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .build();
+    }
+
+    @Bean
+    public RescheduleWorkflowAssistant rescheduleWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+        return AiServices.builder(RescheduleWorkflowAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
                 .build();
     }

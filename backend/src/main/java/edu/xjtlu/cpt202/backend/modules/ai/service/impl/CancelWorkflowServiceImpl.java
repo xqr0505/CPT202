@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.model.output.Response;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.ai.model.CancelTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowAssistant;
@@ -173,7 +174,13 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
             return CANCEL_TASK_ABORTED_MARKER + " Cancellation flow lost the target booking. Please start again.";
         }
 
-        BookingCancelQuoteVO quote = bookingService.customerCancellationQuote(bookingId, userId);
+        BookingCancelQuoteVO quote;
+        try {
+            quote = bookingService.customerCancellationQuote(bookingId, userId);
+        } catch (BusinessException exception) {
+            cancelTaskStateStore.clear(userId);
+            return "Sorry, this booking cannot be cancelled. " + safeText(exception.getMessage());
+        }
         cancelTaskStateStore.clear(userId);
 
         if (!quote.isAllowed()) {

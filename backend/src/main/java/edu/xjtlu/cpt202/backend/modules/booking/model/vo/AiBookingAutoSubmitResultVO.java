@@ -46,6 +46,8 @@ public class AiBookingAutoSubmitResultVO {
 
     private String customerNotes;
 
+    private List<String> availableTopics;
+
     private List<String> warnings;
 
     private List<AvailableSlotVO> availableSlots;

@@ -3,6 +3,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
@@ -503,6 +504,9 @@ class RescheduleWorkflowServiceImplTest {
         public BookingRescheduleQuoteVO customerRescheduleQuote(Long bookingId, Long newSlotId, Long currentCustomerId) {
             lastRescheduleQuoteBookingId = bookingId;
             lastRescheduleQuoteSlotId = newSlotId;
+            if (rescheduleQuote != null && !rescheduleQuote.isAllowed()) {
+                throw new BusinessException(400, rescheduleQuote.getMessage());
+            }
             return rescheduleQuote;
         }
 

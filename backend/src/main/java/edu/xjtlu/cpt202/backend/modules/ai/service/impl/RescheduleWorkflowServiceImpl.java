@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.service.TokenStream;
+import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
@@ -197,7 +198,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         state.setSuggestedSlotId(suggestedSlotId);
 
         if (suggestedSlotId != null) {
-            BookingRescheduleQuoteVO quote = bookingService.customerRescheduleQuote(bookingId, suggestedSlotId, userId);
+            BookingRescheduleQuoteVO quote;
+            try {
+                quote = bookingService.customerRescheduleQuote(bookingId, suggestedSlotId, userId);
+            } catch (BusinessException exception) {
+                rescheduleTaskStateStore.clear(userId);
+                return safeText(exception.getMessage());
+            }
             rescheduleTaskStateStore.clear(userId);
             if (!quote.isAllowed()) {
                 return safeText(quote.getMessage());

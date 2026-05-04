@@ -717,6 +717,39 @@ public class BookingServiceImplTest {
     }
 
     @Test
+    void customerCancellationQuote_BlockedByPolicy_ThrowsParamError() {
+        Long bookingId = 203L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSlotId(88L);
+        booking.setStatus(BookingStatusEnum.CONFIRMED.name());
+        booking.setPrice(new BigDecimal("120.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(88L);
+        slot.setSlotDate(LocalDate.of(2026, 5, 1));
+        slot.setStartTime(LocalTime.of(14, 0));
+
+        BookingCancelQuoteVO quoted = BookingCancelQuoteVO.builder()
+                .allowed(false)
+                .message("Less than 2 hours to start, cannot cancel or reschedule")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(88L)).thenReturn(slot);
+        when(customerBookingChangePolicyService.customerCancellationQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerCancellationQuote(bookingId, 1L));
+
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        assertEquals("Less than 2 hours to start, cannot cancel or reschedule", ex.getMessage());
+    }
+
+    @Test
     void customerRescheduleQuote_DelegatesToPolicy() {
         Long bookingId = 400L;
         Long newSlotId = 77L;
@@ -772,6 +805,55 @@ public class BookingServiceImplTest {
         BookingRescheduleQuoteVO result = bookingService.customerRescheduleQuote(bookingId, newSlotId, 1L);
         assertTrue(result.isAllowed());
         assertEquals(new BigDecimal("20.00"), result.getPayableAmount());
+    }
+
+    @Test
+    void customerRescheduleQuote_BlockedByPolicy_ThrowsParamError() {
+        Long bookingId = 403L;
+        Long newSlotId = 87L;
+        Booking booking = new Booking();
+        booking.setId(bookingId);
+        booking.setCustomerId(1L);
+        booking.setSpecialistId(5L);
+        booking.setSlotId(55L);
+        booking.setStatus("CONFIRMED");
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot currentSlot = new TimeSlot();
+        currentSlot.setId(55L);
+        currentSlot.setSpecialistId(5L);
+        currentSlot.setSlotDate(LocalDate.of(2026, 5, 1));
+        currentSlot.setStartTime(LocalTime.of(14, 0));
+
+        TimeSlot newSlot = new TimeSlot();
+        newSlot.setId(newSlotId);
+        newSlot.setSpecialistId(5L);
+        newSlot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+        newSlot.setSlotDate(LocalDate.now().plusDays(3));
+        newSlot.setStartTime(LocalTime.of(10, 0));
+
+        SpecialistDetailVO specialist = new SpecialistDetailVO();
+        specialist.setConsultationFee(new BigDecimal("120.00"));
+        specialist.setStatus("ACTIVE");
+
+        BookingRescheduleQuoteVO quoted = BookingRescheduleQuoteVO.builder()
+                .allowed(false)
+                .message("Less than 2 hours to start, cannot reschedule")
+                .build();
+
+        when(bookingMapper.selectById(bookingId)).thenReturn(booking);
+        when(timeSlotMapper.selectById(55L)).thenReturn(currentSlot);
+        when(timeSlotMapper.selectById(newSlotId)).thenReturn(newSlot);
+        when(specialistQueryService.getSpecialistDetail(5L)).thenReturn(specialist);
+        when(customerBookingChangePolicyService.customerRescheduleQuote(
+                anyString(), any(LocalDateTime.class), any(LocalDateTime.class), any(BigDecimal.class), any(BigDecimal.class)))
+                .thenReturn(quoted);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> bookingService.customerRescheduleQuote(bookingId, newSlotId, 1L));
+
+        assertEquals(ResultCodeEnum.PARAM_ERROR.getCode(), ex.getCode());
+        assertEquals("Less than 2 hours to start, cannot reschedule", ex.getMessage());
     }
 
     @Test

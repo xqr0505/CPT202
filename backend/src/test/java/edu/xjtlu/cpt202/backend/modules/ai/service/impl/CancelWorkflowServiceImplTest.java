@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
+import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.modules.ai.model.CancelTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
@@ -264,6 +265,9 @@ class CancelWorkflowServiceImplTest {
 
         @Override
         public BookingCancelQuoteVO customerCancellationQuote(Long bookingId, Long currentCustomerId) {
+            if (quote != null && !quote.isAllowed()) {
+                throw new BusinessException(400, quote.getMessage());
+            }
             return quote;
         }
 

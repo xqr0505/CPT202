@@ -10,7 +10,9 @@ import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -40,11 +42,15 @@ class AiChatServiceImplTest {
     @Test
     void shouldKeepContextPerCurrentUserAndClearMemory() {
         InMemoryChatMemoryStore chatMemoryStore = new InMemoryChatMemoryStore();
+        RecordingCancelTaskStateStore cancelTaskStateStore = new RecordingCancelTaskStateStore();
+        RecordingRescheduleTaskStateStore rescheduleTaskStateStore = new RecordingRescheduleTaskStateStore();
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new MemoryAwareAssistant(chatMemoryStore),
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 chatMemoryStore,
+                cancelTaskStateStore,
+                rescheduleTaskStateStore,
                 aiChatProfiler
         );
 
@@ -63,6 +69,8 @@ class AiChatServiceImplTest {
         assertEquals("history=2", secondReply);
         assertEquals("history=0", otherUserReply);
         assertEquals("history=0", replyAfterClear);
+        assertEquals(List.of(1001L), cancelTaskStateStore.clearedUserIds());
+        assertEquals(List.of(1001L), rescheduleTaskStateStore.clearedUserIds());
     }
 
     @Test
@@ -73,6 +81,8 @@ class AiChatServiceImplTest {
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
                 aiChatProfiler
         );
 
@@ -94,6 +104,8 @@ class AiChatServiceImplTest {
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
                 aiChatProfiler
         );
 
@@ -113,6 +125,8 @@ class AiChatServiceImplTest {
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
                 aiChatProfiler
         );
 
@@ -132,6 +146,8 @@ class AiChatServiceImplTest {
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
                 aiChatProfiler
         );
 
@@ -264,6 +280,54 @@ class AiChatServiceImplTest {
 
         private String lastOriginalMessage() {
             return lastOriginalMessage;
+        }
+    }
+
+    private static class RecordingCancelTaskStateStore implements CancelTaskStateStore {
+
+        private final java.util.List<Long> clearedUserIds = new java.util.ArrayList<>();
+
+        @Override
+        public java.util.Optional<edu.xjtlu.cpt202.backend.modules.ai.model.CancelTaskState> get(Long userId) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.CancelTaskState state) {
+            // Not needed in this test.
+        }
+
+        @Override
+        public void clear(Long userId) {
+            clearedUserIds.add(userId);
+        }
+
+        private java.util.List<Long> clearedUserIds() {
+            return clearedUserIds;
+        }
+    }
+
+    private static class RecordingRescheduleTaskStateStore implements RescheduleTaskStateStore {
+
+        private final java.util.List<Long> clearedUserIds = new java.util.ArrayList<>();
+
+        @Override
+        public java.util.Optional<edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState> get(Long userId) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState state) {
+            // Not needed in this test.
+        }
+
+        @Override
+        public void clear(Long userId) {
+            clearedUserIds.add(userId);
+        }
+
+        private java.util.List<Long> clearedUserIds() {
+            return clearedUserIds;
         }
     }
 

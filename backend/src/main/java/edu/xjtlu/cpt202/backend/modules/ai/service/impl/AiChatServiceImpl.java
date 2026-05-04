@@ -6,7 +6,9 @@ import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +30,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final CancelWorkflowService cancelWorkflowService;
     private final RescheduleWorkflowService rescheduleWorkflowService;
     private final ChatMemoryStore chatMemoryStore;
+    private final CancelTaskStateStore cancelTaskStateStore;
+    private final RescheduleTaskStateStore rescheduleTaskStateStore;
     private final AiChatProfiler aiChatProfiler;
 
     public AiChatServiceImpl(
@@ -35,12 +39,16 @@ public class AiChatServiceImpl implements AiChatService {
             CancelWorkflowService cancelWorkflowService,
             RescheduleWorkflowService rescheduleWorkflowService,
             ChatMemoryStore chatMemoryStore,
+            CancelTaskStateStore cancelTaskStateStore,
+            RescheduleTaskStateStore rescheduleTaskStateStore,
             AiChatProfiler aiChatProfiler
     ) {
         this.assistant = assistant;
         this.cancelWorkflowService = cancelWorkflowService;
         this.rescheduleWorkflowService = rescheduleWorkflowService;
         this.chatMemoryStore = chatMemoryStore;
+        this.cancelTaskStateStore = cancelTaskStateStore;
+        this.rescheduleTaskStateStore = rescheduleTaskStateStore;
         this.aiChatProfiler = aiChatProfiler;
     }
 
@@ -88,7 +96,11 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public void clearCurrentUserMemory() {
-        chatMemoryStore.deleteMessages(currentUserId());
+        Long userId = currentUserId();
+        chatMemoryStore.deleteMessages(userId);
+        // Clearing chat history should also clear any active workflow state so the UI truly "resets".
+        cancelTaskStateStore.clear(userId);
+        rescheduleTaskStateStore.clear(userId);
     }
 
     private Long currentUserId() {

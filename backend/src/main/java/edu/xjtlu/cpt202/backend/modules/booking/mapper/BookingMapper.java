@@ -151,6 +151,11 @@ public interface BookingMapper extends BaseMapper<Booking> {
             @Param("timeoutMinutes") long timeoutMinutes
     );
 
+    List<SpecialistPendingBookingVO> selectExpiredPendingRequests(
+            @Param("status") String status,
+            @Param("timeoutMinutes") long timeoutMinutes
+    );
+
     List<SpecialistHandledBookingVO> selectHandledRequestsForSpecialist(
             @Param("currentUserId") Long currentUserId
     );

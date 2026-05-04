@@ -17,5 +17,6 @@ public class BookingLifecycleScheduler {
     @Scheduled(fixedDelayString = "${booking.auto-complete.fixed-delay-ms:60000}")
     public void autoCompleteExpiredConfirmedBookings() {
         bookingService.autoCompleteExpiredConfirmedBookings();
+        bookingService.autoCancelExpiredPendingBookings();
     }
 }

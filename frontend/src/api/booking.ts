@@ -235,8 +235,8 @@ export const getBookingList = (params: BookingListQuery) => {
   return request.get<BookingListResponse>('/v1/customer/bookings/list', { params })
 }
 
-export const getBookingDetail = (bookingId: number | string) => {
-  return request.get<BookingDetail>(`/v1/customer/bookings/${bookingId}`)
+export const getBookingDetail = (bookingId: number | string): Promise<BookingDetail> => {
+  return request.get<any, BookingDetail>(`/v1/customer/bookings/${bookingId}`)
 }
 
 export const getBookingCancelQuote = (bookingId: number | string) => {

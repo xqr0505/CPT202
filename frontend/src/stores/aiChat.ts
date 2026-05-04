@@ -19,8 +19,10 @@ import {
 const AI_BOOKING_DRAFT_EVENT = 'ai-booking-form-draft'
 const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
 const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
+const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
+const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):(\d{4}-\d{2}-\d{2})?:(\d*)\]/i
 
 interface StoredSessionUser {
   userId?: number | string | null
@@ -51,6 +53,12 @@ interface AiBookingSubmitPreviewPayload {
 
 interface AiBookingCancelModalPayload {
   bookingId: number
+}
+
+interface AiBookingRescheduleModalPayload {
+  bookingId: number
+  targetDate?: string | null
+  suggestedSlotId?: number | null
 }
 
 const resolveErrorMessage = (error: unknown): string => {
@@ -477,8 +485,30 @@ const extractCancelModalBookingId = (content: string): number | null => {
   return Math.trunc(parsed)
 }
 
+const extractRescheduleModalPayload = (content: string): AiBookingRescheduleModalPayload | null => {
+  const matched = content.match(RESCHEDULE_MODAL_PATTERN)
+  if (!matched?.[1]) {
+    return null
+  }
+  const bookingId = Number(matched[1])
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return null
+  }
+  const targetDate = normalizeString(matched[2] || null)
+  const suggestedSlotId = normalizeNumericId(matched[3] || null) ?? null
+  return {
+    bookingId: Math.trunc(bookingId),
+    targetDate,
+    suggestedSlotId
+  }
+}
+
 const stripCancelModalMarker = (content: string): string => {
   return content.replace(CANCEL_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const stripRescheduleModalMarker = (content: string): string => {
+  return content.replace(RESCHEDULE_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 const emitCancelModal = (assistantContent: string): string => {
@@ -492,6 +522,19 @@ const emitCancelModal = (assistantContent: string): string => {
     }))
   }
   return stripCancelModalMarker(assistantContent)
+}
+
+const emitRescheduleModal = (assistantContent: string): string => {
+  if (typeof window === 'undefined') {
+    return assistantContent
+  }
+  const payload = extractRescheduleModalPayload(assistantContent)
+  if (payload) {
+    window.dispatchEvent(new CustomEvent<AiBookingRescheduleModalPayload>(AI_BOOKING_RESCHEDULE_MODAL_EVENT, {
+      detail: payload
+    }))
+  }
+  return stripRescheduleModalMarker(assistantContent)
 }
 
 interface AiBookingPageContext {
@@ -665,7 +708,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
   const finalizeAssistantMessage = (messageId: string): void => {
     updateMessage(messageId, message => {
-      const normalizedContent = emitCancelModal(message.content.trim())
+      const normalizedContent = emitRescheduleModal(emitCancelModal(message.content.trim()))
       message.content = normalizedContent.trim()
         ? normalizedContent
         : AI_CHAT_EMPTY_RESPONSE_TEXT
@@ -751,7 +794,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
         removeMessage(assistantMessageId)
       } else {
         updateMessage(assistantMessageId, currentMessage => {
-          currentMessage.content = emitCancelModal(currentMessage.content)
+          currentMessage.content = emitRescheduleModal(emitCancelModal(currentMessage.content))
           currentMessage.status = AI_CHAT_MESSAGE_STATUS.done
         })
         const finalAssistantMessage = messages.value.find(messageItem => messageItem.id === assistantMessageId)

@@ -7,6 +7,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
@@ -25,17 +26,20 @@ public class AiChatServiceImpl implements AiChatService {
 
     private final Assistant assistant;
     private final CancelWorkflowService cancelWorkflowService;
+    private final RescheduleWorkflowService rescheduleWorkflowService;
     private final ChatMemoryStore chatMemoryStore;
     private final AiChatProfiler aiChatProfiler;
 
     public AiChatServiceImpl(
             Assistant assistant,
             CancelWorkflowService cancelWorkflowService,
+            RescheduleWorkflowService rescheduleWorkflowService,
             ChatMemoryStore chatMemoryStore,
             AiChatProfiler aiChatProfiler
     ) {
         this.assistant = assistant;
         this.cancelWorkflowService = cancelWorkflowService;
+        this.rescheduleWorkflowService = rescheduleWorkflowService;
         this.chatMemoryStore = chatMemoryStore;
         this.aiChatProfiler = aiChatProfiler;
     }
@@ -54,6 +58,10 @@ public class AiChatServiceImpl implements AiChatService {
                 || cancelWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
             return cancelWorkflowService.handle(userId, normalizedUserMessage);
         }
+        if (rescheduleWorkflowService.hasActiveTask(userId)
+                || rescheduleWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return rescheduleWorkflowService.handle(userId, normalizedUserMessage);
+        }
         return assistant.chat(userId, normalizedUserMessage);
     }
 
@@ -70,6 +78,10 @@ public class AiChatServiceImpl implements AiChatService {
         if (cancelWorkflowService.hasActiveTask(memoryId)
                 || cancelWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
             return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.hasActiveTask(memoryId)
+                || rescheduleWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return rescheduleWorkflowService.streamHandle(memoryId, normalizedUserMessage);
         }
         return assistant.streamChat(memoryId, normalizedUserMessage);
     }

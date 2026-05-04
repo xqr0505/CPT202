@@ -49,6 +49,14 @@
       :booking-id="selectedCancelBookingId"
       @success="handleCancelSuccess"
     />
+    <BookingRescheduleDialog
+      v-model="showRescheduleDialog"
+      :booking="selectedRescheduleBooking"
+      :booking-id="selectedRescheduleBookingId"
+      :prefill-date="selectedRescheduleDate"
+      :prefill-slot-id="selectedRescheduleSlotId"
+      @success="handleRescheduleSuccess"
+    />
   </el-drawer>
 </template>
 
@@ -56,6 +64,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import BookingCancelDialog from '@/components/business/BookingCancelDialog.vue'
+import BookingRescheduleDialog from '@/components/business/BookingRescheduleDialog.vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import {
   AI_CHAT_CLEAR_BUTTON_TEXT,
@@ -64,18 +73,31 @@ import {
   AI_DRAWER_SIZE,
   AI_DRAWER_TITLE
 } from '@/constants/ai'
+import { getBookingDetail, type BookingListItem } from '@/api/booking'
 import AiComposer from './AiComposer.vue'
 import AiMessageList from './AiMessageList.vue'
 
 const aiChatStore = useAiChatStore()
 const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
+const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 
 interface AiBookingCancelModalPayload {
   bookingId: number
 }
 
+interface AiBookingRescheduleModalPayload {
+  bookingId: number
+  targetDate?: string | null
+  suggestedSlotId?: number | null
+}
+
 const showCancelDialog = ref(false)
 const selectedCancelBookingId = ref<number | null>(null)
+const showRescheduleDialog = ref(false)
+const selectedRescheduleBooking = ref<BookingListItem | null>(null)
+const selectedRescheduleBookingId = ref<number | null>(null)
+const selectedRescheduleDate = ref('')
+const selectedRescheduleSlotId = ref<number | null>(null)
 const isMobile = ref(window.innerWidth <= 640)
 
 const updateMobileState = () => {
@@ -101,6 +123,17 @@ const handleCancelSuccess = () => {
   resetCancelDialogState()
 }
 
+const resetRescheduleDialogState = () => {
+  selectedRescheduleBooking.value = null
+  selectedRescheduleBookingId.value = null
+  selectedRescheduleDate.value = ''
+  selectedRescheduleSlotId.value = null
+}
+
+const handleRescheduleSuccess = () => {
+  resetRescheduleDialogState()
+}
+
 const onAiBookingCancelModal = (event: Event): void => {
   const customEvent = event as CustomEvent<AiBookingCancelModalPayload>
   const bookingId = Number(customEvent.detail?.bookingId || 0)
@@ -110,16 +143,56 @@ const onAiBookingCancelModal = (event: Event): void => {
   openCancelModalFromAi(bookingId)
 }
 
+const mapBookingDetailToListItem = (detail: Awaited<ReturnType<typeof getBookingDetail>>): BookingListItem => ({
+  id: String(detail.bookingId),
+  specialistId: String(detail.specialistId),
+  specialistName: detail.specialistName,
+  specialistAvatar: detail.specialistAvatar,
+  appointmentDateTime: `${detail.slotDate} ${detail.startTime}`,
+  serviceName: detail.topic || 'Consultation',
+  status: String(detail.status || ''),
+  amount: Number(detail.price ?? 0)
+})
+
+const openRescheduleModalFromAi = async (payload: AiBookingRescheduleModalPayload) => {
+  if (!payload.bookingId || payload.bookingId <= 0) {
+    return
+  }
+  const detail = await getBookingDetail(payload.bookingId)
+  selectedRescheduleBooking.value = mapBookingDetailToListItem(detail)
+  selectedRescheduleBookingId.value = payload.bookingId
+  selectedRescheduleDate.value = payload.targetDate || detail.slotDate || ''
+  selectedRescheduleSlotId.value = payload.suggestedSlotId || null
+  showRescheduleDialog.value = true
+}
+
+const onAiBookingRescheduleModal = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingRescheduleModalPayload>
+  const bookingId = Number(customEvent.detail?.bookingId || 0)
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return
+  }
+  void openRescheduleModalFromAi({
+    bookingId,
+    targetDate: customEvent.detail?.targetDate || null,
+    suggestedSlotId: customEvent.detail?.suggestedSlotId || null
+  })
+}
+
 onMounted(() => {
   window.addEventListener('resize', updateMobileState)
   window.addEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
+  window.addEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateMobileState)
   window.removeEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
+  window.removeEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
   showCancelDialog.value = false
+  showRescheduleDialog.value = false
   resetCancelDialogState()
+  resetRescheduleDialogState()
 })
 
 const drawerVisible = computed<boolean>({
@@ -132,7 +205,9 @@ const drawerVisible = computed<boolean>({
 
     aiChatStore.closeDrawer()
     showCancelDialog.value = false
+    showRescheduleDialog.value = false
     resetCancelDialogState()
+    resetRescheduleDialogState()
   }
 })
 </script>

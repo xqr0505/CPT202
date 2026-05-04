@@ -48,6 +48,7 @@ interface AiBookingSubmitPreviewPayload {
   consultationFee?: number | null
   topic: string
   customerNotes?: string | null
+  availableTopics?: string[]
   warnings?: string[]
 }
 
@@ -429,6 +430,10 @@ const tryExtractBookingSubmitPreview = (content: string): AiBookingSubmitPreview
     const warnings = Array.isArray(warningsRaw)
       ? warningsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
       : undefined
+    const availableTopicsRaw = getParsedValueByAliases(parsed, ['availableTopics', 'available_topics', '\u53ef\u9009\u4e3b\u9898'])
+    const availableTopics = Array.isArray(availableTopicsRaw)
+      ? availableTopicsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : undefined
 
     const hasStructuredBookingFields = Boolean(
       specialistIdRaw || slotIdRaw || topic || slotDate || startTime || endTime || specialistName
@@ -452,6 +457,7 @@ const tryExtractBookingSubmitPreview = (content: string): AiBookingSubmitPreview
         specialistName: specialistName || normalizeString(pageContext?.specialistName),
         consultationFee: consultationFee ?? normalizeNumber(pageContext?.consultationFee),
         customerNotes: customerNotes || normalizeString(pageContext?.selectedCustomerNotes),
+        availableTopics,
         warnings
       }
     }

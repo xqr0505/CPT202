@@ -9,6 +9,7 @@ import dev.langchain4j.service.TokenStream;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.AiChatServiceImpl;
@@ -50,6 +51,7 @@ class AiChatProfilerIntegrationTest {
         AiChatProfiler profiler = new AiChatProfiler(commonProperties);
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new StubAssistant(profiler),
+                new NoOpBookingWorkflowService(),
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 new NoopChatMemoryStore(),
@@ -161,6 +163,29 @@ class AiChatProfilerIntegrationTest {
     }
 
     private static class NoOpCancelWorkflowService implements CancelWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return normalizedUserMessage;
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static class NoOpBookingWorkflowService implements BookingWorkflowService {
 
         @Override
         public boolean hasActiveTask(Long userId) {

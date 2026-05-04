@@ -10,6 +10,7 @@ import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +43,7 @@ class AiChatServiceImplTest {
         InMemoryChatMemoryStore chatMemoryStore = new InMemoryChatMemoryStore();
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 new MemoryAwareAssistant(chatMemoryStore),
+                new NoOpBookingWorkflowService(),
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 chatMemoryStore,
@@ -70,6 +72,7 @@ class AiChatServiceImplTest {
         EchoAssistant echoAssistant = new EchoAssistant();
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 echoAssistant,
+                new NoOpBookingWorkflowService(),
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
@@ -91,6 +94,7 @@ class AiChatServiceImplTest {
         RecordingCancelWorkflowService cancelWorkflowService = new RecordingCancelWorkflowService(true, false);
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
+                new NoOpBookingWorkflowService(),
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
@@ -110,6 +114,7 @@ class AiChatServiceImplTest {
         RecordingCancelWorkflowService cancelWorkflowService = new RecordingCancelWorkflowService(false, true);
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
+                new NoOpBookingWorkflowService(),
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
@@ -129,6 +134,7 @@ class AiChatServiceImplTest {
         RecordingCancelWorkflowService cancelWorkflowService = new RecordingCancelWorkflowService(false, false);
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
                 assistant,
+                new NoOpBookingWorkflowService(),
                 cancelWorkflowService,
                 new NoOpRescheduleWorkflowService(),
                 new InMemoryChatMemoryStore(),
@@ -139,6 +145,66 @@ class AiChatServiceImplTest {
         String reply = aiChatService.chat("Check upcoming bookings");
 
         assertTrue(reply.contains("Check upcoming bookings"));
+    }
+
+    @Test
+    void shouldShortCircuitToBookingWorkflowWhenTaskIsActive() {
+        EchoAssistant assistant = new EchoAssistant();
+        RecordingBookingWorkflowService bookingWorkflowService = new RecordingBookingWorkflowService(true, false);
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                assistant,
+                bookingWorkflowService,
+                new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
+                new InMemoryChatMemoryStore(),
+                aiChatProfiler
+        );
+
+        UserContextHolder.setUserId(1001L);
+        String reply = aiChatService.chat("Book now");
+
+        assertEquals("booking-workflow", reply);
+        assertEquals("Book now", bookingWorkflowService.lastOriginalMessage());
+    }
+
+    @Test
+    void shouldStartBookingWorkflowWhenIntentMatched() {
+        EchoAssistant assistant = new EchoAssistant();
+        RecordingBookingWorkflowService bookingWorkflowService = new RecordingBookingWorkflowService(false, true);
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                assistant,
+                bookingWorkflowService,
+                new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
+                new InMemoryChatMemoryStore(),
+                aiChatProfiler
+        );
+
+        UserContextHolder.setUserId(1001L);
+        String reply = aiChatService.chat("Please submit booking now");
+
+        assertEquals("booking-workflow", reply);
+        assertEquals("Please submit booking now", bookingWorkflowService.lastOriginalMessage());
+    }
+
+    @Test
+    void shouldFallbackToNormalAssistantWhenBookingWorkflowAborted() {
+        EchoAssistant assistant = new EchoAssistant();
+        BookingWorkflowService bookingWorkflowService = new AbortingBookingWorkflowService();
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                assistant,
+                bookingWorkflowService,
+                new NoOpCancelWorkflowService(),
+                new NoOpRescheduleWorkflowService(),
+                new InMemoryChatMemoryStore(),
+                aiChatProfiler
+        );
+
+        UserContextHolder.setUserId(1001L);
+        String reply = aiChatService.chat("你好");
+
+        assertTrue(reply.contains("你好"));
+        assertTrue(!reply.contains("[BOOKING_TASK_ABORTED]"));
     }
 
     private static class MemoryAwareAssistant implements Assistant {
@@ -183,6 +249,29 @@ class AiChatServiceImplTest {
     }
 
     private static class NoOpCancelWorkflowService implements CancelWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return normalizedUserMessage;
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            return new SimpleTokenStream(normalizedUserMessage);
+        }
+    }
+
+    private static class NoOpBookingWorkflowService implements BookingWorkflowService {
 
         @Override
         public boolean hasActiveTask(Long userId) {
@@ -264,6 +353,68 @@ class AiChatServiceImplTest {
 
         private String lastOriginalMessage() {
             return lastOriginalMessage;
+        }
+    }
+
+    private static class RecordingBookingWorkflowService implements BookingWorkflowService {
+
+        private final boolean activeTask;
+        private final boolean shouldStart;
+        private String lastOriginalMessage;
+
+        private RecordingBookingWorkflowService(boolean activeTask, boolean shouldStart) {
+            this.activeTask = activeTask;
+            this.shouldStart = shouldStart;
+        }
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return activeTask;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            this.lastOriginalMessage = originalUserMessage;
+            return shouldStart;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            this.lastOriginalMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+            return "booking-workflow";
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            this.lastOriginalMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+            return new SimpleTokenStream("booking-workflow");
+        }
+
+        private String lastOriginalMessage() {
+            return lastOriginalMessage;
+        }
+    }
+
+    private static class AbortingBookingWorkflowService implements BookingWorkflowService {
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return true;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            return false;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            return "[BOOKING_TASK_ABORTED] Booking flow closed.";
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            return new SimpleTokenStream("[BOOKING_TASK_ABORTED] Booking flow closed.");
         }
     }
 

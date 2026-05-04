@@ -938,7 +938,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                         .eq(TimeSlot::getId, slot.getId())
                         .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
         );
-        if (updated == 0) {
+        if (updated == 0 && TimeSlotStatusEnum.BOOKED.name().equals(slot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
         }
 

@@ -8,6 +8,7 @@ import dev.langchain4j.model.output.Response;
 import dev.langchain4j.service.TokenStream;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.common.context.UserContextHolder;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.BookingWorkflowService;
@@ -57,6 +58,7 @@ class AiChatProfilerIntegrationTest {
                 new NoOpCancelWorkflowService(),
                 new NoOpRescheduleWorkflowService(),
                 new NoopChatMemoryStore(),
+                new NoOpBookingTaskStateStore(),
                 new NoOpCancelTaskStateStore(),
                 new NoOpRescheduleTaskStateStore(),
                 profiler
@@ -250,6 +252,21 @@ class AiChatProfilerIntegrationTest {
         @Override
         public void clear(Long userId) {
             // No-op
+        }
+    }
+
+    private static class NoOpBookingTaskStateStore implements BookingTaskStateStore {
+        @Override
+        public java.util.Optional<edu.xjtlu.cpt202.backend.modules.ai.model.BookingTaskState> get(Long userId) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.BookingTaskState state) {
+        }
+
+        @Override
+        public void clear(Long userId) {
         }
     }
 

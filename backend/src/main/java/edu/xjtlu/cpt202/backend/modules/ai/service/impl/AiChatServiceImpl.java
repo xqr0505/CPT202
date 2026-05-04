@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.BookingWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
@@ -34,6 +35,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final CancelWorkflowService cancelWorkflowService;
     private final RescheduleWorkflowService rescheduleWorkflowService;
     private final ChatMemoryStore chatMemoryStore;
+    private final BookingTaskStateStore bookingTaskStateStore;
     private final CancelTaskStateStore cancelTaskStateStore;
     private final RescheduleTaskStateStore rescheduleTaskStateStore;
     private final AiChatProfiler aiChatProfiler;
@@ -44,6 +46,7 @@ public class AiChatServiceImpl implements AiChatService {
             CancelWorkflowService cancelWorkflowService,
             RescheduleWorkflowService rescheduleWorkflowService,
             ChatMemoryStore chatMemoryStore,
+            BookingTaskStateStore bookingTaskStateStore,
             CancelTaskStateStore cancelTaskStateStore,
             RescheduleTaskStateStore rescheduleTaskStateStore,
             AiChatProfiler aiChatProfiler
@@ -53,6 +56,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.cancelWorkflowService = cancelWorkflowService;
         this.rescheduleWorkflowService = rescheduleWorkflowService;
         this.chatMemoryStore = chatMemoryStore;
+        this.bookingTaskStateStore = bookingTaskStateStore;
         this.cancelTaskStateStore = cancelTaskStateStore;
         this.rescheduleTaskStateStore = rescheduleTaskStateStore;
         this.aiChatProfiler = aiChatProfiler;
@@ -125,6 +129,7 @@ public class AiChatServiceImpl implements AiChatService {
         Long userId = currentUserId();
         chatMemoryStore.deleteMessages(userId);
         // Clearing chat history should also clear any active workflow state so the UI truly "resets".
+        bookingTaskStateStore.clear(userId);
         cancelTaskStateStore.clear(userId);
         rescheduleTaskStateStore.clear(userId);
     }

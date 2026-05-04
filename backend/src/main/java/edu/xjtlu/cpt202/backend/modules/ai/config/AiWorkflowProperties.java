@@ -28,4 +28,10 @@ public class AiWorkflowProperties {
 
     @Min(60)
     private Long rescheduleTtlSeconds = 1800L;
+
+    @NotBlank
+    private String bookingKeyPrefix = "expertlink:ai:workflow:booking";
+
+    @Min(60)
+    private Long bookingTtlSeconds = 1800L;
 }

@@ -40,8 +40,8 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
         Definitions:
         - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
-        - BOOKING: user wants to do appointment workflow actions, such as:
-        booking a specialist, checking a specialist's availability/time slots, rescheduling, submitting booking details.
+        - BOOKING: user explicitly wants to place/submit a booking order now.
+        Do NOT use BOOKING for generic availability checks, specialist discovery, or reschedule/cancel policy questions.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
         - CHITCHAT: pure small talk only (greeting/thanks/self-introduction) with no product task.
@@ -49,7 +49,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         Priority rules:
         1) If message asks for own records/history/status list/overview -> DASHBOARD.
         2) Else if message asks to cancel an existing booking -> CANCEL.
-        3) Else if message asks to book/check specialist availability/time -> BOOKING.
+        3) Else if message clearly asks to place/submit a booking order now -> BOOKING.
         4) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
         5) If mixed or unclear, choose KNOWLEDGE by default.
         6) Do NOT choose CHITCHAT unless it is pure small talk and contains no product request.
@@ -80,10 +80,10 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             "upcoming bookings", "past bookings", "dashboard", "statistics", "stats"
     );
     private static final Set<String> BOOKING_ACTION_HINTS = Set.of(
-            "i want to book", "book for me", "book a specialist", "book specialist",
-            "check availability", "specialist availability", "available time", "time slot",
-            "reschedule my booking", "submit booking",
-            "schedule an appointment", "make a booking"
+            "i want to book", "book now", "book it now", "book for me",
+            "place booking", "place a booking", "place order",
+            "submit booking", "confirm booking", "book this slot",
+            "下单", "我要预约", "帮我预约", "帮我下单", "提交预约", "确认预约"
     );
     private static final Set<String> CANCEL_ACTION_HINTS = Set.of(
             "cancel my booking", "cancel booking", "cancel appointment",

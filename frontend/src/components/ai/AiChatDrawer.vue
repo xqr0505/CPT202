@@ -57,11 +57,72 @@
       :prefill-slot-id="selectedRescheduleSlotId"
       @success="handleRescheduleSuccess"
     />
+
+    <el-dialog
+      v-model="showBookingDialog"
+      title="Confirm Booking"
+      width="520px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <div v-if="selectedBookingPreview" class="ai-booking-dialog__content">
+        <div class="ai-booking-dialog__row">
+          <span>Specialist</span>
+          <strong>{{ selectedBookingPreview.specialistName || `#${selectedBookingPreview.specialistId}` }}</strong>
+        </div>
+        <div class="ai-booking-dialog__row">
+          <span>Time</span>
+          <strong>{{ selectedBookingPreview.slotDate }} {{ selectedBookingPreview.startTime }} - {{ selectedBookingPreview.endTime }}</strong>
+        </div>
+        <div class="ai-booking-dialog__row">
+          <span>Price</span>
+          <strong>{{ formatFee(selectedBookingPreview.consultationFee) }}</strong>
+        </div>
+
+        <el-form label-position="top" class="ai-booking-dialog__form">
+          <el-form-item label="Topic" required>
+            <el-select
+              v-model="selectedBookingTopic"
+              placeholder="Select a topic"
+              :disabled="bookingSubmitting"
+            >
+              <el-option
+                v-for="topic in bookingTopicOptions"
+                :key="topic"
+                :label="topic"
+                :value="topic"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Notes">
+            <el-input
+              v-model="selectedBookingNotes"
+              type="textarea"
+              :rows="3"
+              maxlength="500"
+              show-word-limit
+              placeholder="Optional details you want the specialist to know"
+              :disabled="bookingSubmitting"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <div class="ai-booking-dialog__footer">
+          <CustomButton :disabled="bookingSubmitting" @click="closeBookingDialog">Cancel</CustomButton>
+          <CustomButton type="primary" :disabled="bookingSubmitting" @click="submitBookingFromDialog">
+            {{ bookingSubmitting ? 'Submitting...' : 'Confirm booking' }}
+          </CustomButton>
+        </div>
+      </template>
+    </el-dialog>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import CustomButton from '@/components/common/CustomButton.vue'
 import BookingCancelDialog from '@/components/business/BookingCancelDialog.vue'
 import BookingRescheduleDialog from '@/components/business/BookingRescheduleDialog.vue'
@@ -73,13 +134,15 @@ import {
   AI_DRAWER_SIZE,
   AI_DRAWER_TITLE
 } from '@/constants/ai'
-import { getBookingDetail, type BookingListItem } from '@/api/booking'
+import { createBooking, getBookingDetail, getBookingTopics, type BookingListItem } from '@/api/booking'
 import AiComposer from './AiComposer.vue'
 import AiMessageList from './AiMessageList.vue'
 
 const aiChatStore = useAiChatStore()
+const router = useRouter()
 const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
 const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
+const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
 
 interface AiBookingCancelModalPayload {
   bookingId: number
@@ -91,6 +154,19 @@ interface AiBookingRescheduleModalPayload {
   suggestedSlotId?: number | null
 }
 
+interface AiBookingSubmitPreviewPayload {
+  specialistId: number
+  slotId: number
+  slotDate: string
+  startTime: string
+  endTime: string
+  specialistName?: string | null
+  consultationFee?: number | null
+  topic: string
+  customerNotes?: string | null
+  availableTopics?: string[]
+}
+
 const showCancelDialog = ref(false)
 const selectedCancelBookingId = ref<number | null>(null)
 const showRescheduleDialog = ref(false)
@@ -98,6 +174,12 @@ const selectedRescheduleBooking = ref<BookingListItem | null>(null)
 const selectedRescheduleBookingId = ref<number | null>(null)
 const selectedRescheduleDate = ref('')
 const selectedRescheduleSlotId = ref<number | null>(null)
+const showBookingDialog = ref(false)
+const selectedBookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
+const selectedBookingTopic = ref('')
+const selectedBookingNotes = ref('')
+const bookingTopicOptions = ref<string[]>([])
+const bookingSubmitting = ref(false)
 const isMobile = ref(window.innerWidth <= 640)
 
 const updateMobileState = () => {
@@ -130,8 +212,21 @@ const resetRescheduleDialogState = () => {
   selectedRescheduleSlotId.value = null
 }
 
+const resetBookingDialogState = () => {
+  selectedBookingPreview.value = null
+  selectedBookingTopic.value = ''
+  selectedBookingNotes.value = ''
+  bookingTopicOptions.value = []
+  bookingSubmitting.value = false
+}
+
 const handleRescheduleSuccess = () => {
   resetRescheduleDialogState()
+}
+
+const closeBookingDialog = () => {
+  showBookingDialog.value = false
+  resetBookingDialogState()
 }
 
 const onAiBookingCancelModal = (event: Event): void => {
@@ -179,20 +274,105 @@ const onAiBookingRescheduleModal = (event: Event): void => {
   })
 }
 
+const formatFee = (value?: number | null): string => {
+  if (value === null || value === undefined) {
+    return 'N/A'
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return 'N/A'
+  }
+  return `CNY ${parsed.toFixed(2)}`
+}
+
+const openBookingDialogFromAi = async (payload: AiBookingSubmitPreviewPayload) => {
+  let topics: string[] = []
+  try {
+    topics = await getBookingTopics()
+  } catch {
+    topics = []
+  }
+  const normalizedTopics = Array.isArray(topics)
+    ? topics.filter(topic => typeof topic === 'string').map(topic => topic.trim()).filter(Boolean)
+    : []
+  const mergedTopics = Array.from(new Set([
+    ...normalizedTopics,
+    ...(payload.availableTopics || []).filter(topic => typeof topic === 'string' && topic.trim()).map(topic => topic.trim()),
+  ]))
+
+  selectedBookingPreview.value = payload
+  bookingTopicOptions.value = mergedTopics
+  selectedBookingTopic.value = mergedTopics.includes(payload.topic)
+    ? payload.topic
+    : (mergedTopics[0] || payload.topic || '')
+  selectedBookingNotes.value = payload.customerNotes || ''
+  showBookingDialog.value = true
+}
+
+const onAiBookingSubmitPreview = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingSubmitPreviewPayload>
+  const payload = customEvent.detail
+  if (
+    !payload ||
+    !Number.isFinite(Number(payload.specialistId)) ||
+    !Number.isFinite(Number(payload.slotId)) ||
+    Number(payload.specialistId) <= 0 ||
+    Number(payload.slotId) <= 0
+  ) {
+    return
+  }
+  void openBookingDialogFromAi(payload).catch(() => {
+    ElMessage.error('Failed to open booking dialog from AI preview.')
+  })
+}
+
+const submitBookingFromDialog = async () => {
+  if (bookingSubmitting.value || !selectedBookingPreview.value) {
+    return
+  }
+  const topic = selectedBookingTopic.value.trim()
+  if (!topic) {
+    ElMessage.warning('Please choose a booking topic.')
+    return
+  }
+
+  bookingSubmitting.value = true
+  try {
+    const createdBooking = await createBooking({
+      specialistId: selectedBookingPreview.value.specialistId,
+      slotId: selectedBookingPreview.value.slotId,
+      topic,
+      customerNotes: selectedBookingNotes.value.trim(),
+    }, true)
+    closeBookingDialog()
+    aiChatStore.closeDrawer()
+    ElMessage.success(`Booking created successfully. Status: ${createdBooking.status}.`)
+    await router.push('/customer/bookings')
+  } catch (error: any) {
+    ElMessage.error(error?.message || 'Failed to create booking.')
+  } finally {
+    bookingSubmitting.value = false
+  }
+}
+
 onMounted(() => {
   window.addEventListener('resize', updateMobileState)
   window.addEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
   window.addEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
+  window.addEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateMobileState)
   window.removeEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
   window.removeEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
+  window.removeEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
   showCancelDialog.value = false
   showRescheduleDialog.value = false
+  showBookingDialog.value = false
   resetCancelDialogState()
   resetRescheduleDialogState()
+  resetBookingDialogState()
 })
 
 const drawerVisible = computed<boolean>({
@@ -206,8 +386,10 @@ const drawerVisible = computed<boolean>({
     aiChatStore.closeDrawer()
     showCancelDialog.value = false
     showRescheduleDialog.value = false
+    showBookingDialog.value = false
     resetCancelDialogState()
     resetRescheduleDialogState()
+    resetBookingDialogState()
   }
 })
 </script>
@@ -270,6 +452,36 @@ const drawerVisible = computed<boolean>({
   z-index: 10;
   padding-top: var(--space-4);
   background-color: var(--color-bg-surface);
+}
+
+.ai-booking-dialog__content {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ai-booking-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+
+  span {
+    color: var(--color-text-secondary);
+  }
+
+  strong {
+    color: var(--color-text-primary);
+    text-align: right;
+  }
+}
+
+.ai-booking-dialog__form {
+  margin-top: var(--space-2);
+}
+
+.ai-booking-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 
 :deep(.ai-chat-drawer__message-area .ai-message-list) {

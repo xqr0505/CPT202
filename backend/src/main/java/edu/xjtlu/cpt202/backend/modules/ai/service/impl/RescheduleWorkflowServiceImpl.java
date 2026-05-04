@@ -423,6 +423,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     }
 
     private String extractRequestedTimeIntent(String originalUserMessage) {
+        String raw = Optional.ofNullable(originalUserMessage).orElse("");
         String normalized = normalize(originalUserMessage);
         if (normalized.contains("afternoon") || originalUserMessage.contains("下午")) {
             return "afternoon";
@@ -435,6 +436,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         }
         if (normalized.contains("around 3") || normalized.contains("3pm") || normalized.contains("3 pm")) {
             return "15:00";
+        }
+        boolean hasExplicitClockHint = normalized.matches(".*\\b\\d{1,2}:\\d{2}\\b.*")
+                || normalized.matches(".*\\b\\d{1,2}\\s*(am|pm)\\b.*")
+                || raw.contains("点")
+                || normalized.contains("around ");
+        if (!hasExplicitClockHint) {
+            return null;
         }
         Matcher matcher = TIME_PATTERN.matcher(normalized);
         if (matcher.find()) {

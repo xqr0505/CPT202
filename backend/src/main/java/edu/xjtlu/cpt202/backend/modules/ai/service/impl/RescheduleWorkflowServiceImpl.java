@@ -1,15 +1,13 @@
 package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.output.Response;
-import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.service.TokenStream;
-import dev.langchain4j.service.tool.ToolExecution;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
@@ -36,16 +34,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/**
- *
- * @author QiranXiao
- * @since 2026/5/4
- */
 @Service
 public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService {
 
@@ -75,17 +67,20 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     );
 
     private final RescheduleTaskStateStore rescheduleTaskStateStore;
+    private final RescheduleWorkflowAssistant rescheduleWorkflowAssistant;
     private final BookingService bookingService;
     private final SpecialistQueryService specialistQueryService;
     private final AiIntentRouterService aiIntentRouterService;
 
     public RescheduleWorkflowServiceImpl(
             RescheduleTaskStateStore rescheduleTaskStateStore,
+            RescheduleWorkflowAssistant rescheduleWorkflowAssistant,
             BookingService bookingService,
             SpecialistQueryService specialistQueryService,
             AiIntentRouterService aiIntentRouterService
     ) {
         this.rescheduleTaskStateStore = rescheduleTaskStateStore;
+        this.rescheduleWorkflowAssistant = rescheduleWorkflowAssistant;
         this.bookingService = bookingService;
         this.specialistQueryService = specialistQueryService;
         this.aiIntentRouterService = aiIntentRouterService;
@@ -114,13 +109,22 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
 
     @Override
     public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
-        return new SingleReplyTokenStream(handle(userId, normalizedUserMessage));
+        String reply = handle(userId, normalizedUserMessage);
+        return new SingleReplyTokenStream(reply);
     }
 
     private String handleInternal(Long userId, String originalUserMessage, RescheduleTaskState state) {
         if (isAbortShortcut(originalUserMessage)) {
             rescheduleTaskStateStore.clear(userId);
             return RESCHEDULE_TASK_ABORTED_MARKER + " Reschedule flow closed.";
+        }
+
+        String taskStateText = Optional.ofNullable(state.getTaskStateText())
+                .orElse("identifying which booking the user wants to reschedule");
+        String abortProbe = rescheduleWorkflowAssistant.process(originalUserMessage, taskStateText);
+        if (abortProbe != null && abortProbe.startsWith(RESCHEDULE_TASK_ABORTED_MARKER)) {
+            rescheduleTaskStateStore.clear(userId);
+            return abortProbe;
         }
 
         if (state.getStep() == null) {
@@ -159,6 +163,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         state.setTargetBookingId(identifiedBookingId);
         state.setStep(RescheduleTaskState.Step.PRE_CHECK);
         state.setCandidateBookingIds(List.of(identifiedBookingId));
+        state.setTaskStateText("booking identified, checking availability and preparing reschedule trigger");
         state.setRequestedTimeIntent(extractRequestedTimeIntent(originalUserMessage));
         rescheduleTaskStateStore.save(userId, state);
         return handlePreCheckAndTrigger(userId, originalUserMessage, state);
@@ -425,13 +430,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     private String extractRequestedTimeIntent(String originalUserMessage) {
         String raw = Optional.ofNullable(originalUserMessage).orElse("");
         String normalized = normalize(originalUserMessage);
-        if (normalized.contains("afternoon") || originalUserMessage.contains("下午")) {
+        if (normalized.contains("afternoon") || raw.contains("下午")) {
             return "afternoon";
         }
-        if (normalized.contains("morning") || originalUserMessage.contains("上午")) {
+        if (normalized.contains("morning") || raw.contains("上午")) {
             return "morning";
         }
-        if (normalized.contains("evening") || originalUserMessage.contains("晚上")) {
+        if (normalized.contains("evening") || raw.contains("晚上")) {
             return "evening";
         }
         if (normalized.contains("around 3") || normalized.contains("3pm") || normalized.contains("3 pm")) {
@@ -540,32 +545,32 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     private static class SingleReplyTokenStream implements TokenStream {
 
         private final String reply;
-        private Consumer<String> onNext = ignored -> { };
-        private Consumer<Response<AiMessage>> onComplete = ignored -> { };
-        private Consumer<Throwable> onError = ignored -> { };
+        private java.util.function.Consumer<String> onNext = ignored -> { };
+        private java.util.function.Consumer<Response<dev.langchain4j.data.message.AiMessage>> onComplete = ignored -> { };
+        private java.util.function.Consumer<Throwable> onError = ignored -> { };
 
         private SingleReplyTokenStream(String reply) {
             this.reply = reply;
         }
 
         @Override
-        public TokenStream onRetrieved(Consumer<List<Content>> consumer) {
+        public TokenStream onRetrieved(java.util.function.Consumer<List<dev.langchain4j.rag.content.Content>> consumer) {
             return this;
         }
 
         @Override
-        public TokenStream onToolExecuted(Consumer<ToolExecution> consumer) {
+        public TokenStream onToolExecuted(java.util.function.Consumer<dev.langchain4j.service.tool.ToolExecution> consumer) {
             return this;
         }
 
         @Override
-        public TokenStream onComplete(Consumer<Response<AiMessage>> consumer) {
+        public TokenStream onComplete(java.util.function.Consumer<Response<dev.langchain4j.data.message.AiMessage>> consumer) {
             this.onComplete = consumer;
             return this;
         }
 
         @Override
-        public TokenStream onError(Consumer<Throwable> consumer) {
+        public TokenStream onError(java.util.function.Consumer<Throwable> consumer) {
             this.onError = consumer;
             return this;
         }
@@ -579,14 +584,14 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         public void start() {
             try {
                 emitTextChunks(reply);
-                onComplete.accept(Response.from(AiMessage.from(reply)));
+                onComplete.accept(Response.from(dev.langchain4j.data.message.AiMessage.from(reply)));
             } catch (Throwable throwable) {
                 onError.accept(throwable);
             }
         }
 
         @Override
-        public TokenStream onNext(Consumer<String> consumer) {
+        public TokenStream onNext(java.util.function.Consumer<String> consumer) {
             this.onNext = consumer;
             return this;
         }

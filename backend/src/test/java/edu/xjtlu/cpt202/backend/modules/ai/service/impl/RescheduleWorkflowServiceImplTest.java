@@ -7,6 +7,7 @@ import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowAssistant;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
@@ -61,6 +62,7 @@ class RescheduleWorkflowServiceImplTest {
     void shouldStartWorkflowForEnglishRescheduleIntent() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),
+                (userMsg, taskState) -> "continue",
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -75,6 +77,7 @@ class RescheduleWorkflowServiceImplTest {
     void shouldStartWorkflowForChineseRescheduleIntent() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),
+                (userMsg, taskState) -> "continue",
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -95,6 +98,7 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 new StubSpecialistQueryService(),
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -130,6 +134,7 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(301L, "2026-05-12", "16:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -161,6 +166,7 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(301L, "2026-05-19", "16:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -197,6 +203,7 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -230,6 +237,7 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -259,6 +267,7 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of();
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -276,6 +285,7 @@ class RescheduleWorkflowServiceImplTest {
         store.save(1001L, RescheduleTaskState.builder().step(RescheduleTaskState.Step.IDENTIFY).build());
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -309,6 +319,7 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(302L, "2026-05-16", "15:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING
@@ -341,6 +352,7 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(302L, "2026-05-16", "15:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
+                (userMsg, taskState) -> "continue",
                 bookingService,
                 specialistQueryService,
                 (memoryId, userMessage) -> AiIntent.BOOKING

@@ -6,6 +6,7 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import dev.langchain4j.service.AiServices;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingChatLanguageModel;
 import edu.xjtlu.cpt202.backend.modules.ai.model.SanitizingStreamingChatLanguageModel;
@@ -14,6 +15,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.LightModelAiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.impl.ParallelToolAssistant;
 import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
@@ -44,7 +46,8 @@ import java.util.Map;
         AiChatMemoryProperties.class,
         AiToolParallelProperties.class,
         AiRagRewriteProperties.class,
-        AiIntentRouterProperties.class
+        AiIntentRouterProperties.class,
+        AiWorkflowProperties.class
 })
 public class LangChainConfig {
 
@@ -139,6 +142,10 @@ public class LangChainConfig {
                         : List.of(knowledgeToolsProvider.getIfAvailable())
         );
         groupedTools.put(
+                AiIntent.CANCEL,
+                List.of()
+        );
+        groupedTools.put(
                 AiIntent.BOOKING,
                 List.of(aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
         );
@@ -164,6 +171,13 @@ public class LangChainConfig {
                 groupedTools,
                 semanticCacheService
         );
+    }
+
+    @Bean
+    public CancelWorkflowAssistant cancelWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+        return AiServices.builder(CancelWorkflowAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .build();
     }
 
     @Bean

@@ -6,6 +6,7 @@ import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
@@ -23,15 +24,18 @@ public class AiChatServiceImpl implements AiChatService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z");
 
     private final Assistant assistant;
+    private final CancelWorkflowService cancelWorkflowService;
     private final ChatMemoryStore chatMemoryStore;
     private final AiChatProfiler aiChatProfiler;
 
     public AiChatServiceImpl(
             Assistant assistant,
+            CancelWorkflowService cancelWorkflowService,
             ChatMemoryStore chatMemoryStore,
             AiChatProfiler aiChatProfiler
     ) {
         this.assistant = assistant;
+        this.cancelWorkflowService = cancelWorkflowService;
         this.chatMemoryStore = chatMemoryStore;
         this.aiChatProfiler = aiChatProfiler;
     }
@@ -45,6 +49,11 @@ public class AiChatServiceImpl implements AiChatService {
                 "userId", userId,
                 "messageLength", normalizedUserMessage.length()
         ));
+        String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+        if (cancelWorkflowService.hasActiveTask(userId)
+                || cancelWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return cancelWorkflowService.handle(userId, normalizedUserMessage);
+        }
         return assistant.chat(userId, normalizedUserMessage);
     }
 
@@ -57,6 +66,11 @@ public class AiChatServiceImpl implements AiChatService {
                 "memoryId", memoryId,
                 "messageLength", normalizedUserMessage.length()
         ));
+        String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+        if (cancelWorkflowService.hasActiveTask(memoryId)
+                || cancelWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
         return assistant.streamChat(memoryId, normalizedUserMessage);
     }
 

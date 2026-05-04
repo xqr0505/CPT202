@@ -8,6 +8,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service;
  */
 public enum AiIntent {
     KNOWLEDGE,
+    CANCEL,
     BOOKING,
     DASHBOARD,
     CHITCHAT

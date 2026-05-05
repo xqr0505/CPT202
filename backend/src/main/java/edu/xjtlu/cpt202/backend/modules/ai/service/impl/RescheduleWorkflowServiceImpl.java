@@ -15,18 +15,15 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.springframework.stereotype.Service;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -35,8 +32,6 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     static final String RESCHEDULE_TASK_ABORTED_MARKER = "[RESCHEDULE_TASK_ABORTED]";
     static final String TRIGGER_RESCHEDULE_MODAL_PREFIX = "[TRIGGER_RESCHEDULE_MODAL:";
 
-    private static final Pattern DATE_PATTERN = Pattern.compile("\\b(20\\d{2}-\\d{2}-\\d{2})\\b");
-    private static final Pattern TIME_PATTERN = Pattern.compile("\\b(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern RESCHEDULE_INTENT_PATTERN = Pattern.compile(
             "(\\breschedul(?:e|ing)?\\b|\\bchange time\\b|\\bmove my booking\\b|\\bmove appointment\\b|\\bchange appointment\\b|\\bchange booking\\b|\\bmove booking\\b|\\breschedul\\b|\\breschedule\\b.*\\bto\\b|\\bmove\\b.*\\bto\\b)",
             Pattern.CASE_INSENSITIVE
@@ -147,18 +142,14 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             return RESCHEDULE_TASK_ABORTED_MARKER + " Reschedule flow closed.";
         }
 
-        mergeTemporalIntent(
-                state,
-                originalUserMessage,
-                identificationResult.targetDate(),
-                identificationResult.targetTime(),
-                identificationResult.timeHint()
-        );
+        mergeLookupIntent(state, originalUserMessage, identificationResult);
+        mergeTargetIntent(state, identificationResult.targetDate(), identificationResult.targetTime(), identificationResult.timeHint());
 
         if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.NEEDS_USER_SELECTION) {
             List<BookingItemVO> matchedBookings = identificationResult.matchedBookings().isEmpty()
                     ? candidates
                     : identificationResult.matchedBookings();
+            matchedBookings = filterCandidatesByLookupIntent(matchedBookings, state);
             state.setStep(RescheduleTaskState.Step.IDENTIFY);
             state.setCandidateBookingIds(matchedBookings.stream()
                     .map(BookingItemVO::getId)
@@ -172,6 +163,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         }
 
         state.setTargetBookingId(identificationResult.resolvedBookingId());
+        backfillExplicitTargetDateOnlyForResolvedBooking(state, originalUserMessage);
         state.setStep(RescheduleTaskState.Step.DONE);
         state.setCandidateBookingIds(List.of(identificationResult.resolvedBookingId()));
         state.setTaskStateText("booking identified, preparing reschedule trigger");
@@ -203,7 +195,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                 targetDate == null || targetDate.isBlank() ? "" : " on " + targetDate,
                 TRIGGER_RESCHEDULE_MODAL_PREFIX,
                 bookingId,
-                safeText(targetDate)
+                markerText(targetDate)
         );
     }
 
@@ -264,10 +256,11 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         if (result == null || result.getList() == null) {
             return List.of();
         }
-        return result.getList().stream()
+        List<BookingItemVO> filtered = result.getList().stream()
                 .filter(Objects::nonNull)
                 .filter(item -> item.getStatus() != null && RESCHEDULABLE_STATUSES.contains(item.getStatus().toUpperCase(Locale.ROOT)))
                 .toList();
+        return filtered;
     }
 
     private String buildCandidatePrompt(List<BookingItemVO> candidates, String clarificationMessage, RescheduleTaskState state) {
@@ -300,6 +293,34 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return String.join("\n", lines);
     }
 
+    private List<BookingItemVO> filterCandidatesByLookupIntent(List<BookingItemVO> candidates, RescheduleTaskState state) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        if (state.getLookupStartDate() == null && state.getLookupEndDate() == null && firstNonBlank(state.getLookupTimeRangeType()) == null) {
+            return candidates;
+        }
+        List<BookingItemVO> filtered = candidates.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> matchesLookupIntent(item, state))
+                .toList();
+        return filtered.isEmpty() ? candidates : filtered;
+    }
+
+    private boolean matchesLookupIntent(BookingItemVO item, RescheduleTaskState state) {
+        if (item == null || item.getAppointmentDateTime() == null) {
+            return false;
+        }
+        LocalDate appointmentDate = item.getAppointmentDateTime().toLocalDate();
+        if (state.getLookupStartDate() != null && appointmentDate.isBefore(state.getLookupStartDate())) {
+            return false;
+        }
+        if (state.getLookupEndDate() != null && appointmentDate.isAfter(state.getLookupEndDate())) {
+            return false;
+        }
+        return true;
+    }
+
     private String resolveTargetDate(RescheduleTaskState state) {
         if (state.getTargetDate() != null && !state.getTargetDate().isBlank()) {
             return state.getTargetDate();
@@ -307,133 +328,73 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return null;
     }
 
-    private void mergeTemporalIntent(
+    private void mergeLookupIntent(
             RescheduleTaskState state,
             String originalUserMessage,
+            WorkflowBookingIdentificationSupport.BookingIdentificationResult identificationResult
+    ) {
+        state.setLookupStartDate(firstNonNull(
+                identificationResult.lookupStartDate(),
+                state.getLookupStartDate(),
+                fallbackLookupStartDate(originalUserMessage)
+        ));
+        state.setLookupEndDate(firstNonNull(
+                identificationResult.lookupEndDate(),
+                state.getLookupEndDate(),
+                fallbackLookupEndDate(originalUserMessage)
+        ));
+        state.setLookupTimeRangeType(firstNonBlank(
+                identificationResult.lookupTimeRangeType(),
+                state.getLookupTimeRangeType(),
+                fallbackLookupTimeRangeType(originalUserMessage)
+        ));
+    }
+
+    private void mergeTargetIntent(
+            RescheduleTaskState state,
             String llmTargetDate,
             String llmTargetTime,
             String llmTimeHint
     ) {
-        state.setTargetDate(firstNonBlank(
-                llmTargetDate,
-                state.getTargetDate(),
-                fallbackDateFromMessage(originalUserMessage, null)
-        ));
-        state.setTargetTime(firstNonBlank(
-                llmTargetTime,
-                state.getTargetTime(),
-                fallbackTargetTime(originalUserMessage)
-        ));
-        state.setTimeHint(firstNonBlank(
-                llmTimeHint,
-                state.getTimeHint(),
-                fallbackTimeHint(originalUserMessage)
-        ));
+        state.setTargetDate(firstNonBlank(llmTargetDate, state.getTargetDate()));
+        state.setTargetTime(firstNonBlank(llmTargetTime, state.getTargetTime()));
+        state.setTimeHint(firstNonBlank(llmTimeHint, state.getTimeHint()));
         state.setSuggestedSlotId(null);
     }
 
-    private String fallbackDateFromMessage(String originalUserMessage, String fallbackDate) {
-        String message = Optional.ofNullable(originalUserMessage).orElse("").trim();
-        Matcher explicitDate = DATE_PATTERN.matcher(message);
+    private void backfillExplicitTargetDateOnlyForResolvedBooking(RescheduleTaskState state, String originalUserMessage) {
+        if (state.getTargetDate() != null && !state.getTargetDate().isBlank()) {
+            return;
+        }
+        String normalized = normalize(originalUserMessage);
+        if (!normalized.contains(" to ") && !originalUserMessage.contains("改到") && !originalUserMessage.contains("换到")) {
+            return;
+        }
+        java.util.regex.Matcher explicitDate = java.util.regex.Pattern.compile("\\b(20\\d{2}-\\d{2}-\\d{2})\\b").matcher(Optional.ofNullable(originalUserMessage).orElse(""));
         if (explicitDate.find()) {
-            return explicitDate.group(1);
+            state.setTargetDate(explicitDate.group(1));
         }
-
-        LocalDate base = parseDate(fallbackDate).orElse(LocalDate.now());
-        String normalized = normalize(message);
-        if (normalized.contains("today") || message.contains("今天")) {
-            return base.toString();
-        }
-        if (normalized.contains("tomorrow") || message.contains("明天")) {
-            return base.plusDays(1).toString();
-        }
-        if (normalized.contains("next monday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.MONDAY)).toString();
-        }
-        if (normalized.contains("next tuesday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.TUESDAY)).toString();
-        }
-        if (normalized.contains("next wednesday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.WEDNESDAY)).toString();
-        }
-        if (normalized.contains("next thursday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.THURSDAY)).toString();
-        }
-        if (normalized.contains("next friday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.FRIDAY)).toString();
-        }
-        if (normalized.contains("next saturday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.SATURDAY)).toString();
-        }
-        if (normalized.contains("next sunday")) {
-            return base.with(TemporalAdjusters.next(DayOfWeek.SUNDAY)).toString();
-        }
-        if (normalized.contains("monday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)).toString();
-        }
-        if (normalized.contains("tuesday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.TUESDAY)).toString();
-        }
-        if (normalized.contains("wednesday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.WEDNESDAY)).toString();
-        }
-        if (normalized.contains("thursday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.THURSDAY)).toString();
-        }
-        if (normalized.contains("friday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.FRIDAY)).toString();
-        }
-        if (normalized.contains("saturday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)).toString();
-        }
-        if (normalized.contains("sunday")) {
-            return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString();
-        }
-        return fallbackDate == null || fallbackDate.isBlank() ? null : fallbackDate;
     }
 
-    private String fallbackTargetTime(String originalUserMessage) {
-        String raw = Optional.ofNullable(originalUserMessage).orElse("");
+    private LocalDate fallbackLookupStartDate(String originalUserMessage) {
         String normalized = normalize(originalUserMessage);
-        if (normalized.contains("around 3") || normalized.contains("3pm") || normalized.contains("3 pm")) {
-            return "15:00";
+        if (normalized.contains("today")) {
+            return LocalDate.now();
         }
-        boolean hasExplicitClockHint = normalized.matches(".*\\b\\d{1,2}:\\d{2}\\b.*")
-                || normalized.matches(".*\\b\\d{1,2}\\s*(am|pm)\\b.*")
-                || raw.contains("点")
-                || normalized.contains("around ");
-        if (!hasExplicitClockHint) {
-            return null;
-        }
-        Matcher matcher = TIME_PATTERN.matcher(normalized);
-        if (matcher.find()) {
-            int hour = Integer.parseInt(matcher.group(1));
-            String minute = matcher.group(2) == null ? "00" : matcher.group(2);
-            String meridiem = matcher.group(3);
-            if ("pm".equalsIgnoreCase(meridiem) && hour < 12) {
-                hour += 12;
-            } else if ("am".equalsIgnoreCase(meridiem) && hour == 12) {
-                hour = 0;
-            }
-            return "%02d:%s".formatted(hour, minute);
+        if (normalized.contains("tomorrow")) {
+            return LocalDate.now().plusDays(1);
         }
         return null;
     }
 
-    private String fallbackTimeHint(String originalUserMessage) {
-        String raw = Optional.ofNullable(originalUserMessage).orElse("");
+    private LocalDate fallbackLookupEndDate(String originalUserMessage) {
+        return fallbackLookupStartDate(originalUserMessage);
+    }
+
+    private String fallbackLookupTimeRangeType(String originalUserMessage) {
         String normalized = normalize(originalUserMessage);
-        if (normalized.contains("afternoon") || raw.contains("下午")) {
-            return "afternoon";
-        }
-        if (normalized.contains("morning") || raw.contains("上午")) {
-            return "morning";
-        }
-        if (normalized.contains("evening") || raw.contains("晚上")) {
-            return "evening";
-        }
-        if (normalized.contains("around ")) {
-            return raw.trim();
+        if (normalized.contains("today")) {
+            return "TODAY";
         }
         return null;
     }
@@ -457,6 +418,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return text.isEmpty() ? "N/A" : text;
     }
 
+    private String markerText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
     private String normalize(String value) {
         if (value == null) {
             return "";
@@ -468,6 +436,16 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         for (String value : values) {
             if (value != null && !value.isBlank() && !"N/A".equalsIgnoreCase(value.trim())) {
                 return value.trim();
+            }
+        }
+        return null;
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
             }
         }
         return null;

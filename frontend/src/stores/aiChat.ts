@@ -22,7 +22,7 @@ const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
 const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
-const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):(\d{4}-\d{2}-\d{2})?:(\d*)\]/i
+const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):((?:\d{4}-\d{2}-\d{2})|N\/A)?:(\d*)\]/i
 const WORKFLOW_ABORT_MARKER_PATTERN = /\[(?:BOOKING|CANCEL|RESCHEDULE)_TASK_ABORTED\]\s*/gi
 
 interface StoredSessionUser {
@@ -501,7 +501,8 @@ const extractRescheduleModalPayload = (content: string): AiBookingRescheduleModa
   if (!Number.isFinite(bookingId) || bookingId <= 0) {
     return null
   }
-  const targetDate = normalizeString(matched[2] || null)
+  const rawTargetDate = normalizeString(matched[2] || null)
+  const targetDate = rawTargetDate === 'N/A' ? null : rawTargetDate
   const suggestedSlotId = normalizeNumericId(matched[3] || null) ?? null
   return {
     bookingId: Math.trunc(bookingId),

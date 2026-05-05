@@ -119,6 +119,34 @@ class RescheduleWorkflowServiceImplTest {
     }
 
     @Test
+    void shouldUseTodayAsLookupHintInsteadOfTargetDate() {
+        InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
+        StubBookingService bookingService = new StubBookingService();
+        bookingService.bookingList = List.of(
+                booking("21", "Dr. Benjamin Li", "Initial Consultation", LocalDateTime.of(2026, 5, 6, 9, 0), "PENDING"),
+                booking("14", "Dr. Olivia Wang", "Evening Consult", LocalDateTime.of(2026, 5, 12, 21, 0), "CONFIRMED"),
+                booking("20", "S1", "Initial Consultation", LocalDateTime.of(2026, 5, 12, 23, 0), "PENDING")
+        );
+        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
+                store,
+                assistantUsesTodayForLookup(),
+                bookingService,
+                new StubSpecialistQueryService(),
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
+        );
+
+        String reply = service.handle(1001L, wrapped("I want to reschedule my booking today"));
+
+        assertThat(reply).contains("| 21 | Dr. Benjamin Li | Initial Consultation | 2026-05-06 09:00 | PENDING |");
+        assertThat(reply).doesNotContain("| 14 | Dr. Olivia Wang | Evening Consult | 2026-05-12 21:00 | CONFIRMED |");
+        assertThat(reply).doesNotContain("I noted your requested reschedule date");
+        assertThat(store.get(1001L)).isPresent();
+        assertThat(store.get(1001L).get().getLookupTimeRangeType()).isEqualTo("TODAY");
+        assertThat(store.get(1001L).get().getTargetDate()).isNull();
+    }
+
+    @Test
     void shouldTriggerModalImmediatelyWhenBookingIdIsResolved() {
         InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
         StubBookingService bookingService = new StubBookingService();
@@ -146,7 +174,7 @@ class RescheduleWorkflowServiceImplTest {
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14"));
 
-        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:N/A:]");
+        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14::]");
         assertThat(store.get(1001L)).isEmpty();
         assertThat(bookingService.lastRescheduleQuoteBookingId).isNull();
     }
@@ -267,7 +295,7 @@ class RescheduleWorkflowServiceImplTest {
 
         String reply = service.handle(1001L, wrapped("that one"));
 
-        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:N/A:]");
+        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14::]");
     }
 
     private static BookingItemVO booking(String id, String specialist, String service, LocalDateTime time, String status) {
@@ -319,6 +347,22 @@ class RescheduleWorkflowServiceImplTest {
                 TARGET_DATE: 2026-05-16
                 TARGET_TIME: 15:00
                 TIME_HINT: around 3pm
+                """;
+    }
+
+    private static RescheduleWorkflowAssistant assistantUsesTodayForLookup() {
+        return (userMsg, taskState, memoryContext, candidateSummary) -> """
+                ACTION: NEEDS_USER_ID_SELECTION
+                BOOKING_ID: N/A
+                EXPERT_NAME: N/A
+                CATEGORY_NAME: N/A
+                STATUS: N/A
+                START_DATE: 2026-05-06
+                END_DATE: 2026-05-06
+                TIME_RANGE_TYPE: TODAY
+                TARGET_DATE: N/A
+                TARGET_TIME: N/A
+                TIME_HINT: N/A
                 """;
     }
 

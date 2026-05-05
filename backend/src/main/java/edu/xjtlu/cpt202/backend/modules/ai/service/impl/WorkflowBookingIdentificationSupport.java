@@ -67,7 +67,7 @@ public class WorkflowBookingIdentificationSupport {
     ) {
         List<BookingItemVO> pool = chooseCandidatePool(actionableBookings, preferredCandidateBookingIds);
         if (pool.isEmpty()) {
-            return BookingIdentificationResult.needsUserSelection(List.of(), null, null, null, null);
+            return BookingIdentificationResult.needsUserSelection(List.of(), null, null, null, null, null, null, null);
         }
         if (pool.size() == 1) {
             return BookingIdentificationResult.resolved(Long.valueOf(pool.get(0).getId()), pool);
@@ -95,6 +95,9 @@ public class WorkflowBookingIdentificationSupport {
             return BookingIdentificationResult.resolved(
                     structuredReply.resolvedBookingId(),
                     pool,
+                    structuredReply.startDate(),
+                    structuredReply.endDate(),
+                    structuredReply.timeRangeType(),
                     structuredReply.targetDate(),
                     structuredReply.targetTime(),
                     structuredReply.timeHint()
@@ -106,6 +109,9 @@ public class WorkflowBookingIdentificationSupport {
             return BookingIdentificationResult.resolved(
                     Long.valueOf(matchedBookings.get(0).getId()),
                     matchedBookings,
+                    structuredReply.startDate(),
+                    structuredReply.endDate(),
+                    structuredReply.timeRangeType(),
                     structuredReply.targetDate(),
                     structuredReply.targetTime(),
                     structuredReply.timeHint()
@@ -115,6 +121,9 @@ public class WorkflowBookingIdentificationSupport {
             return BookingIdentificationResult.needsUserSelection(
                     matchedBookings,
                     structuredReply.summary(),
+                    structuredReply.startDate(),
+                    structuredReply.endDate(),
+                    structuredReply.timeRangeType(),
                     structuredReply.targetDate(),
                     structuredReply.targetTime(),
                     structuredReply.timeHint()
@@ -123,6 +132,9 @@ public class WorkflowBookingIdentificationSupport {
         return BookingIdentificationResult.needsUserSelection(
                 pool,
                 structuredReply.summary(),
+                structuredReply.startDate(),
+                structuredReply.endDate(),
+                structuredReply.timeRangeType(),
                 structuredReply.targetDate(),
                 structuredReply.targetTime(),
                 structuredReply.timeHint()
@@ -296,36 +308,67 @@ public class WorkflowBookingIdentificationSupport {
             Long resolvedBookingId,
             List<BookingItemVO> matchedBookings,
             String message,
+            LocalDate lookupStartDate,
+            LocalDate lookupEndDate,
+            String lookupTimeRangeType,
             String targetDate,
             String targetTime,
             String timeHint
     ) {
         public static BookingIdentificationResult resolved(Long bookingId, List<BookingItemVO> matchedBookings) {
-            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null, null, null, null);
+            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null, null, null, null, null, null, null);
         }
 
         public static BookingIdentificationResult resolved(
                 Long bookingId,
                 List<BookingItemVO> matchedBookings,
+                LocalDate lookupStartDate,
+                LocalDate lookupEndDate,
+                String lookupTimeRangeType,
                 String targetDate,
                 String targetTime,
                 String timeHint
         ) {
-            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null, targetDate, targetTime, timeHint);
+            return new BookingIdentificationResult(
+                    Status.RESOLVED,
+                    bookingId,
+                    matchedBookings,
+                    null,
+                    lookupStartDate,
+                    lookupEndDate,
+                    lookupTimeRangeType,
+                    targetDate,
+                    targetTime,
+                    timeHint
+            );
         }
 
         public static BookingIdentificationResult needsUserSelection(
                 List<BookingItemVO> matchedBookings,
                 String message,
+                LocalDate lookupStartDate,
+                LocalDate lookupEndDate,
+                String lookupTimeRangeType,
                 String targetDate,
                 String targetTime,
                 String timeHint
         ) {
-            return new BookingIdentificationResult(Status.NEEDS_USER_SELECTION, null, matchedBookings, message, targetDate, targetTime, timeHint);
+            return new BookingIdentificationResult(
+                    Status.NEEDS_USER_SELECTION,
+                    null,
+                    matchedBookings,
+                    message,
+                    lookupStartDate,
+                    lookupEndDate,
+                    lookupTimeRangeType,
+                    targetDate,
+                    targetTime,
+                    timeHint
+            );
         }
 
         public static BookingIdentificationResult aborted(String message) {
-            return new BookingIdentificationResult(Status.ABORTED, null, List.of(), message, null, null, null);
+            return new BookingIdentificationResult(Status.ABORTED, null, List.of(), message, null, null, null, null, null, null);
         }
     }
 

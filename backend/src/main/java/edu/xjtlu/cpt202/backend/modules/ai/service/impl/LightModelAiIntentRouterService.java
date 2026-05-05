@@ -82,7 +82,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             "confirmed automatically", "will it", "if i ", "should i"
     );
     private static final Set<String> DASHBOARD_HINTS = Set.of(
-            "my bookings", "my booking", "booking records", "booking history",
+            "my bookings", "booking records", "booking history",
             "upcoming bookings", "past bookings", "dashboard", "statistics", "stats"
     );
     private static final Set<String> BOOKING_ACTION_HINTS = Set.of(

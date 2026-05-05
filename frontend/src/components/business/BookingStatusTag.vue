@@ -6,7 +6,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOOKING_STATUS } from '@/constants/booking.ts'
 import type { BookingStatus } from '@/constants/booking.ts'
 
 interface Props {

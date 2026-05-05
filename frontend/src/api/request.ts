@@ -7,7 +7,7 @@ import { apiBaseUrl } from '@/config/api';
  * Default API response structure
  * @template T - data type of the response payload
  */
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data: T;
@@ -21,6 +21,15 @@ type AuthFailureError = Error & {
 const ACTIVITY_EVENT_KEY = 'session-activity-event';
 const LOGOUT_EVENT_KEY = 'logout-event';
 const AUTH_REFRESH_PATH = '/auth/refresh-token';
+interface StoredUser {
+  role?: string;
+  [key: string]: unknown;
+}
+
+interface TokenRefreshResponse {
+  token: string;
+  refreshToken?: string;
+}
 
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -46,7 +55,7 @@ let handling401 = false;
 let lastErrorMessage = '';
 let lastErrorMessageTime = 0;
 
-const shouldSuppressErrorMessage = (config?: any): boolean => {
+const shouldSuppressErrorMessage = (config?: { suppressErrorMessage?: boolean }): boolean => {
   return Boolean(config?.suppressErrorMessage);
 };
 
@@ -80,7 +89,7 @@ export const clearAuthData = () => {
 export const saveAuthData = (
   token: string,
   refreshToken: string,
-  user: any,
+  user: StoredUser,
   rememberMe: boolean = false
 ) => {
   saveToken(token, rememberMe);
@@ -113,7 +122,7 @@ export const saveRefreshToken = (refreshToken: string, rememberMe: boolean = fal
   }
 };
 
-export const saveUser = (user: any, rememberMe: boolean = false) => {
+export const saveUser = (user: StoredUser, rememberMe: boolean = false) => {
   const storage = getPreferredStorage(rememberMe);
   storage.setItem('user', JSON.stringify(user));
   if (rememberMe) {
@@ -127,11 +136,11 @@ export const clearRememberedEmail = () => {
   localStorage.removeItem('rememberedEmail');
 };
 
-export const getUser = (): any => {
+export const getUser = (): StoredUser | null => {
   const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
   try {
     return raw ? JSON.parse(raw) : null;
-  } catch (_error) {
+  } catch {
     return null;
   }
 };
@@ -202,7 +211,7 @@ export const isAuthFailureError = (error: unknown): boolean => {
   return false;
 };
 
-const decodeJwtPayload = (token: string): any | null => {
+const decodeJwtPayload = (token: string): { exp?: number } | null => {
   if (!token) {
     return null;
   }
@@ -251,7 +260,7 @@ const service = axios.create({
 service.interceptors.request.use(
   config => {
     config.headers = config.headers || {};
-    const headers = config.headers as Record<string, any> & {
+    const headers = config.headers as Record<string, unknown> & {
       setContentType?: (value?: string | false) => void;
     };
 
@@ -296,10 +305,10 @@ export const refreshAuthToken = async (): Promise<string> => {
 
   const rememberMe = isRememberMeSession();
   refreshingPromise = service
-    .post<any, any>(
+    .post<unknown, TokenRefreshResponse>(
       '/auth/refresh-token',
       { refreshToken },
-      { suppressErrorMessage: true } as any
+      { suppressErrorMessage: true }
     )
     .then(result => {
       if (!result || typeof result.token !== 'string') {
@@ -336,7 +345,11 @@ service.interceptors.response.use(
     }
 
     if (res.code === 401) {
-      const originalRequest = response.config as any;
+      const originalRequest = response.config as {
+        _retry?: boolean;
+        url?: string;
+        [key: string]: unknown;
+      };
       if (
         !originalRequest?._retry &&
         !isRefreshEndpoint(originalRequest?.url) &&
@@ -382,7 +395,11 @@ service.interceptors.response.use(
   async error => {
     const status = error.response?.status;
     const suppressErrorMessage = shouldSuppressErrorMessage(error.config);
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as {
+      _retry?: boolean;
+      url?: string;
+      [key: string]: unknown;
+    };
 
     if (
       status === 401 &&
@@ -394,7 +411,7 @@ service.interceptors.response.use(
       try {
         await refreshAuthToken();
         return service(originalRequest);
-      } catch (_refreshError) {
+      } catch {
         if (!suppressErrorMessage) {
           showErrorOnce('Unauthorized, please login again');
         }

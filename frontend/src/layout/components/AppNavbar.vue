@@ -182,7 +182,7 @@ async function refreshApprovalBadge(): Promise<void> {
       const minutes = getApprovalMinutes(request)
       return minutes !== null && minutes > 0 && minutes <= 60
     }).length
-  } catch (error) {
+  } catch {
     approvalPendingCount.value = 0
     urgentApprovalCount.value = 0
   }
@@ -234,7 +234,7 @@ const handleLogout = async (): Promise<void> => {
 
     await userStore.logout()
     await router.push('/auth')
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e === 'cancel' || e?.toString?.() === 'cancel') {
       await userStore.logout()
       await router.push('/customer/search')

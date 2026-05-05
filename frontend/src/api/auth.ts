@@ -36,7 +36,7 @@ export interface SendVerificationCodePayload {
  * @returns 登录响应
  */
 export function login(payload: LoginPayload): Promise<LoginResponse> {
-  return request.post<any, LoginResponse>('/auth/login', payload);
+  return request.post<unknown, LoginResponse>('/auth/login', payload);
 }
 
 /**
@@ -45,7 +45,7 @@ export function login(payload: LoginPayload): Promise<LoginResponse> {
  * @returns 注册响应（返回自动登录的 Token）
  */
 export function register(payload: RegisterPayload): Promise<LoginResponse> {
-  return request.post<any, LoginResponse>('/auth/register', payload);
+  return request.post<unknown, LoginResponse>('/auth/register', payload);
 }
 
 /**
@@ -53,7 +53,7 @@ export function register(payload: RegisterPayload): Promise<LoginResponse> {
  * @param payload 发送验证码信息
  * @returns 服务器响应
  */
-export function sendVerificationCode(payload: SendVerificationCodePayload): Promise<any> {
+export function sendVerificationCode(payload: SendVerificationCodePayload): Promise<unknown> {
   return request.post('/auth/verify-email', payload);
 }
 
@@ -61,7 +61,7 @@ export function sendVerificationCode(payload: SendVerificationCodePayload): Prom
  * 用户登出
  * @returns 服务器响应
  */
-export function logout(): Promise<any> {
+export function logout(): Promise<unknown> {
   return request.post('/auth/logout', {});
 }
 

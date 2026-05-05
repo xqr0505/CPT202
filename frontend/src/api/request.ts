@@ -13,10 +13,6 @@ interface ApiResponse<T = any> {
   data: T;
 }
 
-type RequestWithToastControl = {
-  suppressErrorMessage?: boolean;
-};
-
 type AuthFailureError = Error & {
   isAuthFailure?: boolean;
   status?: number;
@@ -135,7 +131,7 @@ export const getUser = (): any => {
   const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
   try {
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch (_error) {
     return null;
   }
 };
@@ -398,7 +394,7 @@ service.interceptors.response.use(
       try {
         await refreshAuthToken();
         return service(originalRequest);
-      } catch (refreshError) {
+      } catch (_refreshError) {
         if (!suppressErrorMessage) {
           showErrorOnce('Unauthorized, please login again');
         }

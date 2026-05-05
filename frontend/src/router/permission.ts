@@ -32,7 +32,6 @@ export function setupRouterGuard(router: Router) {
   router.beforeEach(async (to) => {
     const token = getAuthToken();
     const refreshToken = getRefreshToken();
-    const user = getUser();
 
     const shouldAttemptRefresh = Boolean(refreshToken && (!token || isTokenExpired(token)));
     if (shouldAttemptRefresh) {

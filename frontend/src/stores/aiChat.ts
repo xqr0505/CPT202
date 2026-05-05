@@ -262,7 +262,7 @@ const normalizeLineValue = (value: string | null): string | null => {
     return null
   }
   const sanitized = value
-    .replace(/^[\u2022\-\*\d.)\s]+/, '')
+    .replace(/^[\u2022\-*\d.)\s]+/, '')
     .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
     .trim()
   return sanitized || null
@@ -286,7 +286,7 @@ const isBookingConflictContent = (content: string): boolean => {
 
 const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
   const lineCandidate = extractFirstMatch(content, [
-    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D\?\-]?\s*([^\n\r]+)/i,
+    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D?-]?\s*([^\n\r]+)/i,
   ])
   const segment = lineCandidate || content
   const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
@@ -322,7 +322,7 @@ const tryExtractBookingSubmitPreviewFromText = (content: string): AiBookingSubmi
       /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
       /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
       /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D\?]?\s*(\d+)/i,
+      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D?]?\s*(\d+)/i,
       /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
     ])
   )

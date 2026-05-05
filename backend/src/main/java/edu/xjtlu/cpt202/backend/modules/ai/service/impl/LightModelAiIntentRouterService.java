@@ -13,9 +13,14 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
@@ -27,6 +32,7 @@ import java.util.regex.Pattern;
 public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private static final Logger log = LoggerFactory.getLogger(LightModelAiIntentRouterService.class);
+    private static final ExecutorService MODEL_EXECUTOR = Executors.newCachedThreadPool(new IntentRouterThreadFactory());
     private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "BOOKING", "DASHBOARD", "CHITCHAT");
     private static final String ROUTER_PROMPT = """
         You are an intent router for ExpertLink. 
@@ -92,13 +98,23 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private final ChatLanguageModel lightModel;
     private final AiIntentRouterProperties properties;
+    private final ExecutorService modelExecutor;
 
     public LightModelAiIntentRouterService(
             ChatLanguageModel lightModel,
             AiIntentRouterProperties properties
     ) {
+        this(lightModel, properties, MODEL_EXECUTOR);
+    }
+
+    LightModelAiIntentRouterService(
+            ChatLanguageModel lightModel,
+            AiIntentRouterProperties properties,
+            ExecutorService modelExecutor
+    ) {
         this.lightModel = lightModel;
         this.properties = properties;
+        this.modelExecutor = modelExecutor;
     }
 
     @Override
@@ -117,8 +133,9 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     }
 
     private AiIntent resolveByModel(String normalizedMessage) {
+        Future<Response<AiMessage>> future = null;
         try {
-            CompletableFuture<Response<AiMessage>> future = CompletableFuture.supplyAsync(() ->
+            future = modelExecutor.submit(() ->
                     lightModel.generate(List.of(UserMessage.userMessage(ROUTER_PROMPT.formatted(normalizedMessage))))
             );
             Response<AiMessage> response = future.get(properties.getTimeoutMs(), TimeUnit.MILLISECONDS);
@@ -130,14 +147,27 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             log.debug("Intent router fallback due to unknown output: {}", raw);
             return AiIntent.KNOWLEDGE;
         } catch (TimeoutException timeoutException) {
-            log.debug("Intent router timeout after {} ms", properties.getTimeoutMs());
+            cancelQuietly(future);
+            log.debug("Intent router model call timed out after {} ms; falling back to KNOWLEDGE", properties.getTimeoutMs());
+            return AiIntent.KNOWLEDGE;
+        } catch (InterruptedException interruptedException) {
+            cancelQuietly(future);
+            Thread.currentThread().interrupt();
+            log.debug("Intent router interrupted; falling back to KNOWLEDGE");
+            return AiIntent.KNOWLEDGE;
+        } catch (ExecutionException executionException) {
+            Throwable cause = executionException.getCause() == null ? executionException : executionException.getCause();
+            log.debug("Intent router fallback due to model error: {}", cause.getMessage());
             return AiIntent.KNOWLEDGE;
         } catch (RuntimeException exception) {
             log.debug("Intent router fallback due to error: {}", exception.getMessage());
             return AiIntent.KNOWLEDGE;
-        } catch (Exception exception) {
-            log.debug("Intent router fallback due to checked error: {}", exception.getMessage());
-            return AiIntent.KNOWLEDGE;
+        }
+    }
+
+    private void cancelQuietly(Future<Response<AiMessage>> future) {
+        if (future != null) {
+            future.cancel(true);
         }
     }
 
@@ -171,5 +201,17 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             }
         }
         return false;
+    }
+
+    private static final class IntentRouterThreadFactory implements ThreadFactory {
+
+        private static final AtomicInteger COUNTER = new AtomicInteger(1);
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "ai-intent-router-" + COUNTER.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        }
     }
 }

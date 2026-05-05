@@ -73,18 +73,18 @@ public class AiChatServiceImpl implements AiChatService {
         ));
         String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
         if (bookingWorkflowService.hasActiveTask(userId)) {
-            String bookingReply = bookingWorkflowService.handle(userId, normalizedUserMessage);
-            if (isBookingWorkflowAborted(bookingReply)) {
-                return assistant.chat(userId, normalizedUserMessage);
-            }
-            return bookingReply;
+            return bookingWorkflowService.handle(userId, normalizedUserMessage);
         }
-        if (cancelWorkflowService.hasActiveTask(userId)
-                || cancelWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+        if (cancelWorkflowService.hasActiveTask(userId)) {
             return cancelWorkflowService.handle(userId, normalizedUserMessage);
         }
-        if (rescheduleWorkflowService.hasActiveTask(userId)
-                || rescheduleWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+        if (rescheduleWorkflowService.hasActiveTask(userId)) {
+            return rescheduleWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return cancelWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
             return rescheduleWorkflowService.handle(userId, normalizedUserMessage);
         }
         if (bookingWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
@@ -104,18 +104,18 @@ public class AiChatServiceImpl implements AiChatService {
         ));
         String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
         if (bookingWorkflowService.hasActiveTask(memoryId)) {
-            String bookingReply = bookingWorkflowService.handle(memoryId, normalizedUserMessage);
-            if (isBookingWorkflowAborted(bookingReply)) {
-                return assistant.streamChat(memoryId, normalizedUserMessage);
-            }
-            return new SingleReplyTokenStream(bookingReply);
+            return bookingWorkflowService.streamHandle(memoryId, normalizedUserMessage);
         }
-        if (cancelWorkflowService.hasActiveTask(memoryId)
-                || cancelWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+        if (cancelWorkflowService.hasActiveTask(memoryId)) {
             return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
         }
-        if (rescheduleWorkflowService.hasActiveTask(memoryId)
-                || rescheduleWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+        if (rescheduleWorkflowService.hasActiveTask(memoryId)) {
+            return rescheduleWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
             return rescheduleWorkflowService.streamHandle(memoryId, normalizedUserMessage);
         }
         if (bookingWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
@@ -152,11 +152,6 @@ public class AiChatServiceImpl implements AiChatService {
 
     private long elapsedMs(long startNs) {
         return (System.nanoTime() - startNs) / 1_000_000;
-    }
-
-    private boolean isBookingWorkflowAborted(String workflowReply) {
-        return workflowReply != null
-                && workflowReply.startsWith(BookingWorkflowServiceImpl.BOOKING_TASK_ABORTED_MARKER);
     }
 
     private static class SingleReplyTokenStream implements TokenStream {

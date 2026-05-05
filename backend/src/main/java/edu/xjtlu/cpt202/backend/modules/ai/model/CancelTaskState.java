@@ -28,6 +28,8 @@ public class CancelTaskState implements Serializable {
 
     private String taskStateText;
 
+    private String disambiguationHint;
+
     public enum Step {
         IDENTIFY,
         VALIDATE

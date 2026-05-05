@@ -3,12 +3,18 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowAssistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowAssistant;
+import edu.xjtlu.cpt202.backend.modules.booking.model.dto.AiBookingSearchDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
@@ -30,6 +36,9 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookin
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchItemVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchResultVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.AiBookingSearchService;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.dto.SpecialistSearchQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistAvailabilityVO;
@@ -63,10 +72,11 @@ class RescheduleWorkflowServiceImplTest {
     void shouldStartWorkflowForEnglishRescheduleIntent() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         boolean shouldStart = service.shouldStartWorkflow(1001L, "I want to reschedule my booking");
@@ -78,10 +88,11 @@ class RescheduleWorkflowServiceImplTest {
     void shouldStartWorkflowForChineseRescheduleIntent() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         boolean shouldStart = service.shouldStartWorkflow(1001L, "我要改期");
@@ -99,15 +110,16 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("I want to reschedule my booking"));
 
-        assertThat(reply).contains("I found multiple reschedulable bookings.");
+        assertThat(reply).contains("Please reply with the exact booking ID");
         assertThat(reply).contains("| Booking ID | Specialist | Service | Appointment Time | Status |");
         assertThat(reply).contains("| 14 | Dr. Olivia Wang | Evening Consult | 2026-05-12 21:00 | CONFIRMED |");
         assertThat(store.get(1001L)).isPresent();
@@ -135,10 +147,11 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(301L, "2026-05-12", "16:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14"));
@@ -167,10 +180,11 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(301L, "2026-05-19", "16:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-19"));
@@ -204,10 +218,11 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-16 around 3pm"));
@@ -238,10 +253,11 @@ class RescheduleWorkflowServiceImplTest {
         );
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-16"));
@@ -268,10 +284,11 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of();
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-16"));
@@ -286,10 +303,11 @@ class RescheduleWorkflowServiceImplTest {
         store.save(1001L, RescheduleTaskState.builder().step(RescheduleTaskState.Step.IDENTIFY).build());
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 new StubBookingService(),
                 new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("never mind"));
@@ -320,10 +338,11 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(302L, "2026-05-16", "15:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-16 around 3pm"));
@@ -353,16 +372,57 @@ class RescheduleWorkflowServiceImplTest {
         specialistQueryService.availability = List.of(slot(302L, "2026-05-16", "15:00", "AVAILABLE"));
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                assistantNeedsUserSelection(),
                 bookingService,
                 specialistQueryService,
-                (memoryId, userMessage) -> AiIntent.BOOKING
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("reschedule booking 14 to 2026-05-16 around 3pm"));
 
         assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:2026-05-16:302]");
         assertThat(store.get(1001L)).isEmpty();
+    }
+
+    @Test
+    void shouldResolveBookingFromAssistantProvidedIdWhenFollowUpIsVague() {
+        InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
+        StubBookingService bookingService = new StubBookingService();
+        StubSpecialistQueryService specialistQueryService = new StubSpecialistQueryService();
+        bookingService.bookingList = List.of(
+                booking("14", "Dr. Olivia Wang", "Evening Consult", LocalDateTime.of(2026, 5, 12, 21, 0), "CONFIRMED")
+        );
+        bookingService.bookingDetail = BookingDetailVO.builder()
+                .bookingId(14L)
+                .specialistId(101L)
+                .slotDate("2026-05-12")
+                .startTime("21:00")
+                .status("CONFIRMED")
+                .build();
+        specialistQueryService.availability = List.of(slot(302L, "2026-05-16", "15:00", "AVAILABLE"));
+
+        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
+                store,
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: RESOLVED_BOOKING_ID
+                        BOOKING_ID: 14
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
+                bookingService,
+                specialistQueryService,
+                (memoryId, userMessage) -> AiIntent.BOOKING,
+                support()
+        );
+
+        String reply = service.handle(1001L, wrapped("that one"));
+
+        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:2026-05-12:]");
     }
 
     private static BookingItemVO booking(String id, String specialist, String service, LocalDateTime time, String status) {
@@ -395,6 +455,27 @@ class RescheduleWorkflowServiceImplTest {
                 """.formatted(userMessage);
     }
 
+    private static RescheduleWorkflowAssistant assistantNeedsUserSelection() {
+        return (userMsg, taskState, memoryContext, candidateSummary) -> """
+                ACTION: NEEDS_USER_ID_SELECTION
+                BOOKING_ID: N/A
+                EXPERT_NAME: N/A
+                CATEGORY_NAME: N/A
+                STATUS: N/A
+                START_DATE: N/A
+                END_DATE: N/A
+                TIME_RANGE_TYPE: N/A
+                """;
+    }
+
+    private static WorkflowBookingIdentificationSupport support() {
+        StubAiBookingSearchService searchService = new StubAiBookingSearchService();
+        return new WorkflowBookingIdentificationSupport(
+                new InMemoryChatMemoryStore(),
+                new edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool(searchService)
+        );
+    }
+
     private static class InMemoryRescheduleTaskStateStore implements RescheduleTaskStateStore {
 
         private final Map<Long, RescheduleTaskState> states = new HashMap<>();
@@ -412,6 +493,32 @@ class RescheduleWorkflowServiceImplTest {
         @Override
         public void clear(Long userId) {
             states.remove(userId);
+        }
+    }
+
+    private static class InMemoryChatMemoryStore implements ChatMemoryStore {
+        @Override
+        public List<ChatMessage> getMessages(Object memoryId) {
+            return List.of();
+        }
+
+        @Override
+        public void updateMessages(Object memoryId, List<ChatMessage> messages) {
+        }
+
+        @Override
+        public void deleteMessages(Object memoryId) {
+        }
+    }
+
+    private static class StubAiBookingSearchService implements AiBookingSearchService {
+        @Override
+        public AiBookingSearchResultVO searchCustomerBookings(Long customerId, AiBookingSearchDTO queryDTO) {
+            return AiBookingSearchResultVO.builder()
+                    .totalMatched(0)
+                    .returnedCount(0)
+                    .items(List.of())
+                    .build();
         }
     }
 

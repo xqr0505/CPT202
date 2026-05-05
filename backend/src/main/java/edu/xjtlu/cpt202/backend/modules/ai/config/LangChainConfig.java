@@ -82,6 +82,36 @@ public class LangChainConfig {
     }
 
     @Bean
+    public ChatLanguageModel intentRouterChatLanguageModel(
+            @Value("${ai.openai.api-key}") String apiKey,
+            @Value("${ai.openai.model-name}") String modelName,
+            @Value("${ai.openai.base-url:}") String baseUrl,
+            AiModelProperties aiModelProperties
+    ) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(AiConstant.OPENAI_API_KEY_REQUIRED_MESSAGE);
+        }
+        if (modelName == null || modelName.isBlank()) {
+            throw new IllegalStateException(AiConstant.OPENAI_MODEL_NAME_REQUIRED_MESSAGE);
+        }
+
+        var builder = OpenAiChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(modelName)
+                .maxTokens(Math.min(aiModelProperties.getMaxOutputTokens(), 32))
+                .maxRetries(0);
+
+        if (baseUrl != null) {
+            String trimmedBaseUrl = baseUrl.trim();
+            if (!trimmedBaseUrl.isBlank()) {
+                builder.baseUrl(trimmedBaseUrl);
+            }
+        }
+
+        return new SanitizingChatLanguageModel(builder.build());
+    }
+
+    @Bean
     public StreamingChatLanguageModel streamingChatLanguageModel(
             @Value("${ai.openai.api-key}") String apiKey,
             @Value("${ai.openai.model-name}") String modelName,
@@ -175,24 +205,32 @@ public class LangChainConfig {
     }
 
     @Bean
-    public CancelWorkflowAssistant cancelWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+    public CancelWorkflowAssistant cancelWorkflowAssistant(
+            ChatLanguageModel chatLanguageModel,
+            AiBookingSearchTool aiBookingSearchTool
+    ) {
         return AiServices.builder(CancelWorkflowAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
+                .tools(aiBookingSearchTool)
                 .build();
     }
 
     @Bean
-    public RescheduleWorkflowAssistant rescheduleWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+    public RescheduleWorkflowAssistant rescheduleWorkflowAssistant(
+            ChatLanguageModel chatLanguageModel,
+            AiBookingSearchTool aiBookingSearchTool
+    ) {
         return AiServices.builder(RescheduleWorkflowAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
+                .tools(aiBookingSearchTool)
                 .build();
     }
 
     @Bean
     public AiIntentRouterService intentRouterService(
-            ChatLanguageModel chatLanguageModel,
+            ChatLanguageModel intentRouterChatLanguageModel,
             AiIntentRouterProperties aiIntentRouterProperties
     ) {
-        return new LightModelAiIntentRouterService(chatLanguageModel, aiIntentRouterProperties);
+        return new LightModelAiIntentRouterService(intentRouterChatLanguageModel, aiIntentRouterProperties);
     }
 }

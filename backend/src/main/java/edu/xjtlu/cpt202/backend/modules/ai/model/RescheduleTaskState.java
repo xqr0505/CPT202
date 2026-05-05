@@ -34,6 +34,8 @@ public class RescheduleTaskState implements Serializable {
 
     private String taskStateText;
 
+    private String disambiguationHint;
+
     public enum Step {
         IDENTIFY,
         PRE_CHECK,

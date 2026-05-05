@@ -28,16 +28,13 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService {
@@ -45,7 +42,6 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     static final String RESCHEDULE_TASK_ABORTED_MARKER = "[RESCHEDULE_TASK_ABORTED]";
     static final String TRIGGER_RESCHEDULE_MODAL_PREFIX = "[TRIGGER_RESCHEDULE_MODAL:";
 
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,18})\\b");
     private static final Pattern DATE_PATTERN = Pattern.compile("\\b(20\\d{2}-\\d{2}-\\d{2})\\b");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern RESCHEDULE_INTENT_PATTERN = Pattern.compile(
@@ -72,19 +68,22 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     private final BookingService bookingService;
     private final SpecialistQueryService specialistQueryService;
     private final AiIntentRouterService aiIntentRouterService;
+    private final WorkflowBookingIdentificationSupport bookingIdentificationSupport;
 
     public RescheduleWorkflowServiceImpl(
             RescheduleTaskStateStore rescheduleTaskStateStore,
             RescheduleWorkflowAssistant rescheduleWorkflowAssistant,
             BookingService bookingService,
             SpecialistQueryService specialistQueryService,
-            AiIntentRouterService aiIntentRouterService
+            AiIntentRouterService aiIntentRouterService,
+            WorkflowBookingIdentificationSupport bookingIdentificationSupport
     ) {
         this.rescheduleTaskStateStore = rescheduleTaskStateStore;
         this.rescheduleWorkflowAssistant = rescheduleWorkflowAssistant;
         this.bookingService = bookingService;
         this.specialistQueryService = specialistQueryService;
         this.aiIntentRouterService = aiIntentRouterService;
+        this.bookingIdentificationSupport = bookingIdentificationSupport;
     }
 
     @Override
@@ -120,14 +119,6 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             return RESCHEDULE_TASK_ABORTED_MARKER + " Reschedule flow closed.";
         }
 
-        String taskStateText = Optional.ofNullable(state.getTaskStateText())
-                .orElse("identifying which booking the user wants to reschedule");
-        String abortProbe = rescheduleWorkflowAssistant.process(originalUserMessage, taskStateText);
-        if (abortProbe != null && abortProbe.startsWith(RESCHEDULE_TASK_ABORTED_MARKER)) {
-            rescheduleTaskStateStore.clear(userId);
-            return abortProbe;
-        }
-
         if (state.getStep() == null) {
             state.setStep(RescheduleTaskState.Step.IDENTIFY);
         }
@@ -146,10 +137,27 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             return "You do not have any reschedulable bookings right now.";
         }
 
-        Long identifiedBookingId = identifyBookingId(originalUserMessage, candidates);
-        if (identifiedBookingId == null) {
+        WorkflowBookingIdentificationSupport.BookingIdentificationResult identificationResult =
+                bookingIdentificationSupport.identifyBooking(
+                        userId,
+                        originalUserMessage,
+                        Optional.ofNullable(state.getTaskStateText()).orElse("identifying booking to reschedule"),
+                        candidates,
+                        state.getCandidateBookingIds(),
+                        rescheduleWorkflowAssistant::process
+                );
+
+        if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.ABORTED) {
+            rescheduleTaskStateStore.clear(userId);
+            return RESCHEDULE_TASK_ABORTED_MARKER + " Reschedule flow closed.";
+        }
+
+        if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.NEEDS_USER_SELECTION) {
+            List<BookingItemVO> matchedBookings = identificationResult.matchedBookings().isEmpty()
+                    ? candidates
+                    : identificationResult.matchedBookings();
             state.setStep(RescheduleTaskState.Step.IDENTIFY);
-            state.setCandidateBookingIds(candidates.stream()
+            state.setCandidateBookingIds(matchedBookings.stream()
                     .map(BookingItemVO::getId)
                     .filter(Objects::nonNull)
                     .map(Long::valueOf)
@@ -157,15 +165,17 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             state.setTaskStateText("waiting for the user to choose one booking to reschedule");
             state.setTargetDate(extractTargetDate(originalUserMessage, null));
             state.setRequestedTimeIntent(extractRequestedTimeIntent(originalUserMessage));
+            state.setDisambiguationHint(identificationResult.message());
             rescheduleTaskStateStore.save(userId, state);
-            return buildCandidatePrompt(candidates);
+            return buildCandidatePrompt(matchedBookings, identificationResult.message());
         }
 
-        state.setTargetBookingId(identifiedBookingId);
+        state.setTargetBookingId(identificationResult.resolvedBookingId());
         state.setStep(RescheduleTaskState.Step.PRE_CHECK);
-        state.setCandidateBookingIds(List.of(identifiedBookingId));
+        state.setCandidateBookingIds(List.of(identificationResult.resolvedBookingId()));
         state.setTaskStateText("booking identified, checking availability and preparing reschedule trigger");
         state.setRequestedTimeIntent(extractRequestedTimeIntent(originalUserMessage));
+        state.setDisambiguationHint(null);
         rescheduleTaskStateStore.save(userId, state);
         return handlePreCheckAndTrigger(userId, originalUserMessage, state);
     }
@@ -274,80 +284,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                 .toList();
     }
 
-    private Long identifyBookingId(String originalUserMessage, List<BookingItemVO> candidates) {
-        Long directId = extractDirectBookingId(originalUserMessage, candidates);
-        if (directId != null) {
-            return directId;
-        }
-
-        String normalizedMessage = normalize(originalUserMessage);
-        Map<Long, Integer> scores = new LinkedHashMap<>();
-        for (BookingItemVO candidate : candidates) {
-            long score = scoreCandidate(normalizedMessage, candidate);
-            if (score > 0 && candidate.getId() != null) {
-                scores.put(Long.valueOf(candidate.getId()), (int) score);
-            }
-        }
-
-        if (scores.isEmpty()) {
-            return null;
-        }
-
-        List<Map.Entry<Long, Integer>> sorted = scores.entrySet().stream()
-                .sorted((left, right) -> Integer.compare(right.getValue(), left.getValue()))
-                .toList();
-        if (sorted.size() > 1 && Objects.equals(sorted.get(0).getValue(), sorted.get(1).getValue())) {
-            return null;
-        }
-        return sorted.get(0).getKey();
-    }
-
-    private Long extractDirectBookingId(String originalUserMessage, List<BookingItemVO> candidates) {
-        Matcher matcher = NUMBER_PATTERN.matcher(Optional.ofNullable(originalUserMessage).orElse(""));
-        Set<String> candidateIds = candidates.stream()
-                .map(BookingItemVO::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        while (matcher.find()) {
-            String value = matcher.group(1);
-            if (candidateIds.contains(value)) {
-                return Long.valueOf(value);
-            }
-        }
-        return null;
-    }
-
-    private long scoreCandidate(String normalizedMessage, BookingItemVO candidate) {
-        long score = 0L;
-        if (containsNormalized(normalizedMessage, candidate.getSpecialistName())) {
-            score += 4;
-        }
-        if (containsNormalized(normalizedMessage, candidate.getServiceName())) {
-            score += 3;
-        }
-        if (candidate.getAppointmentDateTime() != null) {
-            String dateToken = candidate.getAppointmentDateTime().toLocalDate().toString();
-            String timeToken = candidate.getAppointmentDateTime().toLocalTime().withSecond(0).withNano(0).toString();
-            if (normalizedMessage.contains(dateToken.toLowerCase(Locale.ROOT))) {
-                score += 3;
-            }
-            if (normalizedMessage.contains(timeToken.toLowerCase(Locale.ROOT))) {
-                score += 2;
-            }
-        }
-        return score;
-    }
-
-    private boolean containsNormalized(String normalizedMessage, String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        return normalizedMessage.contains(normalize(value));
-    }
-
-    private String buildCandidatePrompt(List<BookingItemVO> candidates) {
+    private String buildCandidatePrompt(List<BookingItemVO> candidates, String clarificationMessage) {
         List<String> lines = new ArrayList<>();
-        lines.add("I found multiple reschedulable bookings. Please reply with the booking ID you want to reschedule.");
+        if (clarificationMessage != null && !clarificationMessage.isBlank()) {
+            lines.add(clarificationMessage);
+        } else {
+            lines.add("I found multiple reschedulable bookings. Please reply with the exact booking ID you want to reschedule.");
+        }
         lines.add("");
         lines.add("| Booking ID | Specialist | Service | Appointment Time | Status |");
         lines.add("| --- | --- | --- | --- | --- |");

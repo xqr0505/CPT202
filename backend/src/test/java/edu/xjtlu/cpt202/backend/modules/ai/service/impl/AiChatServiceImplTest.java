@@ -30,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * @author QiranXiao
  * @since 2026/4/15
- *
  */
 class AiChatServiceImplTest {
 
@@ -218,7 +217,7 @@ class AiChatServiceImplTest {
     }
 
     @Test
-    void shouldFallbackToNormalAssistantWhenBookingWorkflowAborted() {
+    void shouldReturnAbortReplyWhenBookingWorkflowAborted() {
         EchoAssistant assistant = new EchoAssistant();
         BookingWorkflowService bookingWorkflowService = new AbortingBookingWorkflowService();
         AiChatServiceImpl aiChatService = new AiChatServiceImpl(
@@ -234,10 +233,61 @@ class AiChatServiceImplTest {
         );
 
         UserContextHolder.setUserId(1001L);
-        String reply = aiChatService.chat("你好");
+        String reply = aiChatService.chat("hello");
 
-        assertTrue(reply.contains("你好"));
-        assertTrue(!reply.contains("[BOOKING_TASK_ABORTED]"));
+        assertEquals("[BOOKING_TASK_ABORTED] Booking flow closed.", reply);
+    }
+
+    @Test
+    void shouldKeepCancelWorkflowExclusiveWhenTaskIsActive() {
+        EchoAssistant assistant = new EchoAssistant();
+        RecordingCancelWorkflowService cancelWorkflowService = new RecordingCancelWorkflowService(true, false);
+        RecordingRescheduleWorkflowService rescheduleWorkflowService = new RecordingRescheduleWorkflowService(false, true);
+        RecordingBookingWorkflowService bookingWorkflowService = new RecordingBookingWorkflowService(false, true);
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                assistant,
+                bookingWorkflowService,
+                cancelWorkflowService,
+                rescheduleWorkflowService,
+                new InMemoryChatMemoryStore(),
+                new RecordingBookingTaskStateStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
+                aiChatProfiler
+        );
+
+        UserContextHolder.setUserId(1001L);
+        String reply = aiChatService.chat("I want to reschedule this booking");
+
+        assertEquals("cancel-workflow", reply);
+        assertEquals("I want to reschedule this booking", cancelWorkflowService.lastOriginalMessage());
+        assertTrue(rescheduleWorkflowService.lastOriginalMessage() == null);
+        assertTrue(bookingWorkflowService.lastOriginalMessage() == null);
+    }
+
+    @Test
+    void shouldKeepRescheduleWorkflowExclusiveWhenTaskIsActive() {
+        EchoAssistant assistant = new EchoAssistant();
+        RecordingCancelWorkflowService cancelWorkflowService = new RecordingCancelWorkflowService(false, true);
+        RecordingRescheduleWorkflowService rescheduleWorkflowService = new RecordingRescheduleWorkflowService(true, false);
+        AiChatServiceImpl aiChatService = new AiChatServiceImpl(
+                assistant,
+                new NoOpBookingWorkflowService(),
+                cancelWorkflowService,
+                rescheduleWorkflowService,
+                new InMemoryChatMemoryStore(),
+                new RecordingBookingTaskStateStore(),
+                new RecordingCancelTaskStateStore(),
+                new RecordingRescheduleTaskStateStore(),
+                aiChatProfiler
+        );
+
+        UserContextHolder.setUserId(1001L);
+        String reply = aiChatService.chat("cancel booking 12");
+
+        assertEquals("reschedule-workflow", reply);
+        assertEquals("cancel booking 12", rescheduleWorkflowService.lastOriginalMessage());
+        assertTrue(cancelWorkflowService.lastOriginalMessage() == null);
     }
 
     private static class MemoryAwareAssistant implements Assistant {
@@ -338,7 +388,6 @@ class AiChatServiceImplTest {
 
         @Override
         public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.CancelTaskState state) {
-            // Not needed for this test.
         }
 
         @Override
@@ -362,7 +411,6 @@ class AiChatServiceImplTest {
 
         @Override
         public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.BookingTaskState state) {
-            // Not needed for this test.
         }
 
         @Override
@@ -386,7 +434,6 @@ class AiChatServiceImplTest {
 
         @Override
         public void save(Long userId, edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState state) {
-            // Not needed for this test.
         }
 
         @Override
@@ -493,6 +540,45 @@ class AiChatServiceImplTest {
         public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
             this.lastOriginalMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
             return new SimpleTokenStream("booking-workflow");
+        }
+
+        private String lastOriginalMessage() {
+            return lastOriginalMessage;
+        }
+    }
+
+    private static class RecordingRescheduleWorkflowService implements RescheduleWorkflowService {
+
+        private final boolean activeTask;
+        private final boolean shouldStart;
+        private String lastOriginalMessage;
+
+        private RecordingRescheduleWorkflowService(boolean activeTask, boolean shouldStart) {
+            this.activeTask = activeTask;
+            this.shouldStart = shouldStart;
+        }
+
+        @Override
+        public boolean hasActiveTask(Long userId) {
+            return activeTask;
+        }
+
+        @Override
+        public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+            this.lastOriginalMessage = originalUserMessage;
+            return shouldStart;
+        }
+
+        @Override
+        public String handle(Long userId, String normalizedUserMessage) {
+            this.lastOriginalMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+            return "reschedule-workflow";
+        }
+
+        @Override
+        public TokenStream streamHandle(Long userId, String normalizedUserMessage) {
+            this.lastOriginalMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+            return new SimpleTokenStream("reschedule-workflow");
         }
 
         private String lastOriginalMessage() {

@@ -47,6 +47,8 @@ services:
       - db
 
   backend:
+    profiles:
+      - docker-backend
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
@@ -110,8 +112,6 @@ services:
     volumes:
       - ./frontend:/app
       - node_modules_dev:/app/node_modules
-    depends_on:
-      - backend
 
 volumes:
   db_data_dev:

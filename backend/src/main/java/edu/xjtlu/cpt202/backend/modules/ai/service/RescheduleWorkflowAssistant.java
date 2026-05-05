@@ -24,12 +24,13 @@ public interface RescheduleWorkflowAssistant {
             1. Use the recent memory context to resolve vague references like "this", "that booking", or omitted subjects.
             2. You may only resolve to a booking that appears in the actionable candidates.
             3. If user input is unrelated or user clearly wants to quit this flow, return ACTION: ABORT.
-            4. If there is enough info to identify exactly one candidate booking, return ACTION: RESOLVED_BOOKING_ID and BOOKING_ID.
-            5. If there is not enough info, return ACTION: INSUFFICIENT_INFO.
-            6. If there are still multiple plausible candidates, return ACTION: NEEDS_USER_ID_SELECTION.
-            7. Optionally provide search hints using these fields when helpful:
+            4. On every turn, also try to extract any requested reschedule date/time from the current user message plus recent memory.
+            5. If there is enough info to identify exactly one candidate booking, return ACTION: RESOLVED_BOOKING_ID and BOOKING_ID.
+            6. If there is not enough info, return ACTION: INSUFFICIENT_INFO.
+            7. If there are still multiple plausible candidates, return ACTION: NEEDS_USER_ID_SELECTION.
+            8. Optionally provide search hints using these fields when helpful:
                EXPERT_NAME, CATEGORY_NAME, STATUS, START_DATE, END_DATE, TIME_RANGE_TYPE.
-            8. Return plain text only with one field per line in this exact style:
+            9. Return plain text only with one field per line in this exact style:
                ACTION: ...
                BOOKING_ID: ...
                EXPERT_NAME: ...
@@ -38,8 +39,14 @@ public interface RescheduleWorkflowAssistant {
                START_DATE: ...
                END_DATE: ...
                TIME_RANGE_TYPE: ...
-            9. Never leave a field blank. If a field is unknown or unused, output N/A.
-            10. All inferred wording and intent handling must remain English-compatible.
+               TARGET_DATE: ...
+               TARGET_TIME: ...
+               TIME_HINT: ...
+            10. TARGET_DATE must be ISO yyyy-MM-dd when confidently known, otherwise N/A.
+            11. TARGET_TIME should be a normalized 24-hour HH:mm when confidently known, otherwise N/A.
+            12. TIME_HINT can be broader wording like morning, afternoon, evening, around 3pm, next Friday afternoon if helpful.
+            13. Never leave a field blank. If a field is unknown or unused, output N/A.
+            14. All inferred wording and intent handling must remain English-compatible.
             """)
     String process(
             @UserMessage String userMsg,

@@ -30,7 +30,9 @@ public class RescheduleTaskState implements Serializable {
 
     private List<Long> candidateBookingIds;
 
-    private String requestedTimeIntent;
+    private String targetTime;
+
+    private String timeHint;
 
     private String taskStateText;
 

@@ -41,6 +41,9 @@ public class WorkflowBookingIdentificationSupport {
     private static final Pattern START_DATE_PATTERN = Pattern.compile("^START_DATE\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
     private static final Pattern END_DATE_PATTERN = Pattern.compile("^END_DATE\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
     private static final Pattern TIME_RANGE_TYPE_PATTERN = Pattern.compile("^TIME_RANGE_TYPE\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    private static final Pattern TARGET_DATE_PATTERN = Pattern.compile("^TARGET_DATE\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    private static final Pattern TARGET_TIME_PATTERN = Pattern.compile("^TARGET_TIME\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    private static final Pattern TIME_HINT_PATTERN = Pattern.compile("^TIME_HINT\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
     private static final Set<String> STRUCTURED_EMPTY_VALUES = Set.of("", "N/A", "NONE", "NULL", "UNKNOWN");
 
     private final ChatMemoryStore chatMemoryStore;
@@ -64,7 +67,7 @@ public class WorkflowBookingIdentificationSupport {
     ) {
         List<BookingItemVO> pool = chooseCandidatePool(actionableBookings, preferredCandidateBookingIds);
         if (pool.isEmpty()) {
-            return BookingIdentificationResult.needsUserSelection(List.of(), null);
+            return BookingIdentificationResult.needsUserSelection(List.of(), null, null, null, null);
         }
         if (pool.size() == 1) {
             return BookingIdentificationResult.resolved(Long.valueOf(pool.get(0).getId()), pool);
@@ -89,17 +92,41 @@ public class WorkflowBookingIdentificationSupport {
         }
 
         if (structuredReply.resolvedBookingId() != null && containsBookingId(pool, structuredReply.resolvedBookingId())) {
-            return BookingIdentificationResult.resolved(structuredReply.resolvedBookingId(), pool);
+            return BookingIdentificationResult.resolved(
+                    structuredReply.resolvedBookingId(),
+                    pool,
+                    structuredReply.targetDate(),
+                    structuredReply.targetTime(),
+                    structuredReply.timeHint()
+            );
         }
 
         List<BookingItemVO> matchedBookings = resolveFromSearch(userId, pool, structuredReply);
         if (matchedBookings.size() == 1) {
-            return BookingIdentificationResult.resolved(Long.valueOf(matchedBookings.get(0).getId()), matchedBookings);
+            return BookingIdentificationResult.resolved(
+                    Long.valueOf(matchedBookings.get(0).getId()),
+                    matchedBookings,
+                    structuredReply.targetDate(),
+                    structuredReply.targetTime(),
+                    structuredReply.timeHint()
+            );
         }
         if (!matchedBookings.isEmpty()) {
-            return BookingIdentificationResult.needsUserSelection(matchedBookings, structuredReply.summary());
+            return BookingIdentificationResult.needsUserSelection(
+                    matchedBookings,
+                    structuredReply.summary(),
+                    structuredReply.targetDate(),
+                    structuredReply.targetTime(),
+                    structuredReply.timeHint()
+            );
         }
-        return BookingIdentificationResult.needsUserSelection(pool, structuredReply.summary());
+        return BookingIdentificationResult.needsUserSelection(
+                pool,
+                structuredReply.summary(),
+                structuredReply.targetDate(),
+                structuredReply.targetTime(),
+                structuredReply.timeHint()
+        );
     }
 
     private List<BookingItemVO> resolveFromSearch(
@@ -268,18 +295,37 @@ public class WorkflowBookingIdentificationSupport {
             Status status,
             Long resolvedBookingId,
             List<BookingItemVO> matchedBookings,
-            String message
+            String message,
+            String targetDate,
+            String targetTime,
+            String timeHint
     ) {
         public static BookingIdentificationResult resolved(Long bookingId, List<BookingItemVO> matchedBookings) {
-            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null);
+            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null, null, null, null);
         }
 
-        public static BookingIdentificationResult needsUserSelection(List<BookingItemVO> matchedBookings, String message) {
-            return new BookingIdentificationResult(Status.NEEDS_USER_SELECTION, null, matchedBookings, message);
+        public static BookingIdentificationResult resolved(
+                Long bookingId,
+                List<BookingItemVO> matchedBookings,
+                String targetDate,
+                String targetTime,
+                String timeHint
+        ) {
+            return new BookingIdentificationResult(Status.RESOLVED, bookingId, matchedBookings, null, targetDate, targetTime, timeHint);
+        }
+
+        public static BookingIdentificationResult needsUserSelection(
+                List<BookingItemVO> matchedBookings,
+                String message,
+                String targetDate,
+                String targetTime,
+                String timeHint
+        ) {
+            return new BookingIdentificationResult(Status.NEEDS_USER_SELECTION, null, matchedBookings, message, targetDate, targetTime, timeHint);
         }
 
         public static BookingIdentificationResult aborted(String message) {
-            return new BookingIdentificationResult(Status.ABORTED, null, List.of(), message);
+            return new BookingIdentificationResult(Status.ABORTED, null, List.of(), message, null, null, null);
         }
     }
 
@@ -297,7 +343,10 @@ public class WorkflowBookingIdentificationSupport {
             String status,
             LocalDate startDate,
             LocalDate endDate,
-            String timeRangeType
+            String timeRangeType,
+            String targetDate,
+            String targetTime,
+            String timeHint
     ) {
         static StructuredAssistantReply parse(String raw) {
             return new StructuredAssistantReply(
@@ -308,7 +357,10 @@ public class WorkflowBookingIdentificationSupport {
                     blankToNull(extract(raw, STATUS_PATTERN)),
                     parseDate(extract(raw, START_DATE_PATTERN)),
                     parseDate(extract(raw, END_DATE_PATTERN)),
-                    blankToNull(extract(raw, TIME_RANGE_TYPE_PATTERN))
+                    blankToNull(extract(raw, TIME_RANGE_TYPE_PATTERN)),
+                    normalizeIsoDate(extract(raw, TARGET_DATE_PATTERN)),
+                    normalizeTime(extract(raw, TARGET_TIME_PATTERN)),
+                    blankToNull(extract(raw, TIME_HINT_PATTERN))
             );
         }
 
@@ -386,6 +438,30 @@ public class WorkflowBookingIdentificationSupport {
             } catch (DateTimeParseException ignored) {
                 return null;
             }
+        }
+
+        private static String normalizeIsoDate(String raw) {
+            String value = blankToNull(raw);
+            if (value == null) {
+                return null;
+            }
+            try {
+                return LocalDate.parse(value).toString();
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+
+        private static String normalizeTime(String raw) {
+            String value = blankToNull(raw);
+            if (value == null) {
+                return null;
+            }
+            String normalized = value.trim();
+            if (normalized.matches("^\\d{2}:\\d{2}$")) {
+                return normalized;
+            }
+            return null;
         }
     }
 }

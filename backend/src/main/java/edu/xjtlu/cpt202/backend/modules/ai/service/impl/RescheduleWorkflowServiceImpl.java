@@ -2,7 +2,6 @@ package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.service.TokenStream;
-import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.modules.ai.model.RescheduleTaskState;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
@@ -13,21 +12,15 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
-import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingRescheduleQuoteVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
-import edu.xjtlu.cpt202.backend.modules.schedule.model.vo.SpecialistAvailabilityVO;
-import edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService;
 import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -52,8 +45,6 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             "\\b(what|why|how|when|which|who|where|explain|policy|policies|rule|rules|guide|meaning|mean|allowed|eligible|eligibility|fee|fees|penalty|refund|different specialist|another specialist)\\b",
             Pattern.CASE_INSENSITIVE
     );
-    private static final int STREAM_CHUNK_SIZE = 24;
-    private static final long STREAM_CHUNK_DELAY_MS = 24L;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Set<String> RESCHEDULABLE_STATUSES = Set.of("PENDING", "CONFIRMED");
     private static final Set<String> ABORT_PHRASES = Set.of(
@@ -70,7 +61,6 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
     private final RescheduleTaskStateStore rescheduleTaskStateStore;
     private final RescheduleWorkflowAssistant rescheduleWorkflowAssistant;
     private final BookingService bookingService;
-    private final SpecialistQueryService specialistQueryService;
     private final AiIntentRouterService aiIntentRouterService;
     private final WorkflowBookingIdentificationSupport bookingIdentificationSupport;
 
@@ -78,14 +68,13 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             RescheduleTaskStateStore rescheduleTaskStateStore,
             RescheduleWorkflowAssistant rescheduleWorkflowAssistant,
             BookingService bookingService,
-            SpecialistQueryService specialistQueryService,
+            edu.xjtlu.cpt202.backend.modules.schedule.service.SpecialistQueryService specialistQueryService,
             AiIntentRouterService aiIntentRouterService,
             WorkflowBookingIdentificationSupport bookingIdentificationSupport
     ) {
         this.rescheduleTaskStateStore = rescheduleTaskStateStore;
         this.rescheduleWorkflowAssistant = rescheduleWorkflowAssistant;
         this.bookingService = bookingService;
-        this.specialistQueryService = specialistQueryService;
         this.aiIntentRouterService = aiIntentRouterService;
         this.bookingIdentificationSupport = bookingIdentificationSupport;
     }
@@ -133,8 +122,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         if (state.getStep() == RescheduleTaskState.Step.IDENTIFY) {
             return handleIdentifyStep(userId, originalUserMessage, state);
         }
-
-        return handlePreCheckAndTrigger(userId, originalUserMessage, state);
+        return triggerRescheduleModal(userId, state);
     }
 
     private String handleIdentifyStep(Long userId, String originalUserMessage, RescheduleTaskState state) {
@@ -159,6 +147,14 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             return RESCHEDULE_TASK_ABORTED_MARKER + " Reschedule flow closed.";
         }
 
+        mergeTemporalIntent(
+                state,
+                originalUserMessage,
+                identificationResult.targetDate(),
+                identificationResult.targetTime(),
+                identificationResult.timeHint()
+        );
+
         if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.NEEDS_USER_SELECTION) {
             List<BookingItemVO> matchedBookings = identificationResult.matchedBookings().isEmpty()
                     ? candidates
@@ -170,24 +166,21 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                     .map(Long::valueOf)
                     .toList());
             state.setTaskStateText("waiting for the user to choose one booking to reschedule");
-            state.setTargetDate(extractTargetDate(originalUserMessage, null));
-            state.setRequestedTimeIntent(extractRequestedTimeIntent(originalUserMessage));
             state.setDisambiguationHint(identificationResult.message());
             rescheduleTaskStateStore.save(userId, state);
-            return buildCandidatePrompt(matchedBookings, identificationResult.message());
+            return buildCandidatePrompt(matchedBookings, identificationResult.message(), state);
         }
 
         state.setTargetBookingId(identificationResult.resolvedBookingId());
-        state.setStep(RescheduleTaskState.Step.PRE_CHECK);
+        state.setStep(RescheduleTaskState.Step.DONE);
         state.setCandidateBookingIds(List.of(identificationResult.resolvedBookingId()));
-        state.setTaskStateText("booking identified, checking availability and preparing reschedule trigger");
-        state.setRequestedTimeIntent(extractRequestedTimeIntent(originalUserMessage));
+        state.setTaskStateText("booking identified, preparing reschedule trigger");
         state.setDisambiguationHint(null);
         rescheduleTaskStateStore.save(userId, state);
-        return handlePreCheckAndTrigger(userId, originalUserMessage, state);
+        return triggerRescheduleModal(userId, state);
     }
 
-    private String handlePreCheckAndTrigger(Long userId, String originalUserMessage, RescheduleTaskState state) {
+    private String triggerRescheduleModal(Long userId, RescheduleTaskState state) {
         Long bookingId = state.getTargetBookingId();
         if (bookingId == null) {
             rescheduleTaskStateStore.clear(userId);
@@ -200,50 +193,18 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             return "Sorry, I could not load the booking details for rescheduling.";
         }
 
-        String targetDate = resolveTargetDate(originalUserMessage, state, bookingDetail);
+        String targetDate = resolveTargetDate(state);
         state.setTargetDate(targetDate);
-
-        List<SpecialistAvailabilityVO> availableSlots = specialistQueryService
-                .listAvailability(bookingDetail.getSpecialistId(), LocalDate.parse(targetDate))
-                .stream()
-                .filter(Objects::nonNull)
-                .filter(slot -> "AVAILABLE".equalsIgnoreCase(slot.getStatus()))
-                .filter(this::slotStartsAfterTwoHours)
-                .toList();
-
-        Long suggestedSlotId = resolveSuggestedSlotId(availableSlots, state.getRequestedTimeIntent());
-        state.setSuggestedSlotId(suggestedSlotId);
-
-        if (suggestedSlotId != null) {
-            BookingRescheduleQuoteVO quote;
-            try {
-                quote = bookingService.customerRescheduleQuote(bookingId, suggestedSlotId, userId);
-            } catch (BusinessException exception) {
-                rescheduleTaskStateStore.clear(userId);
-                return safeText(exception.getMessage());
-            }
-            rescheduleTaskStateStore.clear(userId);
-            if (!quote.isAllowed()) {
-                return safeText(quote.getMessage());
-            }
-            return """
-                    I have prepared the reschedule window for you. There is an available time on %s, and you can make the final confirmation in the popup.
-                    %s%d:%s:%d]
-                    """.formatted(targetDate, TRIGGER_RESCHEDULE_MODAL_PREFIX, bookingId, targetDate, suggestedSlotId);
-        }
-
         rescheduleTaskStateStore.clear(userId);
-        if (availableSlots.isEmpty()) {
-            return """
-                    This specialist has no available time slots on %s. You can still open the reschedule popup and choose an available time slot yourself.
-                    %s%d:%s:]
-                    """.formatted(targetDate, TRIGGER_RESCHEDULE_MODAL_PREFIX, bookingId, targetDate);
-        }
-
         return """
-                I have prepared the reschedule window for you. You can review the available time slots on %s and make the final confirmation in the popup.
+                I have prepared the reschedule window for you. You can review the available time slots%s and make the final confirmation in the popup.
                 %s%d:%s:]
-                """.formatted(targetDate, TRIGGER_RESCHEDULE_MODAL_PREFIX, bookingId, targetDate);
+                """.formatted(
+                targetDate == null || targetDate.isBlank() ? "" : " on " + targetDate,
+                TRIGGER_RESCHEDULE_MODAL_PREFIX,
+                bookingId,
+                safeText(targetDate)
+        );
     }
 
     private RescheduleTaskState createInitialState() {
@@ -259,7 +220,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         }
         String normalized = normalize(message);
         return RESCHEDULE_INTENT_PATTERN.matcher(normalized).find()
-                || message.contains("改期")
+                || message.contains("我要改期")
                 || message.contains("改时间")
                 || message.contains("换时间")
                 || message.contains("调整预约")
@@ -290,7 +251,8 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                 return true;
             }
         }
-        return originalUserMessage != null && (originalUserMessage.contains("算了") || originalUserMessage.contains("退出"));
+        return originalUserMessage != null
+                && (originalUserMessage.contains("算了") || originalUserMessage.contains("退出"));
     }
 
     private List<BookingItemVO> loadReschedulableBookings(Long userId) {
@@ -308,12 +270,20 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                 .toList();
     }
 
-    private String buildCandidatePrompt(List<BookingItemVO> candidates, String clarificationMessage) {
+    private String buildCandidatePrompt(List<BookingItemVO> candidates, String clarificationMessage, RescheduleTaskState state) {
         List<String> lines = new ArrayList<>();
         if (clarificationMessage != null && !clarificationMessage.isBlank()) {
             lines.add(clarificationMessage);
         } else {
             lines.add("I found multiple reschedulable bookings. Please reply with the exact booking ID you want to reschedule.");
+        }
+        if (state.getTargetDate() != null && !state.getTargetDate().isBlank()) {
+            lines.add("I noted your requested reschedule date as " + state.getTargetDate() + ".");
+        }
+        if (state.getTargetTime() != null && !state.getTargetTime().isBlank()) {
+            lines.add("I also noted your preferred time as " + state.getTargetTime() + ".");
+        } else if (state.getTimeHint() != null && !state.getTimeHint().isBlank()) {
+            lines.add("I also noted your preferred time hint as " + state.getTimeHint() + ".");
         }
         lines.add("");
         lines.add("| Booking ID | Specialist | Service | Appointment Time | Status |");
@@ -330,18 +300,39 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return String.join("\n", lines);
     }
 
-    private String resolveTargetDate(String originalUserMessage, RescheduleTaskState state, BookingDetailVO bookingDetail) {
-        String extracted = extractTargetDate(originalUserMessage, bookingDetail.getSlotDate());
-        if (extracted != null) {
-            return extracted;
-        }
+    private String resolveTargetDate(RescheduleTaskState state) {
         if (state.getTargetDate() != null && !state.getTargetDate().isBlank()) {
             return state.getTargetDate();
         }
-        return safeText(bookingDetail.getSlotDate());
+        return null;
     }
 
-    private String extractTargetDate(String originalUserMessage, String fallbackDate) {
+    private void mergeTemporalIntent(
+            RescheduleTaskState state,
+            String originalUserMessage,
+            String llmTargetDate,
+            String llmTargetTime,
+            String llmTimeHint
+    ) {
+        state.setTargetDate(firstNonBlank(
+                llmTargetDate,
+                state.getTargetDate(),
+                fallbackDateFromMessage(originalUserMessage, null)
+        ));
+        state.setTargetTime(firstNonBlank(
+                llmTargetTime,
+                state.getTargetTime(),
+                fallbackTargetTime(originalUserMessage)
+        ));
+        state.setTimeHint(firstNonBlank(
+                llmTimeHint,
+                state.getTimeHint(),
+                fallbackTimeHint(originalUserMessage)
+        ));
+        state.setSuggestedSlotId(null);
+    }
+
+    private String fallbackDateFromMessage(String originalUserMessage, String fallbackDate) {
         String message = Optional.ofNullable(originalUserMessage).orElse("").trim();
         Matcher explicitDate = DATE_PATTERN.matcher(message);
         if (explicitDate.find()) {
@@ -398,21 +389,12 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         if (normalized.contains("sunday")) {
             return base.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString();
         }
-        return fallbackDate;
+        return fallbackDate == null || fallbackDate.isBlank() ? null : fallbackDate;
     }
 
-    private String extractRequestedTimeIntent(String originalUserMessage) {
+    private String fallbackTargetTime(String originalUserMessage) {
         String raw = Optional.ofNullable(originalUserMessage).orElse("");
         String normalized = normalize(originalUserMessage);
-        if (normalized.contains("afternoon") || raw.contains("下午")) {
-            return "afternoon";
-        }
-        if (normalized.contains("morning") || raw.contains("上午")) {
-            return "morning";
-        }
-        if (normalized.contains("evening") || raw.contains("晚上")) {
-            return "evening";
-        }
         if (normalized.contains("around 3") || normalized.contains("3pm") || normalized.contains("3 pm")) {
             return "15:00";
         }
@@ -438,56 +420,22 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return null;
     }
 
-    private Long resolveSuggestedSlotId(List<SpecialistAvailabilityVO> availableSlots, String requestedTimeIntent) {
-        if (requestedTimeIntent == null || requestedTimeIntent.isBlank() || availableSlots.isEmpty()) {
-            return null;
+    private String fallbackTimeHint(String originalUserMessage) {
+        String raw = Optional.ofNullable(originalUserMessage).orElse("");
+        String normalized = normalize(originalUserMessage);
+        if (normalized.contains("afternoon") || raw.contains("下午")) {
+            return "afternoon";
         }
-        List<SpecialistAvailabilityVO> sorted = availableSlots.stream()
-                .sorted(Comparator.comparing(SpecialistAvailabilityVO::getStartTime))
-                .toList();
-        return switch (requestedTimeIntent) {
-            case "morning" -> sorted.stream()
-                    .filter(slot -> slot.getStartTime() != null && slot.getStartTime().isBefore(LocalTime.NOON))
-                    .map(SpecialistAvailabilityVO::getId)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null);
-            case "afternoon" -> sorted.stream()
-                    .filter(slot -> slot.getStartTime() != null
-                            && !slot.getStartTime().isBefore(LocalTime.NOON)
-                            && slot.getStartTime().isBefore(LocalTime.of(18, 0)))
-                    .map(SpecialistAvailabilityVO::getId)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null);
-            case "evening" -> sorted.stream()
-                    .filter(slot -> slot.getStartTime() != null && !slot.getStartTime().isBefore(LocalTime.of(18, 0)))
-                    .map(SpecialistAvailabilityVO::getId)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null);
-            default -> resolveNearestByClockTime(sorted, requestedTimeIntent);
-        };
-    }
-
-    private Long resolveNearestByClockTime(List<SpecialistAvailabilityVO> slots, String requestedTimeIntent) {
-        try {
-            LocalTime target = LocalTime.parse(requestedTimeIntent.length() == 5 ? requestedTimeIntent + ":00" : requestedTimeIntent);
-            return slots.stream()
-                    .filter(slot -> slot.getId() != null && slot.getStartTime() != null)
-                    .min(Comparator.comparingLong(slot -> Math.abs(slot.getStartTime().toSecondOfDay() - target.toSecondOfDay())))
-                    .map(SpecialistAvailabilityVO::getId)
-                    .orElse(null);
-        } catch (DateTimeParseException exception) {
-            return null;
+        if (normalized.contains("morning") || raw.contains("上午")) {
+            return "morning";
         }
-    }
-
-    private boolean slotStartsAfterTwoHours(SpecialistAvailabilityVO slot) {
-        if (slot == null || slot.getSlotDate() == null || slot.getStartTime() == null) {
-            return false;
+        if (normalized.contains("evening") || raw.contains("晚上")) {
+            return "evening";
         }
-        return LocalDateTime.of(slot.getSlotDate(), slot.getStartTime()).isAfter(LocalDateTime.now().plusHours(2));
+        if (normalized.contains("around ")) {
+            return raw.trim();
+        }
+        return null;
     }
 
     private Optional<LocalDate> parseDate(String value) {
@@ -516,7 +464,19 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank() && !"N/A".equalsIgnoreCase(value.trim())) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
     private static class SingleReplyTokenStream implements TokenStream {
+
+        private static final int STREAM_CHUNK_SIZE = 24;
+        private static final long STREAM_CHUNK_DELAY_MS = 24L;
 
         private final String reply;
         private java.util.function.Consumer<String> onNext = ignored -> { };

@@ -256,7 +256,7 @@ const openRescheduleModalFromAi = async (payload: AiBookingRescheduleModalPayloa
   const detail = await getBookingDetail(payload.bookingId)
   selectedRescheduleBooking.value = mapBookingDetailToListItem(detail)
   selectedRescheduleBookingId.value = payload.bookingId
-  selectedRescheduleDate.value = payload.targetDate || detail.slotDate || ''
+  selectedRescheduleDate.value = payload.targetDate || ''
   selectedRescheduleSlotId.value = payload.suggestedSlotId || null
   showRescheduleDialog.value = true
 }

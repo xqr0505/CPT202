@@ -84,6 +84,20 @@ class LightModelAiIntentRouterServiceTest {
         assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
     }
 
+    @Test
+    void shouldResolveCancelIntentForHelpMeCancelWithoutKnowledgeHit() {
+        ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
+                lightModel,
+                properties()
+        );
+
+        AiIntent intent = service.resolveIntent(1001L, "help me cancel");
+
+        assertThat(intent).isEqualTo(AiIntent.CANCEL);
+        verifyNoInteractions(lightModel);
+    }
+
     private static AiIntentRouterProperties properties() {
         AiIntentRouterProperties properties = new AiIntentRouterProperties();
         properties.setTimeoutMs(800L);

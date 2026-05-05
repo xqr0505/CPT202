@@ -46,8 +46,8 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
         Definitions:
         - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
+        - RESCHEDULE: user wants to reschedule OR change the time of an existing booking or continue an in-progress reschedule flow.
         - BOOKING: user explicitly wants to place/submit a booking order now.
-        Do NOT use BOOKING for generic availability checks, specialist discovery, or reschedule/cancel policy questions.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
         - CHITCHAT: pure small talk only (greeting/thanks/self-introduction) with no product task.
@@ -76,7 +76,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     );
     private static final Set<String> KNOWLEDGE_HINTS = Set.of(
             "policy", "policies", "rule", "rules", "meaning", "mean", "what does",
-            "how to", "why", "guide", "help", "refund", "cancellation", "cancelation",
+            "how to", "why", "guide", "refund", "cancellation", "cancelation",
             "status mean", "what is", "what are", "explain", "platform",
             "what should i do", "unsupported characters", "error", "failed",
             "confirmed automatically", "will it", "if i ", "should i"
@@ -119,20 +119,25 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     @Override
     public AiIntent resolveIntent(Long memoryId, String userMessage) {
+        return resolveIntentDecision(memoryId, userMessage).intent();
+    }
+
+    @Override
+    public IntentDecision resolveIntentDecision(Long memoryId, String userMessage) {
         if (userMessage == null || userMessage.isBlank()) {
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.NONE);
         }
 
         String normalizedMessage = normalize(userMessage);
         AiIntent ruleBasedIntent = resolveByRules(normalizedMessage);
         if (ruleBasedIntent != null) {
-            return ruleBasedIntent;
+            return new IntentDecision(ruleBasedIntent, FallbackReason.NONE);
         }
 
         return resolveByModel(normalizedMessage);
     }
 
-    private AiIntent resolveByModel(String normalizedMessage) {
+    private IntentDecision resolveByModel(String normalizedMessage) {
         Future<Response<AiMessage>> future = null;
         try {
             future = modelExecutor.submit(() ->
@@ -142,26 +147,26 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             String raw = response == null || response.content() == null ? "" : response.content().text();
             String parsed = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
             if (ALLOWED.contains(parsed)) {
-                return AiIntent.valueOf(parsed);
+                return new IntentDecision(AiIntent.valueOf(parsed), FallbackReason.NONE);
             }
             log.debug("Intent router fallback due to unknown output: {}", raw);
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.ERROR_FALLBACK);
         } catch (TimeoutException timeoutException) {
             cancelQuietly(future);
             log.debug("Intent router model call timed out after {} ms; falling back to KNOWLEDGE", properties.getTimeoutMs());
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.TIMEOUT_FALLBACK);
         } catch (InterruptedException interruptedException) {
             cancelQuietly(future);
             Thread.currentThread().interrupt();
             log.debug("Intent router interrupted; falling back to KNOWLEDGE");
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.ERROR_FALLBACK);
         } catch (ExecutionException executionException) {
             Throwable cause = executionException.getCause() == null ? executionException : executionException.getCause();
             log.debug("Intent router fallback due to model error: {}", cause.getMessage());
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.ERROR_FALLBACK);
         } catch (RuntimeException exception) {
             log.debug("Intent router fallback due to error: {}", exception.getMessage());
-            return AiIntent.KNOWLEDGE;
+            return new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.ERROR_FALLBACK);
         }
     }
 
@@ -175,11 +180,11 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         if (CHITCHAT_EXACT.contains(normalizedMessage)) {
             return AiIntent.CHITCHAT;
         }
-        if (containsAny(normalizedMessage, KNOWLEDGE_HINTS.toArray(String[]::new))) {
-            return AiIntent.KNOWLEDGE;
-        }
         if (containsAny(normalizedMessage, CANCEL_ACTION_HINTS.toArray(String[]::new))) {
             return AiIntent.CANCEL;
+        }
+        if (containsAny(normalizedMessage, KNOWLEDGE_HINTS.toArray(String[]::new))) {
+            return AiIntent.KNOWLEDGE;
         }
         if (containsAny(normalizedMessage, DASHBOARD_HINTS.toArray(String[]::new))) {
             return AiIntent.DASHBOARD;

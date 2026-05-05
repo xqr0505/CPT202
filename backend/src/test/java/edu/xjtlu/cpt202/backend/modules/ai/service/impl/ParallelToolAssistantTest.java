@@ -18,6 +18,8 @@ import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService.FallbackReason;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService.IntentDecision;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import org.junit.jupiter.api.Test;
@@ -278,7 +280,7 @@ class ParallelToolAssistantTest {
     }
 
     @Test
-    void shouldResolveKnowledgeForAmbiguousBookingQuestion() {
+    void shouldResolveBookingForActionLikeBookingQuestionWhenKnowledgeHintsAreNarrowed() {
         CountingIntentModel model = new CountingIntentModel("BOOKING");
         AiIntentRouterProperties properties = new AiIntentRouterProperties();
         LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
@@ -286,9 +288,9 @@ class ParallelToolAssistantTest {
         AiIntent first = routerService.resolveIntent(1001L, "Need help with complex expert selection");
         AiIntent second = routerService.resolveIntent(1001L, "Need help with complex expert selection");
 
-        assertThat(first).isEqualTo(AiIntent.KNOWLEDGE);
-        assertThat(second).isEqualTo(AiIntent.KNOWLEDGE);
-        assertThat(model.invocationCount()).isEqualTo(0);
+        assertThat(first).isEqualTo(AiIntent.BOOKING);
+        assertThat(second).isEqualTo(AiIntent.BOOKING);
+        assertThat(model.invocationCount()).isEqualTo(2);
     }
 
     @Test
@@ -405,6 +407,25 @@ class ParallelToolAssistantTest {
         String reply = assistant.chat(1001L, "User message:\nrefund policy");
 
         assertThat(reply).isEqualTo(AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE);
+        verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
+    }
+
+    @Test
+    void shouldNotReadOrWriteKnowledgeCacheWhenIntentIsTimeoutFallbackKnowledge() {
+        TestReadOnlyTools tools = new TestReadOnlyTools(false);
+        AiSemanticCacheService semanticCacheService = mock(AiSemanticCacheService.class);
+        Assistant assistant = buildAssistantWithCache(
+                tools,
+                Setups.defaultParallelProperties(),
+                new TwoStepToolThenAnswerModel(List.of(request("id-1", "searchKnowledgeBase"))),
+                semanticCacheService,
+                new FixedIntentRouterService(new IntentDecision(AiIntent.KNOWLEDGE, FallbackReason.TIMEOUT_FALLBACK))
+        );
+
+        String reply = assistant.chat(1001L, "User message:\nrefund policy");
+
+        assertThat(reply).isEqualTo("done");
+        verify(semanticCacheService, never()).get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
         verify(semanticCacheService, never()).putAsync(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(AiIntent.KNOWLEDGE));
     }
 
@@ -696,6 +717,20 @@ class ParallelToolAssistantTest {
 
         private int invocationCount() {
             return invocationCount;
+        }
+    }
+
+    private static class FixedIntentRouterService implements AiIntentRouterService {
+
+        private final IntentDecision decision;
+
+        private FixedIntentRouterService(IntentDecision decision) {
+            this.decision = decision;
+        }
+
+        @Override
+        public IntentDecision resolveIntentDecision(Long memoryId, String userMessage) {
+            return decision;
         }
     }
 

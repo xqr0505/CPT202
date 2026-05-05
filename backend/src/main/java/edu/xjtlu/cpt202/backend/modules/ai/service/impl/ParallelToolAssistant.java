@@ -31,6 +31,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatTraceContext;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService.IntentDecision;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.util.ToolArgumentSanitizer;
 import org.slf4j.Logger;
@@ -133,19 +134,17 @@ public class ParallelToolAssistant implements Assistant {
     @Override
     public String chat(Long memoryId, String userMessage) {
         String originalUserMessage = extractOriginalUserMessage(userMessage);
-        AiIntent intent = intentRouterService.resolveIntent(memoryId, originalUserMessage);
-        if (intent == null) {
-            intent = AiIntent.KNOWLEDGE;
-        }
+        IntentDecision intentDecision = intentRouterService.resolveIntentDecision(memoryId, originalUserMessage);
+        AiIntent intent = intentDecision.intent() == null ? AiIntent.KNOWLEDGE : intentDecision.intent();
         String normalizedOriginalUserMessage = normalizeQueryForCache(originalUserMessage);
-        if (intent == AiIntent.KNOWLEDGE) {
+        if (intent == AiIntent.KNOWLEDGE && !intentDecision.isKnowledgeTimeoutFallback()) {
             var cacheHit = semanticCacheService.get(normalizedOriginalUserMessage, AiIntent.KNOWLEDGE);
             if (cacheHit.isPresent()) {
                 return cacheHit.get().answer();
             }
         }
         Response<AiMessage> response = runConversation(memoryId, userMessage, ignored -> {
-        }, intent, normalizedOriginalUserMessage);
+        }, intent, normalizedOriginalUserMessage, intentDecision);
         AiMessage content = response.content();
         if (content == null || content.text() == null) {
             return AiConstant.EMPTY_CONTENT;
@@ -163,7 +162,8 @@ public class ParallelToolAssistant implements Assistant {
             String userMessage,
             Consumer<ToolExecution> onToolExecuted,
             AiIntent intent,
-            String originalUserMessage
+            String originalUserMessage,
+            IntentDecision intentDecision
     ) {
         long totalStartNs = System.nanoTime();
         List<ChatMessage> messages = new ArrayList<>(chatMemoryStore.getMessages(memoryId));
@@ -239,12 +239,20 @@ public class ParallelToolAssistant implements Assistant {
                 "memoryId", memoryId,
                 "toolRounds", rounds
         ));
-        cacheFinalKnowledgeAnswerIfEligible(intent, originalUserMessage, response);
+        cacheFinalKnowledgeAnswerIfEligible(intent, originalUserMessage, response, intentDecision);
         return response;
     }
 
-    private void cacheFinalKnowledgeAnswerIfEligible(AiIntent intent, String originalUserMessage, Response<AiMessage> response) {
+    private void cacheFinalKnowledgeAnswerIfEligible(
+            AiIntent intent,
+            String originalUserMessage,
+            Response<AiMessage> response,
+            IntentDecision intentDecision
+    ) {
         if (intent != AiIntent.KNOWLEDGE) {
+            return;
+        }
+        if (intentDecision != null && intentDecision.isKnowledgeTimeoutFallback()) {
             return;
         }
         String normalizedQuery = normalizeQueryForCache(originalUserMessage);
@@ -858,13 +866,10 @@ public class ParallelToolAssistant implements Assistant {
 
                     long routerStartNs = System.nanoTime();
                     String originalUserMessage = extractOriginalUserMessage(userMessage);
-                    AiIntent intent = intentRouterService.resolveIntent(memoryId, originalUserMessage);
-                    boolean routerFallback = intent == null;
-                    if (intent == null) {
-                        intent = AiIntent.KNOWLEDGE;
-                    }
+                    IntentDecision intentDecision = intentRouterService.resolveIntentDecision(memoryId, originalUserMessage);
+                    AiIntent intent = intentDecision.intent() == null ? AiIntent.KNOWLEDGE : intentDecision.intent();
                     String normalizedOriginalUserMessage = normalizeQueryForCache(originalUserMessage);
-                    if (intent == AiIntent.KNOWLEDGE) {
+                    if (intent == AiIntent.KNOWLEDGE && !intentDecision.isKnowledgeTimeoutFallback()) {
                         var cacheHit = semanticCacheService.get(normalizedOriginalUserMessage, AiIntent.KNOWLEDGE);
                         if (cacheHit.isPresent()) {
                             String cachedAnswer = cacheHit.get().answer();
@@ -885,7 +890,7 @@ public class ParallelToolAssistant implements Assistant {
                     aiChatProfiler.logStage("assistant.stream.intentRouter", elapsedMs(routerStartNs), Map.of(
                             "memoryId", memoryId,
                             "intent", intent.name(),
-                            "fallback", routerFallback
+                            "fallback", intentDecision.fallbackReason() != AiIntentRouterService.FallbackReason.NONE
                     ));
                     aiChatProfiler.logEvent("assistant.stream.intent", Map.of(
                             "memoryId", memoryId,
@@ -968,7 +973,7 @@ public class ParallelToolAssistant implements Assistant {
                     if (streamedAiMessage != null) {
                         addMessageToWindow(messages, streamedAiMessage);
                     }
-                    cacheFinalKnowledgeAnswerIfEligible(intent, normalizedOriginalUserMessage, streamedResponse);
+                    cacheFinalKnowledgeAnswerIfEligible(intent, normalizedOriginalUserMessage, streamedResponse, intentDecision);
                     chatMemoryStore.updateMessages(memoryId, messages);
                     aiChatProfiler.logSummary("assistant.stream.completed", elapsedMs(totalStartNs), Map.of(
                             "memoryId", memoryId,

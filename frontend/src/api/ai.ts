@@ -8,6 +8,7 @@ import {
 } from '@/constants/ai'
 import { apiBaseUrl } from '@/config/api'
 import request, { getAuthToken, logout } from './request'
+import type { RequestConfigWithMeta } from './request'
 
 interface ChatRequestPayload {
   message: string
@@ -125,5 +126,5 @@ export const postChatMessage = async (message: string, callbacks: StreamCallback
 export const deleteChatMemory = async (): Promise<void> => {
   await request.delete(AI_API_CHAT_MEMORY_PATH, {
     suppressErrorMessage: true
-  } as any)
+  } as RequestConfigWithMeta)
 }

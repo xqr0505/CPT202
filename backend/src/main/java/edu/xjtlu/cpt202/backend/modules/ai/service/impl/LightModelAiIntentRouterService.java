@@ -24,7 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
- * Fast intent router based on rules-first matching with lightweight model fallback.
+ * Fast intent router that keeps only high-confidence hard matches and lets the light model
+ * handle ambiguous routing.
  *
  * @author QiranXiao
  * @since 2026/5/2
@@ -46,7 +47,6 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
         Definitions:
         - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
-        - RESCHEDULE: user wants to reschedule OR change the time of an existing booking or continue an in-progress reschedule flow.
         - BOOKING: user explicitly wants to place/submit a booking order now.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
@@ -74,34 +74,20 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             "good morning", "good afternoon", "good evening",
             "who are you", "what can you do", "how are you"
     );
-    private static final Set<String> KNOWLEDGE_HINTS = Set.of(
-            "policy", "policies", "rule", "rules", "meaning", "mean", "what does",
-            "how to", "why", "guide", "refund", "cancellation", "cancelation",
-            "status mean", "what is", "what are", "explain", "platform",
-            "what should i do", "unsupported characters", "error", "failed",
-            "confirmed automatically", "will it", "if i ", "should i"
-    );
-    private static final Set<String> DASHBOARD_HINTS = Set.of(
+    private static final Set<String> DASHBOARD_EXACT = Set.of(
             "check my bookings", "booking records", "booking history",
-            "upcoming bookings", "past bookings", "dashboard", "statistics", "stats"
+            "upcoming bookings", "past bookings", "dashboard", "statistics", "stats",
+            "my appointments", "appointment history", "consultation history"
     );
-    private static final Set<String> BOOKING_ACTION_HINTS = Set.of(
+    private static final Set<String> BOOKING_ACTION_EXACT = Set.of(
             "i want to book", "book now", "book it now", "book for me",
             "place booking", "place a booking", "place order",
-            "submit booking", "confirm booking", "book this slot",
-            "下单", "我要预约", "帮我预约", "帮我下单", "提交预约", "确认预约"
+            "submit booking", "confirm booking", "book this slot"
     );
-    private static final Set<String> CANCEL_ACTION_HINTS = Set.of(
+    private static final Set<String> CANCEL_ACTION_EXACT = Set.of(
             "cancel my booking", "cancel booking", "cancel appointment",
             "cancel my appointment", "i want to cancel", "help me cancel"
     );
-    private static final Set<String> RESCHEDULE_ACTION_HINTS = Set.of(
-            "reschedule", "reschedul", "rescheduling",
-            "reschedule my booking", "reschedule booking", "reschedule appointment",
-            "change time", "change my booking", "change booking", "change appointment",
-            "move my booking", "move booking", "move appointment"
-    );
-
     private final ChatLanguageModel lightModel;
     private final AiIntentRouterProperties properties;
     private final ExecutorService modelExecutor;
@@ -186,21 +172,13 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         if (CHITCHAT_EXACT.contains(normalizedMessage)) {
             return AiIntent.CHITCHAT;
         }
-        if (containsAny(normalizedMessage, CANCEL_ACTION_HINTS.toArray(String[]::new))) {
+        if (CANCEL_ACTION_EXACT.contains(normalizedMessage)) {
             return AiIntent.CANCEL;
         }
-        if (containsAny(normalizedMessage, RESCHEDULE_ACTION_HINTS.toArray(String[]::new))) {
-            // Keep router output compatible with existing intent enum.
-            // Reschedule workflow start is decided by workflow-level trigger matching.
-            return AiIntent.KNOWLEDGE;
-        }
-        if (containsAny(normalizedMessage, KNOWLEDGE_HINTS.toArray(String[]::new))) {
-            return AiIntent.KNOWLEDGE;
-        }
-        if (containsAny(normalizedMessage, DASHBOARD_HINTS.toArray(String[]::new))) {
+        if (DASHBOARD_EXACT.contains(normalizedMessage)) {
             return AiIntent.DASHBOARD;
         }
-        if (containsAny(normalizedMessage, BOOKING_ACTION_HINTS.toArray(String[]::new))) {
+        if (BOOKING_ACTION_EXACT.contains(normalizedMessage)) {
             return AiIntent.BOOKING;
         }
         return null;
@@ -208,15 +186,6 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private String normalize(String userMessage) {
         return WHITESPACE.matcher(userMessage.trim().toLowerCase(Locale.ROOT)).replaceAll(" ");
-    }
-
-    private boolean containsAny(String message, String... phrases) {
-        for (String phrase : phrases) {
-            if (message.contains(phrase)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static final class IntentRouterThreadFactory implements ThreadFactory {
@@ -231,3 +200,4 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         }
     }
 }
+

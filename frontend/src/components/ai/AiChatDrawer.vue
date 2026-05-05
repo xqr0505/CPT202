@@ -30,7 +30,25 @@
           :closable="false"
         />
 
-        <AiMessageList :messages="aiChatStore.messages" />
+        <div v-if="aiChatStore.messages.length === 0" class="ai-chat-drawer__welcome">
+          <div class="ai-chat-drawer__welcome-text">
+            <h3 class="welcome-title">Welcome! I'm your ExpertLink AI Assistant.</h3>
+            <p class="welcome-desc">I can answer questions about the platform and help you book, reschedule, or cancel consultations.</p>
+            <p class="welcome-hint">Try asking me:</p>
+          </div>
+          <div class="ai-chat-drawer__welcome-prompts">
+            <el-button
+              v-for="(prompt, index) in SUGGESTED_PROMPTS"
+              :key="index"
+              class="ai-chat-drawer__prompt-btn"
+              @click="handlePromptClick(prompt)"
+            >
+              {{ prompt }}
+            </el-button>
+          </div>
+        </div>
+
+        <AiMessageList v-else :messages="aiChatStore.messages" />
       </div>
 
       <div class="ai-chat-drawer__footer">
@@ -181,6 +199,17 @@ const selectedBookingNotes = ref('')
 const bookingTopicOptions = ref<string[]>([])
 const bookingSubmitting = ref(false)
 const isMobile = ref(window.innerWidth <= 640)
+
+const SUGGESTED_PROMPTS = [
+  "What is the platform's rescheduling policy?",
+  "Help me check my scheduled consultation from last month.",
+  "Show me doctors available tomorrow."
+]
+
+const handlePromptClick = (prompt: string) => {
+  aiChatStore.setInput(prompt)
+  aiChatStore.sendMessage(prompt)
+}
 
 const updateMobileState = () => {
   isMobile.value = window.innerWidth <= 640
@@ -443,6 +472,73 @@ const drawerVisible = computed<boolean>({
   &::-webkit-scrollbar-thumb {
     background: var(--color-border);
     border-radius: 3px;
+  }
+}
+
+.ai-chat-drawer__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.ai-chat-drawer__welcome-text {
+  text-align: center;
+  margin-bottom: var(--space-6);
+
+  .welcome-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 var(--space-3) 0;
+  }
+
+  .welcome-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-regular);
+    margin: 0 0 var(--space-4) 0;
+  }
+
+  .welcome-hint {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+}
+
+.ai-chat-drawer__welcome-prompts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 400px;
+}
+
+.ai-chat-drawer__prompt-btn {
+  width: 100%;
+  margin: 0 !important; /* Fix Element Plus sibling button left margin */
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding: var(--space-3);
+  line-height: 1.4;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-background-soft);
+  color: var(--color-text-primary);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
   }
 }
 

@@ -101,6 +101,7 @@ class LightModelAiIntentRouterServiceTest {
     @Test
     void shouldNotRouteActionLikeMyBookingMessageToDashboardByRule() {
         ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        when(lightModel.generate(anyList())).thenReturn(Response.from(AiMessage.from("KNOWLEDGE")));
         LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
                 lightModel,
                 properties()
@@ -109,7 +110,22 @@ class LightModelAiIntentRouterServiceTest {
         AiIntent intent = service.resolveIntent(1001L, "reschedul my booking with S1 to 5/13");
 
         assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
-        verifyNoInteractions(lightModel);
+        verify(lightModel).generate(anyList());
+    }
+
+    @Test
+    void shouldRouteLastMonthAppointmentLookupByModelInsteadOfRule() {
+        ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        when(lightModel.generate(anyList())).thenReturn(Response.from(AiMessage.from("DASHBOARD")));
+        LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
+                lightModel,
+                properties()
+        );
+
+        AiIntent intent = service.resolveIntent(1001L, "Help me check my consultation appointment from last month.");
+
+        assertThat(intent).isEqualTo(AiIntent.DASHBOARD);
+        verify(lightModel).generate(anyList());
     }
 
     private static AiIntentRouterProperties properties() {

@@ -65,7 +65,10 @@ ai:
       ttl-seconds: ${AI_CACHE_QA_TTL_SECONDS:604800}
   intent:
     router:
-      timeout-ms: ${AI_INTENT_ROUTER_TIMEOUT_MS:1200}
+      api-key: ${AI_INTENT_ROUTER_API_KEY:${OPENAI_API_KEY:}}
+      model-name: ${AI_INTENT_ROUTER_MODEL_NAME:${AI_RAG_REWRITE_LIGHT_MODEL_NAME:${OPENAI_MODEL_NAME:}}}
+      base-url: ${AI_INTENT_ROUTER_BASE_URL:${OPENAI_BASE_URL:}}
+      timeout-ms: ${AI_INTENT_ROUTER_TIMEOUT_MS:3500}
   rag:
     enabled: ${AI_RAG_ENABLED:true}
     knowledge-location: ${AI_RAG_KNOWLEDGE_LOCATION:classpath*:/knowledge/**/*.md}

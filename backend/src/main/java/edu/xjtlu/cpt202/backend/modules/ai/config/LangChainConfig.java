@@ -26,11 +26,14 @@ import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -51,6 +54,8 @@ import java.util.Map;
         AiWorkflowProperties.class
 })
 public class LangChainConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(LangChainConfig.class);
 
     @Bean
     public ChatLanguageModel chatLanguageModel(
@@ -83,9 +88,10 @@ public class LangChainConfig {
 
     @Bean
     public ChatLanguageModel intentRouterChatLanguageModel(
-            @Value("${ai.openai.api-key}") String apiKey,
-            @Value("${ai.openai.model-name}") String modelName,
-            @Value("${ai.openai.base-url:}") String baseUrl,
+            @Value("${ai.intent.router.api-key:${ai.openai.api-key:}}") String apiKey,
+            @Value("${ai.intent.router.model-name:${ai.rag.rewrite.light-model-name:${ai.openai.model-name:}}}") String modelName,
+            @Value("${ai.intent.router.base-url:${ai.openai.base-url:}}") String baseUrl,
+            AiIntentRouterProperties aiIntentRouterProperties,
             AiModelProperties aiModelProperties
     ) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -107,6 +113,13 @@ public class LangChainConfig {
                 builder.baseUrl(trimmedBaseUrl);
             }
         }
+
+        log.info(
+                "Configured intent router chat model: modelName={}, baseUrl={}, timeoutMs={}",
+                modelName,
+                baseUrl == null || baseUrl.isBlank() ? "<default>" : baseUrl.trim(),
+                aiIntentRouterProperties.getTimeoutMs()
+        );
 
         return new SanitizingChatLanguageModel(builder.build());
     }
@@ -228,7 +241,7 @@ public class LangChainConfig {
 
     @Bean
     public AiIntentRouterService intentRouterService(
-            ChatLanguageModel intentRouterChatLanguageModel,
+            @Qualifier("intentRouterChatLanguageModel") ChatLanguageModel intentRouterChatLanguageModel,
             AiIntentRouterProperties aiIntentRouterProperties
     ) {
         return new LightModelAiIntentRouterService(intentRouterChatLanguageModel, aiIntentRouterProperties);

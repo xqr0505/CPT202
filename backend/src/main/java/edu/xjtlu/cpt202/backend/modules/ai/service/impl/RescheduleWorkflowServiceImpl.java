@@ -48,6 +48,10 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
             "(\\breschedul(?:e|ing)?\\b|\\bchange time\\b|\\bmove my booking\\b|\\bmove appointment\\b|\\bchange appointment\\b|\\bchange booking\\b|\\bmove booking\\b|\\breschedul\\b|\\breschedule\\b.*\\bto\\b|\\bmove\\b.*\\bto\\b)",
             Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern RESCHEDULE_KNOWLEDGE_QUESTION_PATTERN = Pattern.compile(
+            "\\b(what|why|how|when|which|who|where|explain|policy|policies|rule|rules|guide|meaning|mean|allowed|eligible|eligibility|fee|fees|penalty|refund|different specialist|another specialist)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
     private static final int STREAM_CHUNK_SIZE = 24;
     private static final long STREAM_CHUNK_DELAY_MS = 24L;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -93,6 +97,9 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
 
     @Override
     public boolean shouldStartWorkflow(Long userId, String originalUserMessage) {
+        if (looksLikeRescheduleKnowledgeQuestion(originalUserMessage)) {
+            return false;
+        }
         if (looksLikeRescheduleRequest(originalUserMessage)) {
             return true;
         }
@@ -257,6 +264,23 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
                 || message.contains("换时间")
                 || message.contains("调整预约")
                 || message.contains("重新预约");
+    }
+
+    private boolean looksLikeRescheduleKnowledgeQuestion(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = normalize(message);
+        if (!looksLikeRescheduleRequest(message)) {
+            return false;
+        }
+        return RESCHEDULE_KNOWLEDGE_QUESTION_PATTERN.matcher(normalized).find()
+                || normalized.startsWith("can i ")
+                || normalized.startsWith("could i ")
+                || normalized.startsWith("do i ")
+                || normalized.startsWith("does ")
+                || normalized.startsWith("is it ")
+                || normalized.startsWith("should i ");
     }
 
     private boolean isAbortShortcut(String originalUserMessage) {

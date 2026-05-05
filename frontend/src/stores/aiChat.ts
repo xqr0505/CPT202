@@ -23,6 +23,7 @@ const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
 const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):(\d{4}-\d{2}-\d{2})?:(\d*)\]/i
+const WORKFLOW_ABORT_MARKER_PATTERN = /\[(?:BOOKING|CANCEL|RESCHEDULE)_TASK_ABORTED\]\s*/gi
 
 interface StoredSessionUser {
   userId?: number | string | null
@@ -517,6 +518,10 @@ const stripRescheduleModalMarker = (content: string): string => {
   return content.replace(RESCHEDULE_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+const stripWorkflowAbortMarker = (content: string): string => {
+  return content.replace(WORKFLOW_ABORT_MARKER_PATTERN, '').trim()
+}
+
 const emitCancelModal = (assistantContent: string): string => {
   if (typeof window === 'undefined') {
     return assistantContent
@@ -714,7 +719,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
   const finalizeAssistantMessage = (messageId: string): void => {
     updateMessage(messageId, message => {
-      const normalizedContent = emitRescheduleModal(emitCancelModal(message.content.trim()))
+      const normalizedContent = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(message.content.trim())))
       message.content = normalizedContent.trim()
         ? normalizedContent
         : AI_CHAT_EMPTY_RESPONSE_TEXT
@@ -800,7 +805,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
         removeMessage(assistantMessageId)
       } else {
         updateMessage(assistantMessageId, currentMessage => {
-          currentMessage.content = emitRescheduleModal(emitCancelModal(currentMessage.content))
+          currentMessage.content = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(currentMessage.content)))
           currentMessage.status = AI_CHAT_MESSAGE_STATUS.done
         })
         const finalAssistantMessage = messages.value.find(messageItem => messageItem.id === assistantMessageId)

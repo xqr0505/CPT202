@@ -85,6 +85,38 @@ class RescheduleWorkflowServiceImplTest {
     }
 
     @Test
+    void shouldNotStartWorkflowForReschedulePolicyQuestion() {
+        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
+                new InMemoryRescheduleTaskStateStore(),
+                assistantNeedsUserSelection(),
+                new StubBookingService(),
+                new StubSpecialistQueryService(),
+                (memoryId, userMessage) -> AiIntent.KNOWLEDGE,
+                support()
+        );
+
+        boolean shouldStart = service.shouldStartWorkflow(1001L, "what is the reschedule policy");
+
+        assertThat(shouldStart).isFalse();
+    }
+
+    @Test
+    void shouldNotStartWorkflowForRescheduleEligibilityQuestion() {
+        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
+                new InMemoryRescheduleTaskStateStore(),
+                assistantNeedsUserSelection(),
+                new StubBookingService(),
+                new StubSpecialistQueryService(),
+                (memoryId, userMessage) -> AiIntent.KNOWLEDGE,
+                support()
+        );
+
+        boolean shouldStart = service.shouldStartWorkflow(1001L, "Can I reschedule to another specialist?");
+
+        assertThat(shouldStart).isFalse();
+    }
+
+    @Test
     void shouldStartWorkflowForMisspelledRescheduleIntentWithToDatePhrase() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),

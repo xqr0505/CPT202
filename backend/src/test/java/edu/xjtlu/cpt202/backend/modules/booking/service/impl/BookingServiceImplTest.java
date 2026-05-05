@@ -25,6 +25,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingDetailVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.BookingItemVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardHabitRawVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO;
+import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.CustomerBookingChangePolicyService;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
@@ -40,6 +41,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -212,6 +214,87 @@ public class BookingServiceImplTest {
         assertEquals(0, result);
         verify(jsonRedisTemplate, never()).keys(anyString());
         verify(jsonRedisTemplate, never()).delete(anySet());
+    }
+
+    @Test
+    void autoCancelExpiredPendingBookings_CancelsTimedOutRequests() {
+        ReflectionTestUtils.setField(bookingService, "specialistApprovalTimeoutMinutes", 1440L);
+
+        SpecialistPendingBookingVO timedOut = new SpecialistPendingBookingVO();
+        timedOut.setId(201L);
+        timedOut.setSubmissionTime(LocalDateTime.now().minusDays(2));
+        timedOut.setRequestedStartTime(LocalDateTime.now().plusDays(1));
+
+        Booking booking = new Booking();
+        booking.setId(201L);
+        booking.setStatus(BookingStatusEnum.PENDING.name());
+        booking.setSlotId(301L);
+        booking.setCustomerId(21L);
+        booking.setPrice(new BigDecimal("100.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(301L);
+        slot.setStatus(TimeSlotStatusEnum.BOOKED.name());
+
+        when(bookingMapper.selectExpiredPendingRequests(eq(BookingStatusEnum.PENDING.name()), eq(1440L)))
+                .thenReturn(List.of(timedOut));
+        when(bookingMapper.selectById(201L)).thenReturn(booking);
+        when(timeSlotMapper.selectById(301L)).thenReturn(slot);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(1);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Collections.emptySet());
+
+        int result = bookingService.autoCancelExpiredPendingBookings();
+
+        assertEquals(1, result);
+        verify(bookingMapper).updateById(any(Booking.class));
+        verify(bookingMapper).insertRefundPenaltyRecord(eq(201L), eq(new BigDecimal("100.00")), eq(BigDecimal.ZERO), eq("SYSTEM_TIMEOUT_FULL_REFUND"), eq("PENDING"));
+    }
+
+    @Test
+    void autoCancelExpiredPendingBookings_DoesNotFailWhenSlotAlreadyAvailable() {
+        ReflectionTestUtils.setField(bookingService, "specialistApprovalTimeoutMinutes", 1440L);
+
+        SpecialistPendingBookingVO timedOut = new SpecialistPendingBookingVO();
+        timedOut.setId(202L);
+        timedOut.setSubmissionTime(LocalDateTime.now().minusDays(2));
+        timedOut.setRequestedStartTime(LocalDateTime.now().plusDays(1));
+
+        Booking booking = new Booking();
+        booking.setId(202L);
+        booking.setStatus(BookingStatusEnum.PENDING.name());
+        booking.setSlotId(302L);
+        booking.setCustomerId(22L);
+        booking.setPrice(new BigDecimal("165.00"));
+
+        TimeSlot slot = new TimeSlot();
+        slot.setId(302L);
+        slot.setStatus(TimeSlotStatusEnum.AVAILABLE.name());
+
+        when(bookingMapper.selectExpiredPendingRequests(eq(BookingStatusEnum.PENDING.name()), eq(1440L)))
+                .thenReturn(List.of(timedOut));
+        when(bookingMapper.selectById(202L)).thenReturn(booking);
+        when(timeSlotMapper.selectById(302L)).thenReturn(slot);
+        when(timeSlotMapper.update(any(TimeSlot.class), any())).thenReturn(0);
+        when(jsonRedisTemplate.keys(anyString())).thenReturn(Collections.emptySet());
+
+        int result = bookingService.autoCancelExpiredPendingBookings();
+
+        assertEquals(1, result);
+        verify(bookingMapper).updateById(any(Booking.class));
+        verify(bookingMapper).insertRefundPenaltyRecord(eq(202L), eq(new BigDecimal("165.00")), eq(BigDecimal.ZERO), eq("SYSTEM_TIMEOUT_FULL_REFUND"), eq("PENDING"));
+    }
+
+    @Test
+    void autoCancelExpiredPendingBookings_ReturnsZeroWhenNoCandidates() {
+        ReflectionTestUtils.setField(bookingService, "specialistApprovalTimeoutMinutes", 1440L);
+
+        when(bookingMapper.selectExpiredPendingRequests(eq(BookingStatusEnum.PENDING.name()), eq(1440L)))
+                .thenReturn(Collections.emptyList());
+
+        int result = bookingService.autoCancelExpiredPendingBookings();
+
+        assertEquals(0, result);
+        verify(bookingMapper, never()).updateById(any(Booking.class));
     }
 
 

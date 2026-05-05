@@ -374,6 +374,23 @@
         ORDER BY autoRejectAt ASC, b.created_at ASC
     </select>
 
+    <select id="selectExpiredPendingRequests"
+            resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO">
+        SELECT
+            b.id AS id,
+            u.full_name AS customerName,
+            TIMESTAMP(ts.slot_date, ts.start_time) AS requestedStartTime,
+            TIMESTAMP(ts.slot_date, ts.end_time) AS requestedEndTime,
+            b.topic AS topic,
+            b.created_at AS submissionTime,
+            DATE_ADD(b.created_at, INTERVAL #{timeoutMinutes} MINUTE) AS autoRejectAt
+        FROM bookings b
+        JOIN time_slots ts ON b.slot_id = ts.id
+        JOIN users u ON b.customer_id = u.id
+        WHERE b.status = #{status}
+        ORDER BY autoRejectAt ASC, b.created_at ASC
+    </select>
+
     <select id="selectHandledRequestsForSpecialist"
             resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookingVO">
         SELECT

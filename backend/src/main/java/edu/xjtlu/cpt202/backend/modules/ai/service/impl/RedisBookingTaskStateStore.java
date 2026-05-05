@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Redis implementation of the booking workflow state store.
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
  * @since 2026/5/5
  */
 @Service
+@Slf4j
 public class RedisBookingTaskStateStore implements BookingTaskStateStore {
 
     private final RedisTemplate<String, Object> jsonRedisTemplate;
@@ -32,12 +34,20 @@ public class RedisBookingTaskStateStore implements BookingTaskStateStore {
 
     @Override
     public Optional<BookingTaskState> get(Long userId) {
-        Object value = jsonRedisTemplate.opsForValue().get(buildKey(userId));
-        if (value instanceof BookingTaskState state) {
-            refreshTtl(userId);
-            return Optional.of(state);
+        String key = buildKey(userId);
+        try {
+            Object value = jsonRedisTemplate.opsForValue().get(key);
+            if (value instanceof BookingTaskState state) {
+                refreshTtl(userId);
+                return Optional.of(state);
+            }
+            return Optional.empty();
+        } catch (RuntimeException ex) {
+            // Backward-compatible fallback for stale/corrupted Redis payloads.
+            log.warn("Failed to deserialize booking workflow state, clearing key: {}", key, ex);
+            jsonRedisTemplate.delete(key);
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
     @Override

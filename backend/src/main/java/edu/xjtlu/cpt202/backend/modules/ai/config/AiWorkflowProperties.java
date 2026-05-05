@@ -21,17 +21,17 @@ public class AiWorkflowProperties {
     private String cancelKeyPrefix = "expertlink:ai:workflow:cancel";
 
     @Min(60)
-    private Long cancelTtlSeconds = 1800L;
+    private Long cancelTtlSeconds = 600L;
 
     @NotBlank
     private String rescheduleKeyPrefix = "expertlink:ai:workflow:reschedule";
 
     @Min(60)
-    private Long rescheduleTtlSeconds = 1800L;
+    private Long rescheduleTtlSeconds = 600L;
 
     @NotBlank
     private String bookingKeyPrefix = "expertlink:ai:workflow:booking";
 
     @Min(60)
-    private Long bookingTtlSeconds = 1800L;
+    private Long bookingTtlSeconds = 600L;
 }

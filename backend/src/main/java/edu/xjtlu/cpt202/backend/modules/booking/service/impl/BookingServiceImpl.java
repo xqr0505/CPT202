@@ -274,6 +274,45 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public int autoCancelExpiredPendingBookings() {
+        long timeoutMinutes = normalizedSpecialistApprovalTimeoutMinutes();
+        if (timeoutMinutes <= 0) {
+            return 0;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<SpecialistPendingBookingVO> pendingRequests = bookingMapper.selectExpiredPendingRequests(
+                BookingStatusEnum.PENDING.name(),
+                timeoutMinutes
+        );
+        if (pendingRequests == null || pendingRequests.isEmpty()) {
+            return 0;
+        }
+
+        int cancelledCount = 0;
+        for (SpecialistPendingBookingVO request : pendingRequests) {
+            if (request == null || request.getId() == null) {
+                continue;
+            }
+            if (!shouldTimeoutCancel(now, timeoutMinutes, request)) {
+                continue;
+            }
+            try {
+                systemTimeoutCancelPendingBooking(request.getId(), resolveTimeoutReason(now, timeoutMinutes, request));
+                cancelledCount++;
+            } catch (BusinessException businessException) {
+                if (ResultCodeEnum.BAD_REQUEST.getCode().equals(businessException.getCode())) {
+                    // The booking may have been processed by another request/thread.
+                    continue;
+                }
+                throw businessException;
+            }
+        }
+        return cancelledCount;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO) {
         TimeSlot slot = timeSlotMapper.selectById(createDTO.getSlotId());
         if (slot == null) {
@@ -572,20 +611,30 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 timeoutMinutes
         );
         for (SpecialistPendingBookingVO request : pendingRequests) {
-            LocalDateTime requestedStartTime = request.getRequestedStartTime();
-            if (requestedStartTime != null && !requestedStartTime.isAfter(now)) {
-                systemTimeoutCancelPendingBooking(
-                        request.getId(),
-                        "Automatically rejected because the requested time slot has already started."
-                );
+            if (request == null || request.getId() == null) {
                 continue;
             }
-
-            LocalDateTime submissionTime = request.getSubmissionTime();
-            if (submissionTime != null && !submissionTime.plusMinutes(timeoutMinutes).isAfter(now)) {
-                systemTimeoutCancelPendingBooking(request.getId(), buildApprovalTimeoutReason(timeoutMinutes));
+            if (shouldTimeoutCancel(now, timeoutMinutes, request)) {
+                systemTimeoutCancelPendingBooking(request.getId(), resolveTimeoutReason(now, timeoutMinutes, request));
             }
         }
+    }
+
+    private boolean shouldTimeoutCancel(LocalDateTime now, long timeoutMinutes, SpecialistPendingBookingVO request) {
+        LocalDateTime requestedStartTime = request.getRequestedStartTime();
+        if (requestedStartTime != null && !requestedStartTime.isAfter(now)) {
+            return true;
+        }
+        LocalDateTime submissionTime = request.getSubmissionTime();
+        return submissionTime != null && !submissionTime.plusMinutes(timeoutMinutes).isAfter(now);
+    }
+
+    private String resolveTimeoutReason(LocalDateTime now, long timeoutMinutes, SpecialistPendingBookingVO request) {
+        LocalDateTime requestedStartTime = request.getRequestedStartTime();
+        if (requestedStartTime != null && !requestedStartTime.isAfter(now)) {
+            return "Automatically rejected because the requested time slot has already started.";
+        }
+        return buildApprovalTimeoutReason(timeoutMinutes);
     }
 
     private long normalizedSpecialistApprovalTimeoutMinutes() {
@@ -889,7 +938,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                         .eq(TimeSlot::getId, slot.getId())
                         .eq(TimeSlot::getStatus, TimeSlotStatusEnum.BOOKED.name())
         );
-        if (updated == 0) {
+        if (updated == 0 && TimeSlotStatusEnum.BOOKED.name().equals(slot.getStatus())) {
             throw new BusinessException(ResultCodeEnum.BOOKING_ERROR_BLOCK.getCode(), "Failed to release booked slot");
         }
 

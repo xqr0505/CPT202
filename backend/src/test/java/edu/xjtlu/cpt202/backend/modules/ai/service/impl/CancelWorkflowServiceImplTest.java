@@ -234,6 +234,11 @@ class CancelWorkflowServiceImplTest {
         }
 
         @Override
+        public int autoCancelExpiredPendingBookings() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public BookingCreateVO createBooking(Long customerId, BookingCreateDTO createDTO) {
             throw new UnsupportedOperationException();
         }

@@ -44,19 +44,18 @@ export function setupRouterGuard(router: Router) {
 
     const currentToken = getAuthToken();
     const currentUser = getUser();
-    const isAuthenticated = Boolean(currentToken && currentUser);
-
-    if (isAuthenticated) {
+    const userRole = typeof currentUser?.role === 'string' ? currentUser.role : null;
+    if (currentToken && currentUser && userRole) {
       if (to.path === '/auth' || to.path === '/login' || to.path === '/register') {
-        return { path: getDefaultHomePath(currentUser.role) };
+        return { path: getDefaultHomePath(userRole) };
       }
 
       if (to.path === '/') {
-        return { path: getDefaultHomePath(currentUser.role) };
+        return { path: getDefaultHomePath(userRole) };
       }
 
       const requiredRole = to.meta?.role as string | undefined;
-      if (requiredRole && currentUser.role !== requiredRole) {
+      if (requiredRole && userRole !== requiredRole) {
         return { path: '/error/403' };
       }
 

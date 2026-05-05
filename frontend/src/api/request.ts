@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import router from '@/router';
 import { apiBaseUrl } from '@/config/api';
@@ -21,7 +22,7 @@ type AuthFailureError = Error & {
 const ACTIVITY_EVENT_KEY = 'session-activity-event';
 const LOGOUT_EVENT_KEY = 'logout-event';
 const AUTH_REFRESH_PATH = '/auth/refresh-token';
-interface StoredUser {
+export interface StoredUser {
   role?: string;
   [key: string]: unknown;
 }
@@ -30,6 +31,11 @@ interface TokenRefreshResponse {
   token: string;
   refreshToken?: string;
 }
+
+export type RequestConfigWithMeta = AxiosRequestConfig & {
+  suppressErrorMessage?: boolean;
+  _retry?: boolean;
+};
 
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -55,7 +61,7 @@ let handling401 = false;
 let lastErrorMessage = '';
 let lastErrorMessageTime = 0;
 
-const shouldSuppressErrorMessage = (config?: { suppressErrorMessage?: boolean }): boolean => {
+const shouldSuppressErrorMessage = (config?: { suppressErrorMessage?: boolean } | null): boolean => {
   return Boolean(config?.suppressErrorMessage);
 };
 
@@ -308,7 +314,7 @@ export const refreshAuthToken = async (): Promise<string> => {
     .post<unknown, TokenRefreshResponse>(
       '/auth/refresh-token',
       { refreshToken },
-      { suppressErrorMessage: true }
+      { suppressErrorMessage: true } as RequestConfigWithMeta
     )
     .then(result => {
       if (!result || typeof result.token !== 'string') {
@@ -336,20 +342,16 @@ export const refreshAuthToken = async (): Promise<string> => {
 };
 
 service.interceptors.response.use(
-  response => {
+  ((response: { data: ApiResponse; config: InternalAxiosRequestConfig }) => {
     const res = response.data as ApiResponse;
-    const suppressErrorMessage = shouldSuppressErrorMessage(response.config);
+    const suppressErrorMessage = shouldSuppressErrorMessage(response.config as unknown as RequestConfigWithMeta);
 
     if (res.code === 200) {
       return res.data;
     }
 
     if (res.code === 401) {
-      const originalRequest = response.config as {
-        _retry?: boolean;
-        url?: string;
-        [key: string]: unknown;
-      };
+      const originalRequest = response.config as unknown as RequestConfigWithMeta;
       if (
         !originalRequest?._retry &&
         !isRefreshEndpoint(originalRequest?.url) &&
@@ -391,15 +393,11 @@ service.interceptors.response.use(
       showErrorOnce(res.message || 'Error');
     }
     return Promise.reject(new Error(res.message || 'Error'));
-  },
+  }) as unknown as Parameters<typeof service.interceptors.response.use>[0],
   async error => {
     const status = error.response?.status;
-    const suppressErrorMessage = shouldSuppressErrorMessage(error.config);
-    const originalRequest = error.config as {
-      _retry?: boolean;
-      url?: string;
-      [key: string]: unknown;
-    };
+    const suppressErrorMessage = shouldSuppressErrorMessage(error.config as RequestConfigWithMeta);
+    const originalRequest = error.config as RequestConfigWithMeta;
 
     if (
       status === 401 &&

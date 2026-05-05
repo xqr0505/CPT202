@@ -98,6 +98,20 @@ class LightModelAiIntentRouterServiceTest {
         verifyNoInteractions(lightModel);
     }
 
+    @Test
+    void shouldNotRouteActionLikeMyBookingMessageToDashboardByRule() {
+        ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
+                lightModel,
+                properties()
+        );
+
+        AiIntent intent = service.resolveIntent(1001L, "reschedul my booking with S1 to 5/13");
+
+        assertThat(intent).isEqualTo(AiIntent.KNOWLEDGE);
+        verifyNoInteractions(lightModel);
+    }
+
     private static AiIntentRouterProperties properties() {
         AiIntentRouterProperties properties = new AiIntentRouterProperties();
         properties.setTimeoutMs(800L);

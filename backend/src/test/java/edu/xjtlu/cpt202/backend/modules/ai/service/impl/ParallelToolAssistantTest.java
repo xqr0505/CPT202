@@ -729,6 +729,11 @@ class ParallelToolAssistantTest {
         }
 
         @Override
+        public AiIntent resolveIntent(Long memoryId, String userMessage) {
+            return decision.intent();
+        }
+
+        @Override
         public IntentDecision resolveIntentDecision(Long memoryId, String userMessage) {
             return decision;
         }

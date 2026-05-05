@@ -85,6 +85,22 @@ class RescheduleWorkflowServiceImplTest {
     }
 
     @Test
+    void shouldStartWorkflowForMisspelledRescheduleIntentWithToDatePhrase() {
+        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
+                new InMemoryRescheduleTaskStateStore(),
+                assistantNeedsUserSelection(),
+                new StubBookingService(),
+                new StubSpecialistQueryService(),
+                (memoryId, userMessage) -> AiIntent.DASHBOARD,
+                support()
+        );
+
+        boolean shouldStart = service.shouldStartWorkflow(1001L, "reschedul my booking with S1 to 5/13");
+
+        assertThat(shouldStart).isTrue();
+    }
+
+    @Test
     void shouldStartWorkflowForChineseRescheduleIntent() {
         RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
                 new InMemoryRescheduleTaskStateStore(),

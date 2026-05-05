@@ -82,7 +82,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
             "confirmed automatically", "will it", "if i ", "should i"
     );
     private static final Set<String> DASHBOARD_HINTS = Set.of(
-            "my bookings", "booking records", "booking history",
+            "check my bookings", "booking records", "booking history",
             "upcoming bookings", "past bookings", "dashboard", "statistics", "stats"
     );
     private static final Set<String> BOOKING_ACTION_HINTS = Set.of(
@@ -94,6 +94,12 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     private static final Set<String> CANCEL_ACTION_HINTS = Set.of(
             "cancel my booking", "cancel booking", "cancel appointment",
             "cancel my appointment", "i want to cancel", "help me cancel"
+    );
+    private static final Set<String> RESCHEDULE_ACTION_HINTS = Set.of(
+            "reschedule", "reschedul", "rescheduling",
+            "reschedule my booking", "reschedule booking", "reschedule appointment",
+            "change time", "change my booking", "change booking", "change appointment",
+            "move my booking", "move booking", "move appointment"
     );
 
     private final ChatLanguageModel lightModel;
@@ -182,6 +188,11 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         }
         if (containsAny(normalizedMessage, CANCEL_ACTION_HINTS.toArray(String[]::new))) {
             return AiIntent.CANCEL;
+        }
+        if (containsAny(normalizedMessage, RESCHEDULE_ACTION_HINTS.toArray(String[]::new))) {
+            // Keep router output compatible with existing intent enum.
+            // Reschedule workflow start is decided by workflow-level trigger matching.
+            return AiIntent.KNOWLEDGE;
         }
         if (containsAny(normalizedMessage, KNOWLEDGE_HINTS.toArray(String[]::new))) {
             return AiIntent.KNOWLEDGE;

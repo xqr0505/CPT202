@@ -5,6 +5,7 @@ import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
@@ -36,6 +37,7 @@ class LangChainConfigTest {
             .withBean(AiBookingFormTool.class, () -> mock(AiBookingFormTool.class))
             .withBean(AiBookingSubmitTool.class, () -> mock(AiBookingSubmitTool.class))
             .withBean(AiSpecialistAvailabilityTool.class, () -> mock(AiSpecialistAvailabilityTool.class))
+            .withBean(AiSemanticCacheService.class, () -> mock(AiSemanticCacheService.class))
             .withBean(KnowledgeTools.class, () -> mock(KnowledgeTools.class))
             .withBean(CommonProperties.class, CommonProperties::new)
             .withBean(AiChatProfiler.class, () -> new AiChatProfiler(new CommonProperties()))
@@ -47,7 +49,8 @@ class LangChainConfigTest {
     @Test
     void shouldLoadLangChainBeans() {
         contextRunner.run(context -> {
-            assertThat(context).hasSingleBean(ChatLanguageModel.class);
+            assertThat(context).hasBean("chatLanguageModel");
+            assertThat(context).hasBean("intentRouterChatLanguageModel");
             assertThat(context).hasSingleBean(Assistant.class);
             assertThat(context).hasSingleBean(ChatMemoryStore.class);
             assertThat(context.getBean(AiChatMemoryProperties.class).getMaxMessages()).isEqualTo(20);

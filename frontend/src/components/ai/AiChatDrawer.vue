@@ -208,7 +208,7 @@ const SUGGESTED_PROMPTS = [
 
 const handlePromptClick = (prompt: string) => {
   aiChatStore.setInput(prompt)
-  aiChatStore.sendMessage(prompt)
+  void aiChatStore.sendMessage()
 }
 
 const updateMobileState = () => {

@@ -82,7 +82,8 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     private static final Set<String> BOOKING_ACTION_EXACT = Set.of(
             "i want to book", "book now", "book it now", "book for me",
             "place booking", "place a booking", "place order",
-            "submit booking", "confirm booking", "book this slot"
+            "submit booking", "confirm booking", "book this slot",
+            "please place booking order now"
     );
     private static final Set<String> CANCEL_ACTION_EXACT = Set.of(
             "cancel my booking", "cancel booking", "cancel appointment",

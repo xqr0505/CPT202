@@ -15,11 +15,13 @@ import edu.xjtlu.cpt202.backend.modules.auth.mapper.RefreshTokenMapper;
 import edu.xjtlu.cpt202.backend.modules.auth.model.entity.RefreshToken;
 import edu.xjtlu.cpt202.backend.modules.auth.service.VerificationCodeService;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangeCurrentUserEmailDTO;
+import edu.xjtlu.cpt202.backend.modules.user.mapper.SpecialistProfileMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserMapper;
 import edu.xjtlu.cpt202.backend.modules.user.mapper.UserSecurityActivityMapper;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.ChangePasswordDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.SendChangeEmailCodeDTO;
 import edu.xjtlu.cpt202.backend.modules.user.model.dto.UpdateUserProfileDTO;
+import edu.xjtlu.cpt202.backend.modules.user.model.entity.SpecialistProfile;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.User;
 import edu.xjtlu.cpt202.backend.modules.user.model.entity.UserSecurityActivity;
 import edu.xjtlu.cpt202.backend.modules.user.model.vo.UserAvatarUploadVO;
@@ -85,6 +87,7 @@ public class UserAccountServiceImpl implements UserAccountService {
     private static final String PHONE_NUMBER_PATTERN = "^\\+\\d{1,3}\\s\\d{4,14}$";
 
     private final UserMapper userMapper;
+    private final SpecialistProfileMapper specialistProfileMapper;
     private final UserSecurityActivityMapper userSecurityActivityMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final AvatarStorageService avatarStorageService;
@@ -93,7 +96,8 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     @Override
     public UserProfileVO getCurrentUserProfile() {
-        return toUserProfileVO(getCurrentUserOrThrow());
+        User user = getCurrentUserOrThrow();
+        return toUserProfileVO(user, resolveProfileAvatarUrl(user));
     }
 
     @Override
@@ -204,7 +208,7 @@ public class UserAccountServiceImpl implements UserAccountService {
                 "Email changed",
                 List.of(CHANGED_FIELD_EMAIL)
         );
-        return toUserProfileVO(user);
+        return toUserProfileVO(user, resolveProfileAvatarUrl(user));
     }
 
     @Override
@@ -219,6 +223,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         if (userMapper.updateById(user) == 0) {
             throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to save avatar");
         }
+        syncSpecialistAvatarIfNeeded(user, avatarUrl);
 
         recordSecurityActivitySafely(
                 user.getId(),
@@ -456,15 +461,62 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
     }
 
-    private UserProfileVO toUserProfileVO(User user) {
+    private UserProfileVO toUserProfileVO(User user, String avatarUrl) {
         UserProfileVO userProfileVO = new UserProfileVO();
         userProfileVO.setId(user.getId());
         userProfileVO.setFullName(user.getFullName());
         userProfileVO.setEmail(user.getEmail());
         userProfileVO.setPhoneNumber(user.getPhoneNumber());
-        userProfileVO.setAvatarUrl(user.getAvatarUrl());
+        userProfileVO.setAvatarUrl(avatarUrl);
         userProfileVO.setStatus(user.getStatus());
         return userProfileVO;
+    }
+
+    private String resolveProfileAvatarUrl(User user) {
+        String fallbackAvatarUrl = normalizeNullableText(user.getAvatarUrl());
+        if (!isSpecialistUser(user)) {
+            return fallbackAvatarUrl;
+        }
+
+        Long specialistProfileId = specialistProfileMapper.selectIdByUserId(user.getId());
+        if (specialistProfileId == null) {
+            return fallbackAvatarUrl;
+        }
+
+        SpecialistProfile specialistProfile = specialistProfileMapper.selectById(specialistProfileId);
+        if (specialistProfile == null) {
+            return fallbackAvatarUrl;
+        }
+
+        String specialistAvatarUrl = normalizeNullableText(specialistProfile.getAvatarUrl());
+        return StringUtils.hasText(specialistAvatarUrl) ? specialistAvatarUrl : fallbackAvatarUrl;
+    }
+
+    private void syncSpecialistAvatarIfNeeded(User user, String avatarUrl) {
+        if (!isSpecialistUser(user)) {
+            return;
+        }
+
+        Long specialistProfileId = specialistProfileMapper.selectIdByUserId(user.getId());
+        if (specialistProfileId == null) {
+            logger.warn("No specialist profile found when syncing avatar for specialist user {}", user.getId());
+            return;
+        }
+
+        SpecialistProfile specialistProfile = specialistProfileMapper.selectById(specialistProfileId);
+        if (specialistProfile == null) {
+            logger.warn("Specialist profile {} not found when syncing avatar for user {}", specialistProfileId, user.getId());
+            return;
+        }
+
+        specialistProfile.setAvatarUrl(normalizeNullableText(avatarUrl));
+        if (specialistProfileMapper.updateById(specialistProfile) == 0) {
+            logger.warn("Failed to sync avatar for specialist profile {} (user {})", specialistProfileId, user.getId());
+        }
+    }
+
+    private boolean isSpecialistUser(User user) {
+        return user != null && UserRoleEnum.SPECIALIST.name().equalsIgnoreCase(normalizeNullableText(user.getRole()));
     }
 
     private UserSecurityActivityVO toUserSecurityActivityVO(UserSecurityActivity activity) {

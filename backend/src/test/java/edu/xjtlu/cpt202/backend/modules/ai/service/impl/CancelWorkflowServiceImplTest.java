@@ -7,6 +7,8 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntent;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiIntentRouterService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
 import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowAssistant;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingCreateDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.BookingPageQueryDTO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.dto.DashboardQueryDTO;
@@ -28,6 +30,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistHandledBookin
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.SpecialistPendingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UpcomingBookingVO;
 import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
+import edu.xjtlu.cpt202.backend.modules.booking.service.AiBookingSearchService;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.junit.jupiter.api.Test;
 
@@ -50,9 +53,19 @@ class CancelWorkflowServiceImplTest {
     void shouldStartWorkflowForCancelIntent() {
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 new InMemoryCancelTaskStateStore(),
-                (userMsg, taskState) -> "continue",
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: NEEDS_USER_ID_SELECTION
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
                 new StubBookingService(),
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         boolean shouldStart = service.shouldStartWorkflow(1001L, "cancel my booking");
@@ -70,14 +83,24 @@ class CancelWorkflowServiceImplTest {
         );
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: NEEDS_USER_ID_SELECTION
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
                 bookingService,
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("cancel my booking"));
 
-        assertThat(reply).contains("Please reply with the booking ID");
+        assertThat(reply).contains("Please reply with the exact booking ID");
         assertThat(reply).contains("| Booking ID | Specialist | Service | Appointment Time | Status |");
         assertThat(reply).contains("| 11 | Dr. Smith | Therapy | 2026-05-10 09:00 | CONFIRMED |");
         assertThat(reply).contains("| 12 | Dr. Lee | Consultation | 2026-05-11 14:00 | PENDING |");
@@ -101,9 +124,19 @@ class CancelWorkflowServiceImplTest {
                 .build();
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: NEEDS_USER_ID_SELECTION
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
                 bookingService,
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("cancel booking 15"));
@@ -117,11 +150,26 @@ class CancelWorkflowServiceImplTest {
     void shouldAbortAndClearStateWhenAssistantReturnsAbortMarker() {
         InMemoryCancelTaskStateStore store = new InMemoryCancelTaskStateStore();
         store.save(1001L, CancelTaskState.builder().step(CancelTaskState.Step.IDENTIFY).build());
+        StubBookingService bookingService = new StubBookingService();
+        bookingService.bookingList = List.of(
+                booking("15", "Dr. Smith", "Therapy", LocalDateTime.of(2026, 5, 10, 9, 0), "CONFIRMED"),
+                booking("16", "Dr. Lee", "Consultation", LocalDateTime.of(2026, 5, 11, 10, 0), "PENDING")
+        );
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "[CANCEL_TASK_ABORTED] unrelated topic",
-                new StubBookingService(),
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: ABORT
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
+                bookingService,
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("what time is it?"));
@@ -136,9 +184,19 @@ class CancelWorkflowServiceImplTest {
         store.save(1001L, CancelTaskState.builder().step(CancelTaskState.Step.IDENTIFY).build());
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: NEEDS_USER_ID_SELECTION
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
                 new StubBookingService(),
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("never mind"));
@@ -160,9 +218,19 @@ class CancelWorkflowServiceImplTest {
                 .build();
         CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
                 store,
-                (userMsg, taskState) -> "continue",
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: NEEDS_USER_ID_SELECTION
+                        BOOKING_ID: N/A
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
                 bookingService,
-                (memoryId, userMessage) -> AiIntent.CANCEL
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
         );
 
         String reply = service.handle(1001L, wrapped("cancel booking 15"));
@@ -170,6 +238,42 @@ class CancelWorkflowServiceImplTest {
         assertThat(reply).contains("cannot be cancelled");
         assertThat(reply).contains("Less than 2 hours to start");
         assertThat(store.get(1001L)).isEmpty();
+    }
+
+    @Test
+    void shouldResolveBookingFromAssistantProvidedIdWhenFollowUpIsVague() {
+        InMemoryCancelTaskStateStore store = new InMemoryCancelTaskStateStore();
+        StubBookingService bookingService = new StubBookingService();
+        bookingService.bookingList = List.of(
+                booking("15", "Dr. Smith", "Therapy", LocalDateTime.of(2026, 5, 10, 9, 0), "CONFIRMED")
+        );
+        bookingService.quote = BookingCancelQuoteVO.builder()
+                .allowed(true)
+                .policyType("FULL_REFUND")
+                .bookingStartAt(LocalDateTime.of(2026, 5, 10, 9, 0))
+                .refundAmount(new BigDecimal("100.00"))
+                .penaltyAmount(BigDecimal.ZERO)
+                .build();
+        CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
+                store,
+                (userMsg, taskState, memoryContext, candidateSummary) -> """
+                        ACTION: RESOLVED_BOOKING_ID
+                        BOOKING_ID: 15
+                        EXPERT_NAME: N/A
+                        CATEGORY_NAME: N/A
+                        STATUS: N/A
+                        START_DATE: N/A
+                        END_DATE: N/A
+                        TIME_RANGE_TYPE: N/A
+                        """,
+                bookingService,
+                (memoryId, userMessage) -> AiIntent.CANCEL,
+                support()
+        );
+
+        String reply = service.handle(1001L, wrapped("that one"));
+
+        assertThat(reply).contains("[TRIGGER_CANCEL_MODAL:15]");
     }
 
     private static BookingItemVO booking(
@@ -196,6 +300,14 @@ class CancelWorkflowServiceImplTest {
                 User message:
                 %s
                 """.formatted(userMessage);
+    }
+
+    private static WorkflowBookingIdentificationSupport support() {
+        StubAiBookingSearchService searchService = new StubAiBookingSearchService();
+        return new WorkflowBookingIdentificationSupport(
+                new InMemoryChatMemoryStore(),
+                new edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool(searchService)
+        );
     }
 
     private static class InMemoryCancelTaskStateStore implements CancelTaskStateStore {
@@ -494,6 +606,35 @@ class CancelWorkflowServiceImplTest {
         @Override
         public Class<Booking> getEntityClass() {
             return Booking.class;
+        }
+    }
+
+    private static class StubAiBookingSearchService implements AiBookingSearchService {
+        @Override
+        public edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchResultVO searchCustomerBookings(
+                Long customerId,
+                edu.xjtlu.cpt202.backend.modules.booking.model.dto.AiBookingSearchDTO queryDTO
+        ) {
+            return edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingSearchResultVO.builder()
+                    .totalMatched(0)
+                    .returnedCount(0)
+                    .items(List.of())
+                    .build();
+        }
+    }
+
+    private static class InMemoryChatMemoryStore implements ChatMemoryStore {
+        @Override
+        public List<ChatMessage> getMessages(Object memoryId) {
+            return List.of();
+        }
+
+        @Override
+        public void updateMessages(Object memoryId, List<ChatMessage> messages) {
+        }
+
+        @Override
+        public void deleteMessages(Object memoryId) {
         }
     }
 }

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import router from '@/router';
 import { apiBaseUrl } from '@/config/api';
@@ -7,15 +8,11 @@ import { apiBaseUrl } from '@/config/api';
  * Default API response structure
  * @template T - data type of the response payload
  */
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data: T;
 }
-
-type RequestWithToastControl = {
-  suppressErrorMessage?: boolean;
-};
 
 type AuthFailureError = Error & {
   isAuthFailure?: boolean;
@@ -25,6 +22,20 @@ type AuthFailureError = Error & {
 const ACTIVITY_EVENT_KEY = 'session-activity-event';
 const LOGOUT_EVENT_KEY = 'logout-event';
 const AUTH_REFRESH_PATH = '/auth/refresh-token';
+export interface StoredUser {
+  role?: string;
+  [key: string]: unknown;
+}
+
+interface TokenRefreshResponse {
+  token: string;
+  refreshToken?: string;
+}
+
+export type RequestConfigWithMeta = AxiosRequestConfig & {
+  suppressErrorMessage?: boolean;
+  _retry?: boolean;
+};
 
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -50,7 +61,7 @@ let handling401 = false;
 let lastErrorMessage = '';
 let lastErrorMessageTime = 0;
 
-const shouldSuppressErrorMessage = (config?: any): boolean => {
+const shouldSuppressErrorMessage = (config?: { suppressErrorMessage?: boolean } | null): boolean => {
   return Boolean(config?.suppressErrorMessage);
 };
 
@@ -84,7 +95,7 @@ export const clearAuthData = () => {
 export const saveAuthData = (
   token: string,
   refreshToken: string,
-  user: any,
+  user: StoredUser,
   rememberMe: boolean = false
 ) => {
   saveToken(token, rememberMe);
@@ -117,7 +128,7 @@ export const saveRefreshToken = (refreshToken: string, rememberMe: boolean = fal
   }
 };
 
-export const saveUser = (user: any, rememberMe: boolean = false) => {
+export const saveUser = (user: StoredUser, rememberMe: boolean = false) => {
   const storage = getPreferredStorage(rememberMe);
   storage.setItem('user', JSON.stringify(user));
   if (rememberMe) {
@@ -131,11 +142,11 @@ export const clearRememberedEmail = () => {
   localStorage.removeItem('rememberedEmail');
 };
 
-export const getUser = (): any => {
+export const getUser = (): StoredUser | null => {
   const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
   try {
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -206,7 +217,7 @@ export const isAuthFailureError = (error: unknown): boolean => {
   return false;
 };
 
-const decodeJwtPayload = (token: string): any | null => {
+const decodeJwtPayload = (token: string): { exp?: number } | null => {
   if (!token) {
     return null;
   }
@@ -255,7 +266,7 @@ const service = axios.create({
 service.interceptors.request.use(
   config => {
     config.headers = config.headers || {};
-    const headers = config.headers as Record<string, any> & {
+    const headers = config.headers as Record<string, unknown> & {
       setContentType?: (value?: string | false) => void;
     };
 
@@ -300,10 +311,10 @@ export const refreshAuthToken = async (): Promise<string> => {
 
   const rememberMe = isRememberMeSession();
   refreshingPromise = service
-    .post<any, any>(
+    .post<unknown, TokenRefreshResponse>(
       '/auth/refresh-token',
       { refreshToken },
-      { suppressErrorMessage: true } as any
+      { suppressErrorMessage: true } as RequestConfigWithMeta
     )
     .then(result => {
       if (!result || typeof result.token !== 'string') {
@@ -331,16 +342,16 @@ export const refreshAuthToken = async (): Promise<string> => {
 };
 
 service.interceptors.response.use(
-  response => {
+  ((response: { data: ApiResponse; config: InternalAxiosRequestConfig }) => {
     const res = response.data as ApiResponse;
-    const suppressErrorMessage = shouldSuppressErrorMessage(response.config);
+    const suppressErrorMessage = shouldSuppressErrorMessage(response.config as unknown as RequestConfigWithMeta);
 
     if (res.code === 200) {
       return res.data;
     }
 
     if (res.code === 401) {
-      const originalRequest = response.config as any;
+      const originalRequest = response.config as unknown as RequestConfigWithMeta;
       if (
         !originalRequest?._retry &&
         !isRefreshEndpoint(originalRequest?.url) &&
@@ -382,11 +393,11 @@ service.interceptors.response.use(
       showErrorOnce(res.message || 'Error');
     }
     return Promise.reject(new Error(res.message || 'Error'));
-  },
+  }) as unknown as Parameters<typeof service.interceptors.response.use>[0],
   async error => {
     const status = error.response?.status;
-    const suppressErrorMessage = shouldSuppressErrorMessage(error.config);
-    const originalRequest = error.config as any;
+    const suppressErrorMessage = shouldSuppressErrorMessage(error.config as RequestConfigWithMeta);
+    const originalRequest = error.config as RequestConfigWithMeta;
 
     if (
       status === 401 &&
@@ -398,7 +409,7 @@ service.interceptors.response.use(
       try {
         await refreshAuthToken();
         return service(originalRequest);
-      } catch (refreshError) {
+      } catch {
         if (!suppressErrorMessage) {
           showErrorOnce('Unauthorized, please login again');
         }

@@ -26,11 +26,14 @@ import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -51,6 +54,8 @@ import java.util.Map;
         AiWorkflowProperties.class
 })
 public class LangChainConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(LangChainConfig.class);
 
     @Bean
     public ChatLanguageModel chatLanguageModel(
@@ -77,6 +82,44 @@ public class LangChainConfig {
                 builder.baseUrl(trimmedBaseUrl);
             }
         }
+
+        return new SanitizingChatLanguageModel(builder.build());
+    }
+
+    @Bean
+    public ChatLanguageModel intentRouterChatLanguageModel(
+            @Value("${ai.intent.router.api-key:${ai.openai.api-key:}}") String apiKey,
+            @Value("${ai.intent.router.model-name:${ai.rag.rewrite.light-model-name:${ai.openai.model-name:}}}") String modelName,
+            @Value("${ai.intent.router.base-url:${ai.openai.base-url:}}") String baseUrl,
+            AiIntentRouterProperties aiIntentRouterProperties,
+            AiModelProperties aiModelProperties
+    ) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(AiConstant.OPENAI_API_KEY_REQUIRED_MESSAGE);
+        }
+        if (modelName == null || modelName.isBlank()) {
+            throw new IllegalStateException(AiConstant.OPENAI_MODEL_NAME_REQUIRED_MESSAGE);
+        }
+
+        var builder = OpenAiChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(modelName)
+                .maxTokens(Math.min(aiModelProperties.getMaxOutputTokens(), 32))
+                .maxRetries(0);
+
+        if (baseUrl != null) {
+            String trimmedBaseUrl = baseUrl.trim();
+            if (!trimmedBaseUrl.isBlank()) {
+                builder.baseUrl(trimmedBaseUrl);
+            }
+        }
+
+        log.info(
+                "Configured intent router chat model: modelName={}, baseUrl={}, timeoutMs={}",
+                modelName,
+                baseUrl == null || baseUrl.isBlank() ? "<default>" : baseUrl.trim(),
+                aiIntentRouterProperties.getTimeoutMs()
+        );
 
         return new SanitizingChatLanguageModel(builder.build());
     }
@@ -175,24 +218,32 @@ public class LangChainConfig {
     }
 
     @Bean
-    public CancelWorkflowAssistant cancelWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+    public CancelWorkflowAssistant cancelWorkflowAssistant(
+            ChatLanguageModel chatLanguageModel,
+            AiBookingSearchTool aiBookingSearchTool
+    ) {
         return AiServices.builder(CancelWorkflowAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
+                .tools(aiBookingSearchTool)
                 .build();
     }
 
     @Bean
-    public RescheduleWorkflowAssistant rescheduleWorkflowAssistant(ChatLanguageModel chatLanguageModel) {
+    public RescheduleWorkflowAssistant rescheduleWorkflowAssistant(
+            ChatLanguageModel chatLanguageModel,
+            AiBookingSearchTool aiBookingSearchTool
+    ) {
         return AiServices.builder(RescheduleWorkflowAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
+                .tools(aiBookingSearchTool)
                 .build();
     }
 
     @Bean
     public AiIntentRouterService intentRouterService(
-            ChatLanguageModel chatLanguageModel,
+            @Qualifier("intentRouterChatLanguageModel") ChatLanguageModel intentRouterChatLanguageModel,
             AiIntentRouterProperties aiIntentRouterProperties
     ) {
-        return new LightModelAiIntentRouterService(chatLanguageModel, aiIntentRouterProperties);
+        return new LightModelAiIntentRouterService(intentRouterChatLanguageModel, aiIntentRouterProperties);
     }
 }

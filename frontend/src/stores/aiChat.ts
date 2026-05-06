@@ -22,7 +22,8 @@ const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
 const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
 const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
-const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):(\d{4}-\d{2}-\d{2})?:(\d*)\]/i
+const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):((?:\d{4}-\d{2}-\d{2})|N\/A)?:(\d*)\]/i
+const WORKFLOW_ABORT_MARKER_PATTERN = /\[(?:BOOKING|CANCEL|RESCHEDULE)_TASK_ABORTED\]\s*/gi
 
 interface StoredSessionUser {
   userId?: number | string | null
@@ -262,7 +263,7 @@ const normalizeLineValue = (value: string | null): string | null => {
     return null
   }
   const sanitized = value
-    .replace(/^[\u2022\-\*\d.)\s]+/, '')
+    .replace(/^[\u2022\-*\d.)\s]+/, '')
     .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
     .trim()
   return sanitized || null
@@ -286,7 +287,7 @@ const isBookingConflictContent = (content: string): boolean => {
 
 const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
   const lineCandidate = extractFirstMatch(content, [
-    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D\?\-]?\s*([^\n\r]+)/i,
+    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D?-]?\s*([^\n\r]+)/i,
   ])
   const segment = lineCandidate || content
   const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
@@ -322,7 +323,7 @@ const tryExtractBookingSubmitPreviewFromText = (content: string): AiBookingSubmi
       /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
       /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
       /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D\?]?\s*(\d+)/i,
+      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D?]?\s*(\d+)/i,
       /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
     ])
   )
@@ -500,7 +501,8 @@ const extractRescheduleModalPayload = (content: string): AiBookingRescheduleModa
   if (!Number.isFinite(bookingId) || bookingId <= 0) {
     return null
   }
-  const targetDate = normalizeString(matched[2] || null)
+  const rawTargetDate = normalizeString(matched[2] || null)
+  const targetDate = rawTargetDate === 'N/A' ? null : rawTargetDate
   const suggestedSlotId = normalizeNumericId(matched[3] || null) ?? null
   return {
     bookingId: Math.trunc(bookingId),
@@ -515,6 +517,10 @@ const stripCancelModalMarker = (content: string): string => {
 
 const stripRescheduleModalMarker = (content: string): string => {
   return content.replace(RESCHEDULE_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const stripWorkflowAbortMarker = (content: string): string => {
+  return content.replace(WORKFLOW_ABORT_MARKER_PATTERN, '').trim()
 }
 
 const emitCancelModal = (assistantContent: string): string => {
@@ -714,7 +720,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
   const finalizeAssistantMessage = (messageId: string): void => {
     updateMessage(messageId, message => {
-      const normalizedContent = emitRescheduleModal(emitCancelModal(message.content.trim()))
+      const normalizedContent = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(message.content.trim())))
       message.content = normalizedContent.trim()
         ? normalizedContent
         : AI_CHAT_EMPTY_RESPONSE_TEXT
@@ -800,7 +806,7 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
         removeMessage(assistantMessageId)
       } else {
         updateMessage(assistantMessageId, currentMessage => {
-          currentMessage.content = emitRescheduleModal(emitCancelModal(currentMessage.content))
+          currentMessage.content = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(currentMessage.content)))
           currentMessage.status = AI_CHAT_MESSAGE_STATUS.done
         })
         const finalAssistantMessage = messages.value.find(messageItem => messageItem.id === assistantMessageId)

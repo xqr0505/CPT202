@@ -64,7 +64,7 @@
               </CustomButton>
             </el-tooltip>
 
-            <template v-if="activeTab === 'UPCOMING'">
+            <template v-if="activeTab === 'UPCOMING' && !isCancelledBooking(bookingRow(row))">
               <el-tooltip content="Reschedule" placement="top">
                 <CustomButton size="small" type="warning" circle class="action-btn-circle" :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                   <el-icon><Edit /></el-icon>
@@ -118,7 +118,8 @@
                 </CustomButton>
               </el-tooltip>
 
-              <template v-if="activeTab === 'UPCOMING'">
+            <template v-if="activeTab === 'UPCOMING'">
+              <template v-if="!isCancelledBooking(bookingRow(row))">
                 <el-tooltip content="Reschedule" placement="top">
                   <CustomButton class="mobile-action-btn-circle" size="small" type="warning" circle :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                     <el-icon><Edit /></el-icon>
@@ -130,6 +131,14 @@
                   </CustomButton>
                 </el-tooltip>
               </template>
+              <template v-else>
+                <el-tooltip content="Book Again" placement="top">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="success" circle @click="handleAction('bookAgain', bookingRow(row))">
+                    <el-icon><RefreshRight /></el-icon>
+                  </CustomButton>
+                </el-tooltip>
+              </template>
+            </template>
 
               <template v-else>
                 <el-tooltip content="Book Again" placement="top">
@@ -311,6 +320,7 @@ const formatDateTime = (dtStr: string) => {
 }
 
 const normalizeStatus = (status: string) => String(status || '').toUpperCase();
+const isCancelledBooking = (row: BookingListItem) => normalizeStatus(row.status) === 'CANCELLED';
 
 const canCancelBooking = (row: BookingListItem) => {
   const normalizedStatus = normalizeStatus(row.status);

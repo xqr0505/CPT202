@@ -183,5 +183,5 @@ onMounted(() => {
 
 <template>
   <router-view />
-  <DevFooter v-if="isDev" />
+  <DevFooter v-if="false" />
 </template>

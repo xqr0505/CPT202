@@ -34,19 +34,21 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private static final Logger log = LoggerFactory.getLogger(LightModelAiIntentRouterService.class);
     private static final ExecutorService MODEL_EXECUTOR = Executors.newCachedThreadPool(new IntentRouterThreadFactory());
-    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "BOOKING", "DASHBOARD", "CHITCHAT");
+    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "RESCHEDULE", "BOOKING", "DASHBOARD", "CHITCHAT");
     private static final String ROUTER_PROMPT = """
         You are an intent router for ExpertLink. 
         Classify the user message into exactly ONE label:
 
         KNOWLEDGE
         CANCEL
+        RESCHEDULE
         BOOKING
         DASHBOARD
         CHITCHAT
 
         Definitions:
         - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
+        - RESCHEDULE: user wants to change/rearrange/move the time/date of an existing booking.
         - BOOKING: user explicitly wants to place/submit a booking order now.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
@@ -55,13 +57,14 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         Priority rules:
         1) If message asks for own records/history/status list/overview -> DASHBOARD.
         2) Else if message asks to cancel an existing booking -> CANCEL.
-        3) Else if message clearly asks to place/submit a booking order now -> BOOKING.
-        4) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
+        3) Else if message asks to reschedule/change time/date of an existing booking -> RESCHEDULE.
+        4) Else if message clearly asks to place/submit a booking order now -> BOOKING.
+        5) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
         5) If mixed or unclear, choose KNOWLEDGE by default.
         6) Do NOT choose CHITCHAT unless it is pure small talk and contains no product request.
 
         Output rules:
-        - Output exactly one word from: KNOWLEDGE, CANCEL, BOOKING, DASHBOARD, CHITCHAT
+        - Output exactly one word from: KNOWLEDGE, CANCEL, RESCHEDULE, BOOKING, DASHBOARD, CHITCHAT
         - No extra text.
 
         User message:
@@ -88,6 +91,12 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
     private static final Set<String> CANCEL_ACTION_EXACT = Set.of(
             "cancel my booking", "cancel booking", "cancel appointment",
             "cancel my appointment", "i want to cancel", "help me cancel"
+    );
+    private static final Set<String> RESCHEDULE_ACTION_EXACT = Set.of(
+            "reschedule my booking", "reschedule booking", "reschedule appointment",
+            "reschedule my appointment", "i want to reschedule", "help me reschedule",
+            "change my booking time", "change my appointment time", "move my booking",
+            "move my appointment"
     );
     private final ChatLanguageModel lightModel;
     private final AiIntentRouterProperties properties;
@@ -175,6 +184,9 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         }
         if (CANCEL_ACTION_EXACT.contains(normalizedMessage)) {
             return AiIntent.CANCEL;
+        }
+        if (RESCHEDULE_ACTION_EXACT.contains(normalizedMessage)) {
+            return AiIntent.RESCHEDULE;
         }
         if (DASHBOARD_EXACT.contains(normalizedMessage)) {
             return AiIntent.DASHBOARD;

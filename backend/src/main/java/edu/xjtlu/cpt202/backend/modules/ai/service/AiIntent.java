@@ -9,6 +9,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.service;
 public enum AiIntent {
     KNOWLEDGE,
     CANCEL,
+    RESCHEDULE,
     BOOKING,
     DASHBOARD,
     CHITCHAT

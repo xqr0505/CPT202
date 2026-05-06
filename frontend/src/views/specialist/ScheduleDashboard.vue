@@ -47,7 +47,9 @@
             :class="getSlotStatusClass(slot)"
             @click="openSlotDetail(slot)"
           >
-            <div class="slot-time">{{ slot.startTime }} - {{ slot.endTime }}</div>
+            <div class="slot-time">
+              {{ formatDisplayTime(slot.startTime) }} - {{ formatDisplayTime(slot.endTime) }}
+            </div>
             <div class="slot-status">
               <el-tag :type="getStatusTagType(slot)" size="small">
                 {{ getSlotDisplayLabel(slot) }}
@@ -155,7 +157,8 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="Date">{{ selectedSlot.slotDate }}</el-descriptions-item>
           <el-descriptions-item label="Time">
-            {{ selectedSlot.startTime }} - {{ selectedSlot.endTime }}
+            {{ formatDisplayTime(selectedSlot.startTime) }} -
+            {{ formatDisplayTime(selectedSlot.endTime) }}
           </el-descriptions-item>
           <el-descriptions-item label="Status">
             <el-tag :type="getStatusTagType(selectedSlot)">
@@ -499,6 +502,14 @@ function getDayNameForDate(dateStr: string): string {
 
 function normalizeTimeValue(time: string): string {
   return /^\d{2}:\d{2}$/.test(time) ? `${time}:00` : time
+}
+
+function formatDisplayTime(time: string): string {
+  if (!time) {
+    return ''
+  }
+  const match = time.match(/^(\d{2}:\d{2})/)
+  return match ? match[1] : time
 }
 
 function resolveSlotStartAt(slotDate: string, startTime: string): Date | null {

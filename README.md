@@ -1,30 +1,74 @@
 # ExpertLink Consult System
 
-A full-stack consulting system built with Spring Boot (backend) and Vue 3 + Vite (frontend).
+ExpertLink is a full-stack doctor appointment booking system.
+
+- Backend: Spring Boot (Java 17), MySQL, Redis Stack
+- Frontend: Vue 3 + Vite + Element Plus
 
 ## Project Structure
 
-- `backend/` — Spring Boot API, MySQL, Flyway, MyBatis-Plus
-- `frontend/` — Vue 3 application
-- `docs/` — project notes and structure docs
+- `backend/` Spring Boot API (MySQL, Flyway, MyBatis-Plus, Redis)
+- `frontend/` Vue 3 application
+- `docs/` Notes and docs
+- `scripts/` Local dev helper scripts (Windows)
 
-## Prerequisites
-
-Make sure the following are installed locally:
+## Prerequisites (Local)
 
 - Java 17
-- Maven 3.9+ or the included Maven Wrapper
-- Node.js 20.19.0+ or 22.12.0+
-- npm
+- Maven 3.9+ (or `backend/mvnw`)
+- Node.js `^20.19.0 || >=22.12.0` and npm
 - MySQL 8.0+
+- Redis Stack (recommended) or a compatible Redis server
 
-## Required Local Setup
+## Environment Variables
 
-### 1) Create the database
+This repo uses a root `.env` file for local/dev and Docker configuration.
 
-The backend uses MySQL database `cpt202_consultancy`.
+1. Create `.env` from the template:
 
-Run the following SQL in your local MySQL client:
+```bash
+cp .env.example .env
+```
+
+2. Fill in required values (at minimum):
+
+- `DB_PASSWORD`
+- `JWT_SECRET` (at least 32 characters)
+
+Optional (only needed if you use these features):
+
+- Email: `MAIL_PASSWORD`
+- AI: `OPENAI_API_KEY`, `DASHSCOPE_API_KEY` (and related model/base URL settings)
+
+If you run Redis locally (not via Docker), set:
+
+- `REDIS_HOST=127.0.0.1`
+- `REDIS_PORT=6379`
+
+## Run Locally (Recommended Dev Flow)
+
+On Windows, the easiest flow is: start infrastructure via Docker, and run backend/frontend on the host.
+
+```powershell
+scripts\run-local-dev.cmd
+```
+
+Default endpoints:
+
+- Frontend (Vite): `http://localhost:5331`
+- Backend (Spring Boot dev): `http://localhost:8081`
+- Swagger UI: `http://localhost:8081/swagger-ui/index.html`
+
+This dev flow uses Docker services by default:
+
+- MySQL: `127.0.0.1:9001`
+- Redis Stack server: `127.0.0.1:9002`
+
+## Run Manually (No Helper Scripts)
+
+1. Start MySQL and Redis Stack (or Redis).
+
+2. Create the database:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS cpt202_consultancy
@@ -32,52 +76,14 @@ DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 2) Check backend database credentials
-
-Backend dev config is in:
-
-- `backend/src/main/resources/application-dev.yml`
-
-Current defaults:
-
-- host: `127.0.0.1`
-- port: `3306`
-- database: `cpt202_consultancy`
-- username: `root`
-- password: `12345`
-
-If your local MySQL settings are different, update that file before running the backend.
-
-## Run the Backend
-
-Open a terminal in the repository root and run:
+3. Start backend:
 
 ```powershell
 cd backend
 ./mvnw spring-boot:run
 ```
 
-If you prefer system Maven, use:
-
-```powershell
-cd backend
-mvn spring-boot:run
-```
-
-Backend defaults:
-
-- URL: `http://localhost:8081`
-- API docs: `http://localhost:8081/swagger-ui/index.html`
-
-## Local Dev Scripts (Windows)
-
-- `scripts/run-local-dev.cmd` (db+redis via docker + backend + frontend)
-- `scripts/run-local-backend.cmd`
-- `scripts/run-local-frontend.cmd`
-
-## Run the Frontend
-
-Open another terminal in the repository root and run:
+4. Start frontend:
 
 ```powershell
 cd frontend
@@ -85,50 +91,12 @@ npm install
 npm run dev
 ```
 
-Frontend defaults:
+## Docker (Recommended for Sharing / Deployment)
 
-- URL: `http://localhost:5331`
-
-## Quick Start Checklist
-
-1. Start MySQL.
-2. Create the `cpt202_consultancy` database.
-3. Confirm `backend/src/main/resources/application-dev.yml` matches your MySQL credentials.
-4. Start the backend.
-5. Start the frontend.
-6. Open the frontend in your browser.
-7. Open Swagger UI if you want to test APIs directly.
-
-## Validation Commands
-
-Run these if you want to verify the project after setup:
-
-### Backend
-
-```powershell
-cd backend
-./mvnw test
-./mvnw -DskipTests package
-```
-
-### Frontend
-
-```powershell
-cd frontend
-npm run type-check
-npm run build
-npm run lint
-```
+For a production-like setup and a full Docker-based dev setup, use Docker.
+See `README_DOCKER.md`.
 
 ## Troubleshooting
 
-- If the backend fails to start, check MySQL is running and the database credentials in `application-dev.yml` are correct.
-- If the frontend cannot reach the backend, confirm the backend is running on `http://localhost:8081`.
-- If dependencies are missing, run `npm install` again in `frontend/` and rerun the backend Maven command.
-
-## Run With Docker
-
-Docker (production-like + dev) instructions are in:
-
-- `README_DOCKER.md`
-
+- Backend fails to start: check MySQL/Redis are reachable and your `.env` values are set.
+- Frontend cannot reach backend: ensure backend is on `http://localhost:8081` and `FRONTEND_VITE_API_BASE_URL_DEV` ends with `/api`.

@@ -4,7 +4,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import DevFooter from '@/components/common/DevFooter.vue'
 import { logout, getAuthToken, getRefreshToken, refreshAuthToken } from '@/api/request'
 
-const isDev = Boolean(import.meta.env.DEV)
 const globalError = ref<{ message: string | null; stack?: string | null } | null>(null)
 
 const WARNING_DELAY = 29 * 60 * 1000

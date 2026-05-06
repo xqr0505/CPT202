@@ -339,7 +339,7 @@ function formatDisplayTime(time: string): string {
     return ''
   }
   const match = time.match(/^(\d{2}:\d{2})/)
-  return match ? match[1] : time
+  return match && match[1] ? match[1] : time || ''
 }
 
 async function fetchRules() {

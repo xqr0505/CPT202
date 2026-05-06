@@ -162,6 +162,7 @@ public interface AdminSpecialistMapper {
             <set>
                 full_name = #{fullName},
                 email = #{email},
+                avatar_url = #{avatarUrl},
                 <if test="passwordHash != null and passwordHash != ''">
                     password_hash = #{passwordHash},
                     password_changed_at = NOW(),
@@ -175,6 +176,7 @@ public interface AdminSpecialistMapper {
             @Param("userId") Long userId,
             @Param("fullName") String fullName,
             @Param("email") String email,
+            @Param("avatarUrl") String avatarUrl,
             @Param("passwordHash") String passwordHash
     );
 

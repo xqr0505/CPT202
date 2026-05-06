@@ -35,6 +35,7 @@ public interface RescheduleWorkflowAssistant {
             10. If there are still multiple plausible candidates, return ACTION: NEEDS_USER_ID_SELECTION.
             11. Optionally provide search hints using these fields when helpful:
                EXPERT_NAME, CATEGORY_NAME, STATUS, START_DATE, END_DATE, TIME_RANGE_TYPE.
+               If you provide START_DATE or END_DATE, prefer ISO format YYYY-MM-DD.
             12. Example:
                 - "I want to reschedule my booking today" -> TIME_RANGE_TYPE: TODAY, TARGET_DATE: N/A
                 - "I want to reschedule booking 14 to tomorrow at 3pm" -> BOOKING_ID: 14, TARGET_DATE set, TARGET_TIME set

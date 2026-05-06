@@ -151,9 +151,14 @@ public class CancelWorkflowServiceImpl implements CancelWorkflowService {
         }
 
         if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.NEEDS_USER_SELECTION) {
-            List<BookingItemVO> matchedBookings = identificationResult.matchedBookings().isEmpty()
-                    ? candidates
-                    : identificationResult.matchedBookings();
+            List<BookingItemVO> matchedBookings = identificationResult.matchedBookings();
+            if (matchedBookings == null || matchedBookings.isEmpty()) {
+                cancelTaskStateStore.clear(userId);
+                return """
+                        I could not find a unique cancellable booking matching your request in this round.
+                        Please provide more specific details (Booking ID, specialist name, service, or appointment date/time), then I will search again.
+                        """;
+            }
             state.setStep(CancelTaskState.Step.IDENTIFY);
             state.setCandidateBookingIds(matchedBookings.stream()
                     .map(BookingItemVO::getId)

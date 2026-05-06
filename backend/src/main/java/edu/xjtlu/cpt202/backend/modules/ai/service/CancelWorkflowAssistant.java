@@ -30,6 +30,7 @@ public interface CancelWorkflowAssistant {
             6. If there are still multiple plausible candidates, return ACTION: NEEDS_USER_ID_SELECTION.
             7. Optionally provide search hints using these fields when helpful:
                EXPERT_NAME, CATEGORY_NAME, STATUS, START_DATE, END_DATE, TIME_RANGE_TYPE.
+               If you provide START_DATE or END_DATE, prefer ISO format YYYY-MM-DD.
             8. Return plain text only with one field per line in this exact style:
                ACTION: ...
                BOOKING_ID: ...

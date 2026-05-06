@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -45,6 +47,18 @@ public class WorkflowBookingIdentificationSupport {
     private static final Pattern TARGET_TIME_PATTERN = Pattern.compile("^TARGET_TIME\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
     private static final Pattern TIME_HINT_PATTERN = Pattern.compile("^TIME_HINT\\s*:[ \\t]*([^\\r\\n]*)$", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
     private static final Set<String> STRUCTURED_EMPTY_VALUES = Set.of("", "N/A", "NONE", "NULL", "UNKNOWN");
+    private static final List<DateTimeFormatter> FLEXIBLE_DATE_FORMATTERS = List.of(
+            DateTimeFormatter.ISO_LOCAL_DATE,
+            DateTimeFormatter.ofPattern("yyyy-M-d", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("M/d/yyyy", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("M-d-yyyy", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("M/d", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("M-d", Locale.ENGLISH),
+            new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMM d yyyy").toFormatter(Locale.ENGLISH),
+            new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMMM d yyyy").toFormatter(Locale.ENGLISH),
+            new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMM d").toFormatter(Locale.ENGLISH),
+            new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMMM d").toFormatter(Locale.ENGLISH)
+    );
 
     private final ChatMemoryStore chatMemoryStore;
     private final AiBookingSearchTool aiBookingSearchTool;
@@ -130,7 +144,7 @@ public class WorkflowBookingIdentificationSupport {
             );
         }
         return BookingIdentificationResult.needsUserSelection(
-                pool,
+                List.of(),
                 structuredReply.summary(),
                 structuredReply.startDate(),
                 structuredReply.endDate(),
@@ -147,11 +161,6 @@ public class WorkflowBookingIdentificationSupport {
             StructuredAssistantReply structuredReply
     ) {
         AiBookingSearchDTO searchDTO = structuredReply.toSearchDTO();
-        if (searchDTO.getTimeRangeType() == null
-                && searchDTO.getStartDate() == null
-                && searchDTO.getEndDate() == null) {
-            searchDTO.setTimeRangeType("UPCOMING");
-        }
         if (isBlank(searchDTO.getExpertName())
                 && isBlank(searchDTO.getCategoryName())
                 && isBlank(searchDTO.getStatus())
@@ -476,11 +485,19 @@ public class WorkflowBookingIdentificationSupport {
             if (value == null) {
                 return null;
             }
-            try {
-                return LocalDate.parse(value);
-            } catch (DateTimeParseException ignored) {
-                return null;
+            for (DateTimeFormatter formatter : FLEXIBLE_DATE_FORMATTERS) {
+                try {
+                    LocalDate parsed = LocalDate.parse(value, formatter);
+                    if (!value.matches(".*\\d{4}.*")) {
+                        LocalDate today = LocalDate.now();
+                        parsed = parsed.withYear(today.getYear());
+                    }
+                    return parsed;
+                } catch (DateTimeParseException ignored) {
+                    // try next format
+                }
             }
+            return null;
         }
 
         private static String normalizeIsoDate(String raw) {

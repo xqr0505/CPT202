@@ -146,10 +146,22 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         mergeTargetIntent(state, identificationResult.targetDate(), identificationResult.targetTime(), identificationResult.timeHint());
 
         if (identificationResult.status() == WorkflowBookingIdentificationSupport.Status.NEEDS_USER_SELECTION) {
-            List<BookingItemVO> matchedBookings = identificationResult.matchedBookings().isEmpty()
-                    ? candidates
-                    : identificationResult.matchedBookings();
+            List<BookingItemVO> matchedBookings = identificationResult.matchedBookings();
+            if (matchedBookings == null || matchedBookings.isEmpty()) {
+                rescheduleTaskStateStore.clear(userId);
+                return """
+                        I could not find a unique reschedulable booking matching your request in this round.
+                        Please provide more specific details (Booking ID, specialist name, service, or appointment date/time), then I will search again.
+                        """;
+            }
             matchedBookings = filterCandidatesByLookupIntent(matchedBookings, state);
+            if (matchedBookings.isEmpty()) {
+                rescheduleTaskStateStore.clear(userId);
+                return """
+                        I could not find a unique reschedulable booking matching your request in this round.
+                        Please provide more specific details (Booking ID, specialist name, service, or appointment date/time), then I will search again.
+                        """;
+            }
             state.setStep(RescheduleTaskState.Step.IDENTIFY);
             state.setCandidateBookingIds(matchedBookings.stream()
                     .map(BookingItemVO::getId)
@@ -300,11 +312,10 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         if (state.getLookupStartDate() == null && state.getLookupEndDate() == null && firstNonBlank(state.getLookupTimeRangeType()) == null) {
             return candidates;
         }
-        List<BookingItemVO> filtered = candidates.stream()
+        return candidates.stream()
                 .filter(Objects::nonNull)
                 .filter(item -> matchesLookupIntent(item, state))
                 .toList();
-        return filtered.isEmpty() ? candidates : filtered;
     }
 
     private boolean matchesLookupIntent(BookingItemVO item, RescheduleTaskState state) {

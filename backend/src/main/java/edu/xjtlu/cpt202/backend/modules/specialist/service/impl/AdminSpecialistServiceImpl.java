@@ -100,6 +100,12 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 UserRoleEnum.SPECIALIST.name(),
                 normalizedName
         );
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(normalizedAvatarUrl);
+            if (userMapper.updateById(user) == 0) {
+                throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to initialize specialist avatar");
+            }
+        }
 
         SpecialistProfile specialistProfile = SpecialistProfile.builder()
                 .userId(user.getId())
@@ -184,7 +190,16 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
         saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
         String passwordHash = normalizedPassword == null ? null : passwordEncoder.encode(normalizedPassword);
-        adminSpecialistMapper.updateUserAccountById(userId, normalizedName, normalizedEmail, passwordHash);
+        int updatedUserRows = adminSpecialistMapper.updateUserAccountById(
+                userId,
+                normalizedName,
+                normalizedEmail,
+                normalizedAvatarUrl,
+                passwordHash
+        );
+        if (updatedUserRows == 0) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
 
         if (resetPasswordToDefault) {
             CompletableFuture.runAsync(() -> sendSpecialistPasswordResetNotification(

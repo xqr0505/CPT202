@@ -42,7 +42,7 @@ export const DASHBOARD_HABIT_EMPTY_TEXT =
   'No visit habit data in this period.'
 export const DASHBOARD_EMPTY_EXPERTS_TEXT = 'No experts consulted yet'
 
-export const DASHBOARD_CURRENCY_PREFIX = '$'
+export const DASHBOARD_CURRENCY_PREFIX = '￥'
 export const DASHBOARD_AMOUNT_PRECISION = 2
 
 export const DASHBOARD_INITIAL_SKELETON_CARD_COUNT = 4

@@ -176,7 +176,7 @@ class AdminSpecialistServiceImplTest {
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("300.00"), null, null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
         ArgumentCaptor<SpecialistFeeChangeRecord> recordCaptor = ArgumentCaptor.forClass(SpecialistFeeChangeRecord.class);
         verify(specialistFeeChangeRecordMapper).insert(recordCaptor.capture());
         assertEquals(new BigDecimal("260.00"), recordCaptor.getValue().getOldFee());
@@ -210,7 +210,7 @@ class AdminSpecialistServiceImplTest {
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
     }
 
     @Test
@@ -243,6 +243,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 "encoded-default-password"
         );
         verify(mailSender, timeout(1000).atLeastOnce()).createMimeMessage();
@@ -277,6 +278,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 null
         );
         verify(mailSender, never()).createMimeMessage();
@@ -313,6 +315,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 "encoded-default-password"
         );
     }
@@ -437,7 +440,7 @@ class AdminSpecialistServiceImplTest {
 
         adminSpecialistService.updateSpecialist(1L, request);
 
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
         verify(specialistFeeChangeRecordMapper, never()).insert(any());
     }
 

@@ -35,7 +35,9 @@
               <el-tag type="primary" size="large">{{ rule.dayOfWeekDesc }}</el-tag>
             </div>
             <div class="rule-time">
-              <span class="time-range">{{ rule.startTime }} - {{ rule.endTime }}</span>
+              <span class="time-range">
+                {{ formatDisplayTime(rule.startTime) }} - {{ formatDisplayTime(rule.endTime) }}
+              </span>
             </div>
           </div>
           <div class="rule-meta">
@@ -330,6 +332,14 @@ function formatDate(dateStr: string | null): string {
   if (!year || !month || !day) return dateStr
   const date = new Date(year, month - 1, day)
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatDisplayTime(time: string): string {
+  if (!time) {
+    return ''
+  }
+  const match = time.match(/^(\d{2}:\d{2})/)
+  return match && match[1] ? match[1] : time || ''
 }
 
 async function fetchRules() {

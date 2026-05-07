@@ -190,6 +190,10 @@ public class LangChainConfig {
                 List.of()
         );
         groupedTools.put(
+                AiIntent.RESCHEDULE,
+                List.of()
+        );
+        groupedTools.put(
                 AiIntent.BOOKING,
                 List.of(aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
         );

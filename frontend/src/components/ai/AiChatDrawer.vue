@@ -202,7 +202,7 @@ const isMobile = ref(window.innerWidth <= 640)
 
 const SUGGESTED_PROMPTS = [
   "What is the platform's rescheduling policy?",
-  "Help me check my scheduled consultation from last month.",
+  "Help me check my consultation last month.",
   "Show me doctors available tomorrow."
 ]
 

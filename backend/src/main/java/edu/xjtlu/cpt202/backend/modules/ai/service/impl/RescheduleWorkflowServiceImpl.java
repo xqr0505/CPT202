@@ -87,7 +87,7 @@ public class RescheduleWorkflowServiceImpl implements RescheduleWorkflowService 
         if (looksLikeRescheduleRequest(originalUserMessage)) {
             return true;
         }
-        return aiIntentRouterService.resolveIntent(userId, originalUserMessage) == AiIntent.BOOKING
+        return aiIntentRouterService.resolveIntent(userId, originalUserMessage) == AiIntent.RESCHEDULE
                 && looksLikeRescheduleRequest(originalUserMessage);
     }
 

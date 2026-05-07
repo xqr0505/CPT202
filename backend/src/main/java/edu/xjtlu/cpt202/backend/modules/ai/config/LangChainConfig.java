@@ -23,6 +23,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.store.RedisChatMemoryStore;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import org.springframework.beans.factory.ObjectProvider;
@@ -51,7 +52,8 @@ import java.util.Map;
         AiToolParallelProperties.class,
         AiRagRewriteProperties.class,
         AiIntentRouterProperties.class,
-        AiWorkflowProperties.class
+        AiWorkflowProperties.class,
+        AiSpecialistSearchProperties.class
 })
 public class LangChainConfig {
 
@@ -168,6 +170,7 @@ public class LangChainConfig {
             AiBookingSearchTool aiBookingSearchTool,
             AiBookingFormTool aiBookingFormTool,
             AiBookingSubmitTool aiBookingSubmitTool,
+            AiSpecialistSearchTool aiSpecialistSearchTool,
             AiSpecialistAvailabilityTool aiSpecialistAvailabilityTool,
             ObjectProvider<KnowledgeTools> knowledgeToolsProvider
     ) {
@@ -175,6 +178,7 @@ public class LangChainConfig {
         tools.add(aiBookingSearchTool);
         tools.add(aiBookingFormTool);
         tools.add(aiBookingSubmitTool);
+        tools.add(aiSpecialistSearchTool);
         tools.add(aiSpecialistAvailabilityTool);
         knowledgeToolsProvider.ifAvailable(tools::add);
 
@@ -195,7 +199,7 @@ public class LangChainConfig {
         );
         groupedTools.put(
                 AiIntent.BOOKING,
-                List.of(aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
+                List.of(aiSpecialistSearchTool, aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
         );
         groupedTools.put(
                 AiIntent.DASHBOARD,

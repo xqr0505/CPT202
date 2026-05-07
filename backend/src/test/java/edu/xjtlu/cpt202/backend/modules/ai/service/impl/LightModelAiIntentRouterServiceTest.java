@@ -41,6 +41,34 @@ class LightModelAiIntentRouterServiceTest {
     }
 
     @Test
+    void shouldRouteDoctorRecommendationRequestToSpecialistRecommendationIntent() {
+        ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
+                lightModel,
+                properties()
+        );
+
+        AiIntent intent = service.resolveIntent(1001L, "help me find the right doctor for ADHD");
+
+        assertThat(intent).isEqualTo(AiIntent.SPECIALIST_RECOMMENDATION);
+        verifyNoInteractions(lightModel);
+    }
+
+    @Test
+    void shouldRouteRecommendSpecialistRequestToSpecialistRecommendationIntent() {
+        ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
+        LightModelAiIntentRouterService service = new LightModelAiIntentRouterService(
+                lightModel,
+                properties()
+        );
+
+        AiIntent intent = service.resolveIntent(1001L, "recommend a specialist for fast heartbeat");
+
+        assertThat(intent).isEqualTo(AiIntent.SPECIALIST_RECOMMENDATION);
+        verifyNoInteractions(lightModel);
+    }
+
+    @Test
     void shouldNotRouteGenericAvailabilityQueryToBookingIntent() {
         ChatLanguageModel lightModel = mock(ChatLanguageModel.class);
         when(lightModel.generate(anyList())).thenReturn(Response.from(AiMessage.from("KNOWLEDGE")));

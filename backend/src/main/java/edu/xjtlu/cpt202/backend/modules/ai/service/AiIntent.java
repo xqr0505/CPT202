@@ -10,6 +10,7 @@ public enum AiIntent {
     KNOWLEDGE,
     CANCEL,
     RESCHEDULE,
+    SPECIALIST_RECOMMENDATION,
     BOOKING,
     DASHBOARD,
     CHITCHAT

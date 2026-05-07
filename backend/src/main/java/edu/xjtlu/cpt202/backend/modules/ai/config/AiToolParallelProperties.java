@@ -29,6 +29,8 @@ public class AiToolParallelProperties {
 
     private Set<String> readOnlyNames = new LinkedHashSet<>(Set.of(
             "searchCurrentCustomerBookings",
-            "searchKnowledgeBase"
+            "searchKnowledgeBase",
+            "searchSpecialists",
+            "searchSpecialistAvailabilityForBooking"
     ));
 }

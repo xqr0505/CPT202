@@ -9,6 +9,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class LangChainConfigTest {
             .withBean(AiBookingSearchTool.class, () -> mock(AiBookingSearchTool.class))
             .withBean(AiBookingFormTool.class, () -> mock(AiBookingFormTool.class))
             .withBean(AiBookingSubmitTool.class, () -> mock(AiBookingSubmitTool.class))
+            .withBean(AiSpecialistSearchTool.class, () -> mock(AiSpecialistSearchTool.class))
             .withBean(AiSpecialistAvailabilityTool.class, () -> mock(AiSpecialistAvailabilityTool.class))
             .withBean(AiSemanticCacheService.class, () -> mock(AiSemanticCacheService.class))
             .withBean(KnowledgeTools.class, () -> mock(KnowledgeTools.class))

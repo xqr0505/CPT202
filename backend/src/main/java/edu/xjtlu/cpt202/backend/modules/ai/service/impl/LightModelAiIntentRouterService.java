@@ -34,7 +34,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
 
     private static final Logger log = LoggerFactory.getLogger(LightModelAiIntentRouterService.class);
     private static final ExecutorService MODEL_EXECUTOR = Executors.newCachedThreadPool(new IntentRouterThreadFactory());
-    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "RESCHEDULE", "BOOKING", "DASHBOARD", "CHITCHAT");
+    private static final Set<String> ALLOWED = Set.of("KNOWLEDGE", "CANCEL", "RESCHEDULE", "SPECIALIST_RECOMMENDATION", "BOOKING", "DASHBOARD", "CHITCHAT");
     private static final String ROUTER_PROMPT = """
         You are an intent router for ExpertLink. 
         Classify the user message into exactly ONE label:
@@ -42,6 +42,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         KNOWLEDGE
         CANCEL
         RESCHEDULE
+        SPECIALIST_RECOMMENDATION
         BOOKING
         DASHBOARD
         CHITCHAT
@@ -49,6 +50,7 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         Definitions:
         - CANCEL: user wants to cancel an existing booking or continue an in-progress cancellation flow.
         - RESCHEDULE: user wants to change/rearrange/move the time/date of an existing booking.
+        - SPECIALIST_RECOMMENDATION: user asks to find/recommend/suggest a suitable doctor or specialist by symptom, category, level, or doctor name.
         - BOOKING: user explicitly wants to place/submit a booking order now.
         - DASHBOARD: user wants to view their own booking records/history/status/statistics/upcoming or past appointments.
         - KNOWLEDGE: platform policy/rules/how-to questions, e.g. refund/cancellation policy, booking status meaning, platform usage guidance.
@@ -58,13 +60,14 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         1) If message asks for own records/history/status list/overview -> DASHBOARD.
         2) Else if message asks to cancel an existing booking -> CANCEL.
         3) Else if message asks to reschedule/change time/date of an existing booking -> RESCHEDULE.
-        4) Else if message clearly asks to place/submit a booking order now -> BOOKING.
+        4) Else if message asks to find/recommend/suggest a suitable doctor/specialist -> SPECIALIST_RECOMMENDATION.
+        5) Else if message clearly asks to place/submit a booking order now -> BOOKING.
         5) Else if message asks policy/rules/platform usage/meaning/explanation -> KNOWLEDGE.
         5) If mixed or unclear, choose KNOWLEDGE by default.
         6) Do NOT choose CHITCHAT unless it is pure small talk and contains no product request.
 
         Output rules:
-        - Output exactly one word from: KNOWLEDGE, CANCEL, RESCHEDULE, BOOKING, DASHBOARD, CHITCHAT
+        - Output exactly one word from: KNOWLEDGE, CANCEL, RESCHEDULE, SPECIALIST_RECOMMENDATION, BOOKING, DASHBOARD, CHITCHAT
         - No extra text.
 
         User message:
@@ -194,7 +197,34 @@ public class LightModelAiIntentRouterService implements AiIntentRouterService {
         if (BOOKING_ACTION_EXACT.contains(normalizedMessage)) {
             return AiIntent.BOOKING;
         }
+        if (containsBookingRecommendationCue(normalizedMessage)) {
+            return AiIntent.SPECIALIST_RECOMMENDATION;
+        }
         return null;
+    }
+
+    private boolean containsBookingRecommendationCue(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return false;
+        }
+        boolean asksToFind = normalizedMessage.contains("find")
+                || normalizedMessage.contains("recommend")
+                || normalizedMessage.contains("suggest");
+        boolean mentionsSpecialist = normalizedMessage.contains("doctor")
+                || normalizedMessage.contains("specialist")
+                || normalizedMessage.contains("pediatrician")
+                || normalizedMessage.contains("cardiologist")
+                || normalizedMessage.contains("dermatologist")
+                || normalizedMessage.contains("psychiatrist")
+                || normalizedMessage.contains("gynecologist")
+                || normalizedMessage.contains("orthopedic");
+        boolean mentionsMatchingNeed = normalizedMessage.contains("right")
+                || normalizedMessage.contains("suitable")
+                || normalizedMessage.contains("best")
+                || normalizedMessage.contains("for")
+                || normalizedMessage.contains("based on")
+                || normalizedMessage.contains("symptom");
+        return asksToFind && mentionsSpecialist && mentionsMatchingNeed;
     }
 
     private String normalize(String userMessage) {

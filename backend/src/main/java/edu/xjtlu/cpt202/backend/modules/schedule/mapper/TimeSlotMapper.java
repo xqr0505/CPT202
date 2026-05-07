@@ -26,6 +26,7 @@ public interface TimeSlotMapper extends BaseMapper<TimeSlot> {
                 ts.start_time AS startTime,
                 ts.end_time AS endTime,
                 ts.status AS status,
+                ts.is_deleted AS isDeleted,
                 b.id AS bookingId,
                 b.status AS bookingStatus,
                 b.customer_id AS customerId,
@@ -38,6 +39,7 @@ public interface TimeSlotMapper extends BaseMapper<TimeSlot> {
             LEFT JOIN users u ON u.id = b.customer_id
             WHERE ts.specialist_id = #{specialistId}
               AND ts.slot_date BETWEEN #{weekStartDate} AND #{weekEndDate}
+              AND ts.is_deleted = 0
             ORDER BY ts.slot_date ASC, ts.start_time ASC
             """)
     List<TimeSlotVO> selectWeeklyScheduleBySpecialistId(@Param("specialistId") Long specialistId,

@@ -27,6 +27,8 @@ public class TimeSlotVO {
 
     private String status;
 
+    private Integer isDeleted;
+
     private String statusDesc;
 
     private Long bookingId;

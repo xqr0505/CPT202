@@ -31,6 +31,10 @@ public class TimeSlot {
 
     private String status;
 
+    @TableField("is_deleted")
+    @TableLogic(value = "0", delval = "1")
+    private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 

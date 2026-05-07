@@ -83,6 +83,10 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/expertlink/ssl:/etc/nginx/ssl:ro
+      - /opt/expertlink/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
 

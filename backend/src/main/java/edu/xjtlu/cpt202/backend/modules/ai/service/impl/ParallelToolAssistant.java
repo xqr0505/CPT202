@@ -1006,10 +1006,10 @@ public class ParallelToolAssistant implements Assistant {
             Consumer<String> tokenConsumer,
             ToolBox toolBox
     ) {
-        AtomicReference<Response<AiMessage>> streamedResponseRef = new AtomicReference<>();
         CompletableFuture<Response<AiMessage>> streamedResponseFuture = new CompletableFuture<>();
         long streamingInvokeStartNs = System.nanoTime();
         AtomicReference<Boolean> firstTokenLogged = new AtomicReference<>(Boolean.FALSE);
+        StringBuilder streamedTextBuilder = new StringBuilder();
 
         invokeStreamingModel(messages, new StreamingResponseHandler<>() {
             @Override
@@ -1021,6 +1021,9 @@ public class ParallelToolAssistant implements Assistant {
                             "streamStage", stageName
                     ));
                 }
+                if (token != null) {
+                    streamedTextBuilder.append(token);
+                }
                 if (emitTokens) {
                     tokenConsumer.accept(token);
                 }
@@ -1029,7 +1032,6 @@ public class ParallelToolAssistant implements Assistant {
             @Override
             public void onComplete(Response<AiMessage> response) {
                 AiChatTraceContext.restoreTraceId(traceId);
-                streamedResponseRef.set(response);
                 streamedResponseFuture.complete(response);
             }
 
@@ -1044,8 +1046,71 @@ public class ParallelToolAssistant implements Assistant {
                 "memoryId", memoryId
         ));
 
-        Response<AiMessage> response = streamedResponseFuture.join();
+        Response<AiMessage> response;
+        try {
+            response = streamedResponseFuture.join();
+        } catch (CompletionException exception) {
+            if (!isNullStreamingResponseFailure(exception)) {
+                throw exception;
+            }
+            return fallbackToSynchronousRound(
+                    messages,
+                    memoryId,
+                    traceId,
+                    totalStartNs,
+                    stageName,
+                    emitTokens,
+                    tokenConsumer,
+                    toolBox,
+                    streamedTextBuilder.toString()
+            );
+        }
+        if (response == null) {
+            return fallbackToSynchronousRound(
+                    messages,
+                    memoryId,
+                    traceId,
+                    totalStartNs,
+                    stageName,
+                    emitTokens,
+                    tokenConsumer,
+                    toolBox,
+                    streamedTextBuilder.toString()
+            );
+        }
         return new ProbeStreamResult(response);
+    }
+
+    private ProbeStreamResult fallbackToSynchronousRound(
+            List<ChatMessage> messages,
+            Long memoryId,
+            String traceId,
+            long totalStartNs,
+            String stageName,
+            boolean emitTokens,
+            Consumer<String> tokenConsumer,
+            ToolBox toolBox,
+            String streamedText
+    ) {
+        if (streamedText != null && !streamedText.isBlank()) {
+            return new ProbeStreamResult(Response.from(AiMessage.from(streamedText)));
+        }
+
+        long fallbackStartNs = System.nanoTime();
+        Response<AiMessage> response = invokeModel(messages, toolBox);
+        aiChatProfiler.logStage(stageName + ".syncFallback", elapsedMs(fallbackStartNs), Map.of(
+                "memoryId", memoryId
+        ));
+        AiMessage aiMessage = response == null ? null : response.content();
+        if (emitTokens && aiMessage != null && !aiMessage.hasToolExecutionRequests()
+                && aiMessage.text() != null && !aiMessage.text().isBlank()) {
+            emitTextChunks(aiMessage.text(), tokenConsumer, traceId, totalStartNs, memoryId);
+        }
+        return new ProbeStreamResult(response);
+    }
+
+    private boolean isNullStreamingResponseFailure(Throwable throwable) {
+        return rootCauseMessage(throwable).contains("response cannot be null");
     }
 
     private void emitTextChunks(

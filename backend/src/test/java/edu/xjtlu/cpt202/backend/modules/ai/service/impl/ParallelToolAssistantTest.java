@@ -174,6 +174,29 @@ class ParallelToolAssistantTest {
     }
 
     @Test
+    void shouldFallbackToSyncModelWhenStreamingResponseIsNull() throws InterruptedException {
+        NoToolModel model = new NoToolModel();
+        Assistant assistant = buildAssistant(
+                new TestReadOnlyTools(false),
+                Setups.defaultParallelProperties(),
+                model,
+                new NullResponseFailureStreamingModel()
+        );
+
+        List<String> chunks = new CopyOnWriteArrayList<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        assistant.streamChat(1001L, "query")
+                .onNext(chunks::add)
+                .onComplete(response -> latch.countDown())
+                .onError(error -> latch.countDown())
+                .start();
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS));
+        assertThat(model.invocationCount()).isEqualTo(1);
+        assertThat(String.join("", chunks)).isEqualTo("unused");
+    }
+
+    @Test
     void shouldExecuteToolsAndThenStreamFinalAnswer() throws InterruptedException {
         SingleToolRoundModel model = new SingleToolRoundModel(List.of(
                 request("id-1", "searchCurrentCustomerBookings")
@@ -663,6 +686,22 @@ class ParallelToolAssistantTest {
 
         private int invocationCount() {
             return invocationCount;
+        }
+    }
+
+    private static class NullResponseFailureStreamingModel implements StreamingChatLanguageModel {
+        @Override
+        public void generate(List<ChatMessage> messages, StreamingResponseHandler<AiMessage> handler) {
+            handler.onError(new IllegalArgumentException("response cannot be null"));
+        }
+
+        @Override
+        public void generate(
+                List<ChatMessage> messages,
+                List<ToolSpecification> toolSpecifications,
+                StreamingResponseHandler<AiMessage> handler
+        ) {
+            generate(messages, handler);
         }
     }
 

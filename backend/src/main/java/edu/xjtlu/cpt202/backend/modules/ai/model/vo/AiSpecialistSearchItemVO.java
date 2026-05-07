@@ -6,7 +6,7 @@ import lombok.Data;
 /**
  * AI-facing specialist search result item.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Data

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 /**
  * AI tool for hybrid specialist retrieval.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Component

@@ -23,7 +23,7 @@ import java.util.Map;
 /**
  * Syncs specialist documents into Redis hybrid-search index.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Service

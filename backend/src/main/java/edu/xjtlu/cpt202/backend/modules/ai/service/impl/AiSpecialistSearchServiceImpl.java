@@ -8,6 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.model.vo.AiSpecialistSearchItemVO;
 import edu.xjtlu.cpt202.backend.modules.ai.model.vo.AiSpecialistSearchResultVO;
 import edu.xjtlu.cpt202.backend.modules.ai.rag.RagProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiSpecialistSearchService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -29,7 +30,7 @@ import java.util.stream.Collectors;
 /**
  * Redis-backed hybrid specialist retrieval service.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Service
@@ -48,6 +49,7 @@ public class AiSpecialistSearchServiceImpl implements AiSpecialistSearchService 
     private final AiSpecialistSearchProperties properties;
     private final JedisPooled specialistSearchJedis;
 
+    @Autowired
     public AiSpecialistSearchServiceImpl(
             EmbeddingModel embeddingModel,
             AiSpecialistSearchProperties properties,

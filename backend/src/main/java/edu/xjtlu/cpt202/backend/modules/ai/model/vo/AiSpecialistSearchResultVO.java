@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * AI-facing specialist search result payload.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Data

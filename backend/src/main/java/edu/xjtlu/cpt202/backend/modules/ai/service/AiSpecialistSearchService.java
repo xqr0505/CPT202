@@ -5,7 +5,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.model.vo.AiSpecialistSearchResultVO;
 /**
  * Hybrid specialist search for AI tooling.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 public interface AiSpecialistSearchService {

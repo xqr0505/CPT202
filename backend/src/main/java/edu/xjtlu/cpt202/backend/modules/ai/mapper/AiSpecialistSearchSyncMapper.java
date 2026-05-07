@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Read model for syncing specialist search documents into Redis.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Mapper

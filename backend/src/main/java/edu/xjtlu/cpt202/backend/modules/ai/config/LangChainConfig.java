@@ -198,8 +198,12 @@ public class LangChainConfig {
                 List.of()
         );
         groupedTools.put(
+                AiIntent.SPECIALIST_RECOMMENDATION,
+                List.of(aiSpecialistSearchTool, aiSpecialistAvailabilityTool)
+        );
+        groupedTools.put(
                 AiIntent.BOOKING,
-                List.of(aiSpecialistSearchTool, aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
+                List.of(aiSpecialistAvailabilityTool, aiBookingSubmitTool, aiBookingFormTool)
         );
         groupedTools.put(
                 AiIntent.DASHBOARD,

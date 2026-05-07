@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Redis hybrid-search settings for AI specialist recommendation.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Data

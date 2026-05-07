@@ -1,16 +1,20 @@
 package edu.xjtlu.cpt202.backend.modules.ai.model.vo;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Source document stored in Redis specialist search index.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AiSpecialistSearchIndexDocument {
 
     private Long specialistId;

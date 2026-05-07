@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Ensures specialist-search Redis index exists and is populated.
  *
- * @author Codex
+ * @author QiranXiao
  * @since 2026/5/7
  */
 @Slf4j

@@ -8,6 +8,7 @@ export interface TimeSlotVO {
   startTime: string
   endTime: string
   status: string
+  isDeleted?: number
   statusDesc?: string
   bookingId?: number
   bookingStatus?: string

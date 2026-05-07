@@ -203,7 +203,7 @@ const isMobile = ref(window.innerWidth <= 640)
 const SUGGESTED_PROMPTS = [
   "What is the platform's rescheduling policy?",
   "Help me check my consultation last month.",
-  "Show me doctors available tomorrow."
+  "My four-year-old son has allergic rhinitis, can you recommend a doctor for me?"
 ]
 
 const handlePromptClick = (prompt: string) => {

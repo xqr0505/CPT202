@@ -51,8 +51,10 @@ public class AiSpecialistSearchIndexInitializer {
                 log.info("Created AI specialist search index: {}", properties.getIndexName());
             }
             indexService.rebuildAll();
+            log.info("AI specialist search index sync completed: {}", properties.getIndexName());
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to initialize AI specialist search index.", exception);
+            log.error("AI specialist search index sync failed, continue startup in degraded mode. index={}",
+                    properties.getIndexName(), exception);
         }
     }
 

@@ -91,6 +91,18 @@ public class AiSpecialistSearchServiceImpl implements AiSpecialistSearchService 
                     .map(this::toItem)
                     .toList();
 
+            // Recommendation-first fallback:
+            // if the user provided explicit structured filters (especially category/level/name)
+            // but strict thresholding yields no result, return best filtered candidates instead
+            // of empty output, so the assistant can still suggest specialists.
+            if (items.isEmpty() && (normalizedCategory != null || normalizedLevel != null || normalizedName != null)) {
+                items = candidates.values().stream()
+                        .sorted(candidateComparator())
+                        .limit(properties.getMaxResults())
+                        .map(this::toItem)
+                        .toList();
+            }
+
             return AiSpecialistSearchResultVO.builder()
                     .query(normalizedQuery)
                     .appliedCategoryFilter(normalizedCategory)
@@ -173,6 +185,10 @@ public class AiSpecialistSearchServiceImpl implements AiSpecialistSearchService 
     }
 
     private boolean passesThreshold(Candidate candidate) {
+        // If name is explicitly matched, allow it through regardless of semantic threshold.
+        if (candidate.nameMatched) {
+            return true;
+        }
         double threshold = candidate.keywordScore >= 0.75D
                 ? properties.getStrongKeywordSimilarityThreshold()
                 : properties.getSimilarityThreshold();

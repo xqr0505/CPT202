@@ -25,10 +25,10 @@ public class AiSpecialistSearchProperties {
     private String indexName = "expertlink:ai:specialist";
 
     @Min(1)
-    private int topK = 10;
+    private int topK = 5;
 
     @Min(1)
-    private int maxResults = 5;
+    private int maxResults = 3;
 
     @DecimalMin("0.0")
     @DecimalMax("1.0")

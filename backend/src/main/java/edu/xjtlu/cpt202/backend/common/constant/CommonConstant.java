@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.common.constant;
 
 /**
+ * Common constants used across the application.
  * @author QiranXiao
  * @date 2026/3/26
  */

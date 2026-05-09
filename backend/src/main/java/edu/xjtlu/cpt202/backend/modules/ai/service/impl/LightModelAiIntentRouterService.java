@@ -24,8 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
- * Fast intent router that keeps only high-confidence hard matches and lets the light model
- * handle ambiguous routing.
+ * intent router with a lightweight model.
  *
  * @author QiranXiao
  * @since 2026/5/2

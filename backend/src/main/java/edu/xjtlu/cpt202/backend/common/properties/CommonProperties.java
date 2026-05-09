@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
+ * Common application properties loaded from configuration files.
  * @author QiranXiao
  * @date 2026/3/26
  */

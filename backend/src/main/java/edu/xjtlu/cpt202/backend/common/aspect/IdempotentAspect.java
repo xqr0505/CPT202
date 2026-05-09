@@ -85,6 +85,15 @@ public class IdempotentAspect {
         }
     }
 
+    /**
+     * Proceed with in-memory locking for idempotency check.
+     *
+     * @param joinPoint the join point of the method execution
+     * @param idempotent the idempotent annotation instance
+     * @param cacheKey the unique key for the request
+     * @return the result of the method execution
+     * @throws Throwable if an error occurs during method execution
+     */
     private Object proceedWithInMemoryLock(ProceedingJoinPoint joinPoint, Idempotent idempotent, String cacheKey) throws Throwable {
         long currentTime = System.currentTimeMillis();
 

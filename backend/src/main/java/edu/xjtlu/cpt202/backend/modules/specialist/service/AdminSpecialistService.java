@@ -7,6 +7,7 @@ import edu.xjtlu.cpt202.backend.modules.specialist.model.dto.AdminSpecialistUpda
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistDetailVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.AdminSpecialistListVO;
 import edu.xjtlu.cpt202.backend.modules.specialist.model.vo.SpecialistFeeChangeRecordVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -23,4 +24,6 @@ public interface AdminSpecialistService {
     void updateSpecialist(Long id, AdminSpecialistUpdateDTO request);
 
     int updateSpecialistStatus(Long id, String status);
+
+    String uploadSpecialistAvatar(MultipartFile file);
 }

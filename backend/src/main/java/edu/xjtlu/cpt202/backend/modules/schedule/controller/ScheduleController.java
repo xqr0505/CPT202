@@ -16,11 +16,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
-
-/**
- * Controller for time slot management (Module 4).
- * @author Schedule Module Team
- */
 @Tag(name = "Schedule Management", description = "APIs for managing specialist time slots")
 @RestController
 @RequestMapping("/api/specialist/schedule/slots")

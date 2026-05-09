@@ -7,11 +7,6 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-
-/**
- * DTO for creating a recurring availability rule.
- * @author Schedule Module Team
- */
 @Data
 public class CreateRecurringRuleRequest {
 

@@ -3,6 +3,8 @@ package edu.xjtlu.cpt202.backend.modules.booking.enums;
 import edu.xjtlu.cpt202.backend.common.enums.BaseEnum;
 
 /**
+ * The current system does not have an integrated payment module, so it is not in use.
+ * 
  * Refund Status Enum.
  * Used for Financial Tracking.
  * @author QiranXiao

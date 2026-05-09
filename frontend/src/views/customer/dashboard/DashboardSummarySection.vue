@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <!-- Mobile wheel date filter (English) -->
+    <!-- Mobile wheel date filter -->
     <div class="dashboard-summary__filters mobile-only mobile-date-range">
       <div class="mobile-wheel-group">
         <!-- Start date row -->
@@ -607,11 +607,11 @@ onMounted(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1 1 auto;
-    text-align: left; /* title in single line next to icon */
+    text-align: left;
   }
 
   &__card:hover {
-    /* No shadow on hover as per prompt */
+    /* No shadow on hover */
   }
 
   &__card--skeleton {
@@ -624,7 +624,7 @@ onMounted(() => {
     text-align: left;
   }
 
-  /* Expert-card header should remain left aligned */
+
   .dashboard-summary__card--experts .dashboard-summary__card-header {
     flex-direction: row;
     align-items: center;
@@ -649,14 +649,13 @@ onMounted(() => {
     color: var(--color-text-inverse);
     flex-shrink: 0;
   }
-  /* label styling consolidated above */
 
-  /* spacing: keep icon flush-left in header */
+
   .dashboard-summary__card-header > .dashboard-summary__icon {
     margin-right: var(--space-3);
   }
 
-  /* Experts card body should keep list alignment (do not center) */
+
   .dashboard-summary__card--experts .dashboard-summary__card-body {
     justify-content: flex-start;
     align-items: stretch;

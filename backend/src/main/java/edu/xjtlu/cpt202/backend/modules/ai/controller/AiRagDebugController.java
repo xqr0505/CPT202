@@ -36,7 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Lightweight RAG diagnostics endpoint for environment verification.
+ * RAG debug endpoint for environment verification.
  */
 @RestController
 @RequestMapping(AiConstant.API_V1_AI + "/rag")

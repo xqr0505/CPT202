@@ -4,7 +4,7 @@
       <div>
         <h1>Find the right specialist for your next consultation</h1>
         <p class="hero-copy">
-          Search by name, category, price, and date availability. The list keeps your filter state in the URL so detail-page back navigation stays intact.
+          Search by name, category, price, and date availability. 
         </p>
       </div>
     </header>

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 
 /**
- *
+ * AI tool for searching the current customer's bookings.
  * @author QiranXiao
  * @since 2026/4/17
  */

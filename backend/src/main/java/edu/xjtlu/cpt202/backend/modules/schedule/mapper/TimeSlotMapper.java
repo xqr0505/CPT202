@@ -9,11 +9,6 @@ import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDate;
 import java.util.List;
-
-/**
- * Mapper interface for TimeSlot entity.
- * @author Schedule Module Team
- */
 @Mapper
 public interface TimeSlotMapper extends BaseMapper<TimeSlot> {
 

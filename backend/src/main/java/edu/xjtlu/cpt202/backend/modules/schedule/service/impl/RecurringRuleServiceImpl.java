@@ -28,11 +28,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum.*;
-
-/**
- * Implementation of RecurringRuleService for recurring availability rule management.
- * @author Schedule Module Team
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor

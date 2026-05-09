@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DevFooter from '@/components/common/DevFooter.vue'
 import { logout, getAuthToken, getRefreshToken, refreshAuthToken } from '@/api/request'
 
-const router = useRouter()
-const isDev = Boolean(import.meta.env.DEV)
 const globalError = ref<{ message: string | null; stack?: string | null } | null>(null)
 
 const WARNING_DELAY = 29 * 60 * 1000
@@ -58,11 +55,11 @@ async function showSessionWarning() {
 
   try {
     await ElMessageBox.confirm(
-      '因无操作，您的会话将在 1 分钟后过期，是否保持登录？',
-      '会话即将过期',
+      'Your session will expire in 1 minute due to inactivity. Keep logged in?',
+      'Session Expiring',
       {
-        confirmButtonText: '保持登录',
-        cancelButtonText: '立即登出',
+        confirmButtonText: 'Keep Logged In',
+        cancelButtonText: 'Log Out Now',
         closeOnClickModal: false,
         closeOnPressEscape: false,
         distinguishCancelAndClose: true,
@@ -72,8 +69,8 @@ async function showSessionWarning() {
 
     await refreshAuthToken()
     resetSessionTimers()
-    ElMessage.success('已保持登录，登录状态已续期')
-  } catch (error) {
+    ElMessage.success('You have been logged in, and your login status has been renewed')
+  } catch {
     await expireSession()
   } finally {
     warningActive = false
@@ -166,7 +163,7 @@ onMounted(() => {
   window.addEventListener('touchstart', handleUserActivity)
   window.addEventListener('session-activity', onSessionActivity)
 
-  ;(window as any).__triggerGlobalError = (msg = 'Manual test error') => showError(msg)
+  ;(window as Window & { __triggerGlobalError?: (msg?: string) => void }).__triggerGlobalError = (msg = 'Manual test error') => showError(msg)
   resetSessionTimers()
 
   onBeforeUnmount(() => {
@@ -181,20 +178,9 @@ onMounted(() => {
   })
 })
 
-function goToErrorPage(code: string) {
-  router.push(`/error/${code}`)
-}
-
-function dismiss() {
-  globalError.value = null
-}
-
-function reloadApp() {
-  window.location.reload()
-}
 </script>
 
 <template>
   <router-view />
-  <DevFooter v-if="isDev" />
+  <DevFooter v-if="false" />
 </template>

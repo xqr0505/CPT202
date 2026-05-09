@@ -64,7 +64,7 @@
               </CustomButton>
             </el-tooltip>
 
-            <template v-if="activeTab === 'UPCOMING'">
+            <template v-if="activeTab === 'UPCOMING' && !isCancelledBooking(bookingRow(row))">
               <el-tooltip content="Reschedule" placement="top">
                 <CustomButton size="small" type="warning" circle class="action-btn-circle" :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                   <el-icon><Edit /></el-icon>
@@ -118,7 +118,8 @@
                 </CustomButton>
               </el-tooltip>
 
-              <template v-if="activeTab === 'UPCOMING'">
+            <template v-if="activeTab === 'UPCOMING'">
+              <template v-if="!isCancelledBooking(bookingRow(row))">
                 <el-tooltip content="Reschedule" placement="top">
                   <CustomButton class="mobile-action-btn-circle" size="small" type="warning" circle :disabled="!canRescheduleBooking(bookingRow(row))" @click="handleAction('reschedule', bookingRow(row))">
                     <el-icon><Edit /></el-icon>
@@ -130,6 +131,14 @@
                   </CustomButton>
                 </el-tooltip>
               </template>
+              <template v-else>
+                <el-tooltip content="Book Again" placement="top">
+                  <CustomButton class="mobile-action-btn-circle" size="small" type="success" circle @click="handleAction('bookAgain', bookingRow(row))">
+                    <el-icon><RefreshRight /></el-icon>
+                  </CustomButton>
+                </el-tooltip>
+              </template>
+            </template>
 
               <template v-else>
                 <el-tooltip content="Book Again" placement="top">
@@ -145,150 +154,30 @@
     </div>
   </div>
   <BookingDetailModal v-model="showDetailModal" @action="(data) => handleAction(data.action, data.row)" />
-  <el-dialog
+  <BookingCancelDialog
     v-model="showCancelDialog"
-    title="Cancel Booking"
-    width="500px"
-    :close-on-click-modal="false"
-    @closed="resetCancelDialog"
-  >
-    <div v-loading="cancelQuoteLoading" class="cancel-dialog-content">
-      <p class="cancel-dialog-tip">
-        Please confirm your cancellation. Refund and penalty will be calculated automatically according to the cancellation policy.
-      </p>
-
-      <div v-if="cancelQuote" class="cancel-finance-card">
-        <div class="finance-row">
-          <span>Refund Amount:</span>
-          <strong class="refund-amount">{{ formatMoney(cancelQuote.refundAmount) }}</strong>
-        </div>
-        <div class="finance-row">
-          <span>Penalty Amount:</span>
-          <strong class="penalty-amount">{{ formatMoney(cancelQuote.penaltyAmount) }}</strong>
-        </div>
-      </div>
-
-      <el-alert
-        v-if="cancelQuote?.message"
-        :title="cancelQuote.message"
-        :type="cancelQuote?.allowed ? 'info' : 'warning'"
-        :closable="false"
-        show-icon
-      />
-    </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <CustomButton @click="showCancelDialog = false">Keep Booking</CustomButton>
-        <CustomButton
-          type="danger"
-          :loading="cancelConfirmLoading"
-          :disabled="cancelQuoteLoading || !cancelQuote?.allowed"
-          @click="confirmCancel"
-        >
-          Confirm Cancel
-        </CustomButton>
-      </span>
-    </template>
-  </el-dialog>
-  <el-dialog
+    :booking="selectedBooking"
+    @success="handleBookingMutated"
+  />
+  <BookingRescheduleDialog
     v-model="showRescheduleDialog"
-    title="Reschedule Booking"
-    width="560px"
-    :close-on-click-modal="false"
-    @closed="resetRescheduleDialog"
-  >
-    <div class="reschedule-dialog-content">
-      <p class="cancel-dialog-tip">
-        Choose a new time slot first. We will calculate the final amount before you confirm.
-      </p>
-
-      <div class="reschedule-picker-row">
-        <el-date-picker
-          v-model="rescheduleDate"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="Select date"
-          :disabled="rescheduleQuoteLoading || rescheduleConfirmLoading"
-          @change="loadRescheduleAvailability"
-        />
-      </div>
-
-      <div v-loading="rescheduleAvailabilityLoading" class="reschedule-slot-grid">
-        <EmptyPlaceholder
-          v-if="!rescheduleAvailability.length"
-          description="No available slots on this date."
-        />
-        <button
-          v-for="slot in rescheduleAvailability"
-          v-else
-          :key="slot.id"
-          type="button"
-          class="slot-chip"
-          :class="{ active: selectedRescheduleSlotId === slot.id }"
-          @click="handleRescheduleSlotSelect(slot.id)"
-        >
-          <span class="slot-time">{{ formatSlotTime(slot.startTime) }} - {{ formatSlotTime(slot.endTime) }}</span>
-        </button>
-      </div>
-
-      <div v-if="rescheduleQuote" v-loading="rescheduleQuoteLoading" class="cancel-finance-card">
-        <div class="finance-row">
-          <span>Price Difference:</span>
-          <strong>{{ formatMoney(rescheduleQuote.priceDifference) }}</strong>
-        </div>
-        <div class="finance-row">
-          <span>Penalty Amount:</span>
-          <strong class="penalty-amount">{{ formatMoney(rescheduleQuote.penaltyAmount) }}</strong>
-        </div>
-        <div class="finance-row">
-          <span>Refund Amount:</span>
-          <strong class="refund-amount">{{ formatMoney(rescheduleQuote.refundAmount) }}</strong>
-        </div>
-        <div class="finance-row">
-          <span>Payable Amount:</span>
-          <strong>{{ formatMoney(rescheduleQuote.payableAmount) }}</strong>
-        </div>
-      </div>
-
-      <el-alert
-        v-if="rescheduleQuote?.message"
-        :title="rescheduleQuote.message"
-        :type="rescheduleQuote?.allowed ? 'info' : 'warning'"
-        :closable="false"
-        show-icon
-      />
-    </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <CustomButton @click="showRescheduleDialog = false">Cancel</CustomButton>
-        <CustomButton
-          type="warning"
-          :loading="rescheduleConfirmLoading"
-          :disabled="!selectedRescheduleSlotId || rescheduleQuoteLoading || !rescheduleQuote?.allowed"
-          @click="confirmReschedule"
-        >
-          Confirm Reschedule
-        </CustomButton>
-      </span>
-    </template>
-  </el-dialog>
+    :booking="selectedBooking"
+    @success="handleBookingMutated"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 import { Calendar, View, Edit, Close, RefreshRight } from '@element-plus/icons-vue'
-import {confirmBookingCancel, confirmBookingReschedule, getBookingCancelQuote, getBookingList, getBookingRescheduleQuote} from '@/api/booking'
+import { getBookingList } from '@/api/booking'
 import type { BookingListItem } from '@/api/booking'
 import type { FetchDataParams, FetchDataResult, TableColumn } from '@/components/business/PaginationTable.vue'
 import PaginationTable from '@/components/business/PaginationTable.vue'
 import BookingStatusTag from '@/components/business/BookingStatusTag.vue'
 import CustomButton from '@/components/common/CustomButton.vue'
 import BookingDetailModal from '@/components/business/BookingDetailModal.vue'
-import EmptyPlaceholder from '@/components/business/EmptyPlaceholder.vue'
-import { fetchSpecialistAvailability } from '@/api/specialist'
-import type { SpecialistAvailabilitySlot } from '@/types/specialist'
+import BookingCancelDialog from '@/components/business/BookingCancelDialog.vue'
+import BookingRescheduleDialog from '@/components/business/BookingRescheduleDialog.vue'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router';
 
@@ -302,18 +191,8 @@ const route = useRoute();
 
 const showDetailModal = ref(false);
 const showCancelDialog = ref(false);
-const cancelQuoteLoading = ref(false);
-const cancelConfirmLoading = ref(false);
 const selectedBooking = ref<BookingListItem | null>(null);
-const cancelQuote = ref<Awaited<ReturnType<typeof getBookingCancelQuote>> | null>(null);
 const showRescheduleDialog = ref(false);
-const rescheduleAvailabilityLoading = ref(false);
-const rescheduleQuoteLoading = ref(false);
-const rescheduleConfirmLoading = ref(false);
-const rescheduleDate = ref('');
-const rescheduleAvailability = ref<SpecialistAvailabilitySlot[]>([]);
-const selectedRescheduleSlotId = ref<number | null>(null);
-const rescheduleQuote = ref<Awaited<ReturnType<typeof getBookingRescheduleQuote>> | null>(null);
 const highlightedBookingId = computed(() => {
   const raw = typeof route.query.highlightBookingId === 'string'
     ? route.query.highlightBookingId.trim()
@@ -441,6 +320,7 @@ const formatDateTime = (dtStr: string) => {
 }
 
 const normalizeStatus = (status: string) => String(status || '').toUpperCase();
+const isCancelledBooking = (row: BookingListItem) => normalizeStatus(row.status) === 'CANCELLED';
 
 const canCancelBooking = (row: BookingListItem) => {
   const normalizedStatus = normalizeStatus(row.status);
@@ -458,35 +338,6 @@ const canCancelBooking = (row: BookingListItem) => {
 
 const canRescheduleBooking = (row: BookingListItem) => canCancelBooking(row);
 
-const formatMoney = (value?: number) => {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '¥0.00';
-};
-
-const formatSlotTime = (time?: string) => {
-  if (!time) return '';
-  const parts = String(time).split(':');
-  const [hour, minute] = parts;
-  if (hour && minute) {
-    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-  }
-  return String(time);
-};
-
-const slotStartsAfterTwoHours = (slot: SpecialistAvailabilitySlot) => {
-  const datePart = String(slot.slotDate || '').trim();
-  const timePart = String(slot.startTime || '').trim();
-  if (!datePart || !timePart) {
-    return false;
-  }
-  const iso = `${datePart}T${timePart.length === 5 ? `${timePart}:00` : timePart}`;
-  const slotTime = new Date(iso).getTime();
-  if (Number.isNaN(slotTime)) {
-    return false;
-  }
-  return slotTime - Date.now() > 2 * 60 * 60 * 1000;
-};
-
 const openCancelDialog = async (row: BookingListItem) => {
   if (!canCancelBooking(row)) {
     ElMessage.warning('Cancellation is only available for bookings more than 2 hours away.');
@@ -495,57 +346,6 @@ const openCancelDialog = async (row: BookingListItem) => {
 
   selectedBooking.value = row;
   showCancelDialog.value = true;
-  cancelQuoteLoading.value = true;
-
-  try {
-    cancelQuote.value = await getBookingCancelQuote(row.id);
-  } catch {
-    cancelQuote.value = null;
-    ElMessage.error('Failed to calculate refund quote. Please try again.');
-  } finally {
-    cancelQuoteLoading.value = false;
-  }
-};
-
-const resetCancelDialog = () => {
-  selectedBooking.value = null;
-  cancelQuote.value = null;
-  cancelQuoteLoading.value = false;
-  cancelConfirmLoading.value = false;
-};
-
-const toLocalDate = (dtStr: string) => {
-  if (!dtStr) return '';
-  const cleanDtStr = dtStr.replace(' ', 'T');
-  const dateObj = new Date(cleanDtStr);
-  if (isNaN(dateObj.getTime())) return '';
-  const year = dateObj.getFullYear();
-  const month = `${dateObj.getMonth() + 1}`.padStart(2, '0');
-  const day = `${dateObj.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const loadRescheduleAvailability = async () => {
-  if (!selectedBooking.value || !rescheduleDate.value) {
-    rescheduleAvailability.value = [];
-    return;
-  }
-  rescheduleAvailabilityLoading.value = true;
-  try {
-    const slots = await fetchSpecialistAvailability(Number(selectedBooking.value.specialistId), rescheduleDate.value);
-    rescheduleAvailability.value = (slots || []).filter(
-      (slot) => slot.status === 'AVAILABLE' && slotStartsAfterTwoHours(slot),
-    );
-    if (!rescheduleAvailability.value.some((slot) => slot.id === selectedRescheduleSlotId.value)) {
-      selectedRescheduleSlotId.value = null;
-      rescheduleQuote.value = null;
-    }
-  } catch {
-    rescheduleAvailability.value = [];
-    ElMessage.error('Failed to load available slots.');
-  } finally {
-    rescheduleAvailabilityLoading.value = false;
-  }
 };
 
 const openRescheduleDialog = async (row: BookingListItem) => {
@@ -554,70 +354,12 @@ const openRescheduleDialog = async (row: BookingListItem) => {
     return;
   }
   selectedBooking.value = row;
-  rescheduleDate.value = toLocalDate(row.appointmentDateTime);
   showRescheduleDialog.value = true;
-  await loadRescheduleAvailability();
 };
 
-const handleRescheduleSlotSelect = async (slotId: number) => {
-  if (!selectedBooking.value) {
-    return;
-  }
-  selectedRescheduleSlotId.value = slotId;
-  rescheduleQuoteLoading.value = true;
-  try {
-    rescheduleQuote.value = await getBookingRescheduleQuote(selectedBooking.value.id, slotId);
-  } catch {
-    rescheduleQuote.value = null;
-    ElMessage.error('Failed to calculate reschedule quote. Please try again.');
-  } finally {
-    rescheduleQuoteLoading.value = false;
-  }
-};
-
-const resetRescheduleDialog = () => {
+const handleBookingMutated = () => {
   selectedBooking.value = null;
-  rescheduleDate.value = '';
-  rescheduleAvailability.value = [];
-  selectedRescheduleSlotId.value = null;
-  rescheduleQuote.value = null;
-  rescheduleAvailabilityLoading.value = false;
-  rescheduleQuoteLoading.value = false;
-  rescheduleConfirmLoading.value = false;
-};
-
-const confirmReschedule = async () => {
-  if (!selectedBooking.value || !selectedRescheduleSlotId.value || !rescheduleQuote.value?.allowed) {
-    return;
-  }
-  rescheduleConfirmLoading.value = true;
-  try {
-    const result = await confirmBookingReschedule(selectedBooking.value.id, selectedRescheduleSlotId.value);
-    ElMessage.success(result.message || 'Booking rescheduled successfully.');
-    showRescheduleDialog.value = false;
-    tableRef.value?.refresh();
-  } catch {
-    ElMessage.error('Failed to reschedule booking. Please try again.');
-  } finally {
-    rescheduleConfirmLoading.value = false;
-  }
-};
-
-const confirmCancel = async () => {
-  if (!selectedBooking.value || !cancelQuote.value?.allowed) {
-    return;
-  }
-  cancelConfirmLoading.value = true;
-  try {
-    const result = await confirmBookingCancel(selectedBooking.value.id);
-    ElMessage.success(result.message || 'Booking cancelled successfully.');
-    showCancelDialog.value = false;
-    tableRef.value?.refresh();
-  } catch {
-    ElMessage.error('Failed to cancel booking. Please try again.');
-  } finally {
-    cancelConfirmLoading.value = false;
-  }
+  tableRef.value?.refresh();
 };
 
 const handleAction = (action: string, row: BookingListItem) => {

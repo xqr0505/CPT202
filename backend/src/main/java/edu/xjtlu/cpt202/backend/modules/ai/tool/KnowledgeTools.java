@@ -47,10 +47,11 @@ public class KnowledgeTools {
             return AiConstant.KNOWLEDGE_NOT_FOUND_FALLBACK_MESSAGE;
         }
 
-        return contents.stream()
+        String response = contents.stream()
                 .map(Content::textSegment)
                 .map(this::formatSegment)
                 .collect(Collectors.joining("\n---\n"));
+        return response;
     }
 
     private List<Content> retrieveWithRewriteFallback(String query) {

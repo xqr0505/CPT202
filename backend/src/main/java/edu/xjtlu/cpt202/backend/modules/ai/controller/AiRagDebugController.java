@@ -2,6 +2,7 @@ package edu.xjtlu.cpt202.backend.modules.ai.controller;
 
 import edu.xjtlu.cpt202.backend.common.result.Result;
 import edu.xjtlu.cpt202.backend.modules.ai.constant.AiConstant;
+import edu.xjtlu.cpt202.backend.modules.ai.config.AiSemanticCacheProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.rag.DashScopeEmbeddingProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.rag.RagProperties;
 import dev.langchain4j.data.embedding.Embedding;
@@ -48,6 +49,7 @@ public class AiRagDebugController {
     private final RedisTemplate<String, String> redisTemplate;
     private final EmbeddingStore<TextSegment> embeddingStore;
     private final EmbeddingModel embeddingModel;
+    private final AiSemanticCacheProperties qaCacheProperties;
 
     public AiRagDebugController(
             RagProperties ragProperties,
@@ -55,7 +57,8 @@ public class AiRagDebugController {
             Environment environment,
             RedisTemplate<String, String> redisTemplate,
             EmbeddingStore<TextSegment> embeddingStore,
-            EmbeddingModel embeddingModel
+            EmbeddingModel embeddingModel,
+            AiSemanticCacheProperties qaCacheProperties
     ) {
         this.ragProperties = ragProperties;
         this.embeddingProperties = embeddingProperties;
@@ -63,6 +66,7 @@ public class AiRagDebugController {
         this.redisTemplate = redisTemplate;
         this.embeddingStore = embeddingStore;
         this.embeddingModel = embeddingModel;
+        this.qaCacheProperties = qaCacheProperties;
     }
 
     @PreAuthorize(AiConstant.AI_CHAT_ACCESS_EXPRESSION)
@@ -147,6 +151,87 @@ public class AiRagDebugController {
         payload.put("ftInfo", runRedisCommand("FT.INFO", indexName));
         payload.put("ftSearchAll", runRedisCommand("FT.SEARCH", indexName, "*", "LIMIT", "0", "3"));
         payload.put("jedisIndex", runJedisIndexProbe(indexName));
+        return Result.success(payload);
+    }
+
+    @PreAuthorize(AiConstant.AI_CHAT_ACCESS_EXPRESSION)
+    @GetMapping("/qa-semantic-probe")
+    public Result<Map<String, Object>> qaSemanticProbe(@RequestParam("q") String query) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        String normalized = query == null ? "" : query.trim();
+        payload.put("query", normalized);
+        payload.put("semanticEnabled", qaCacheProperties.isSemanticEnabled());
+        payload.put("similarityThreshold", qaCacheProperties.getSimilarityThreshold());
+        payload.put("qaIndexName", qaCacheProperties.getIndexName());
+
+        if (normalized.isBlank()) {
+            payload.put("error", "Query must not be blank.");
+            return Result.success(payload);
+        }
+
+        Embedding embedding = embeddingModel.embed(normalized).content();
+        float[] vector = embedding.vector();
+        if (vector == null || vector.length == 0) {
+            payload.put("error", "Embedding vector is empty.");
+            return Result.success(payload);
+        }
+        byte[] vectorBytes = toLittleEndianBytes(vector);
+        payload.put("embeddingDimensionActual", vector.length);
+        payload.put("vectorBytesLength", vectorBytes.length);
+
+        String ftQuery = "@intent:{KNOWLEDGE}=>[KNN 1 @vector $vec AS score]";
+        payload.put("ftQuery", ftQuery);
+        Object reply = runRedisCommand(
+                "FT.SEARCH",
+                qaCacheProperties.getIndexName(),
+                ftQuery,
+                "PARAMS",
+                "2",
+                "vec",
+                "__BINARY_VECTOR__",
+                "SORTBY",
+                "score",
+                "ASC",
+                "LIMIT",
+                "0",
+                "1",
+                "RETURN",
+                "4",
+                "query",
+                "answer",
+                "intent",
+                "score",
+                "DIALECT",
+                "2"
+        );
+        payload.put("ftSearchTemplateResult", reply);
+
+        Object binaryReply = redisTemplate.execute((RedisConnection connection) -> {
+            byte[][] args = new byte[][]{
+                    qaCacheProperties.getIndexName().getBytes(StandardCharsets.UTF_8),
+                    ftQuery.getBytes(StandardCharsets.UTF_8),
+                    "PARAMS".getBytes(StandardCharsets.UTF_8),
+                    "2".getBytes(StandardCharsets.UTF_8),
+                    "vec".getBytes(StandardCharsets.UTF_8),
+                    vectorBytes,
+                    "SORTBY".getBytes(StandardCharsets.UTF_8),
+                    "score".getBytes(StandardCharsets.UTF_8),
+                    "ASC".getBytes(StandardCharsets.UTF_8),
+                    "LIMIT".getBytes(StandardCharsets.UTF_8),
+                    "0".getBytes(StandardCharsets.UTF_8),
+                    "1".getBytes(StandardCharsets.UTF_8),
+                    "RETURN".getBytes(StandardCharsets.UTF_8),
+                    "4".getBytes(StandardCharsets.UTF_8),
+                    "query".getBytes(StandardCharsets.UTF_8),
+                    "answer".getBytes(StandardCharsets.UTF_8),
+                    "intent".getBytes(StandardCharsets.UTF_8),
+                    "score".getBytes(StandardCharsets.UTF_8),
+                    "DIALECT".getBytes(StandardCharsets.UTF_8),
+                    "2".getBytes(StandardCharsets.UTF_8)
+            };
+            return normalizeRedisReply(connection.execute("FT.SEARCH", args));
+        });
+        payload.put("ftSearchBinaryResult", binaryReply);
         return Result.success(payload);
     }
 
@@ -278,5 +363,15 @@ public class AiRagDebugController {
             result.add(item);
         }
         return result;
+    }
+
+    private byte[] toLittleEndianBytes(float[] vector) {
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer
+                .allocate(vector.length * Float.BYTES)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (float value : vector) {
+            buffer.putFloat(value);
+        }
+        return buffer.array();
     }
 }

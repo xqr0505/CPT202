@@ -66,7 +66,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { login, type LoginPayload, type LoginResponse } from '@/api/auth';
+import { login, type LoginPayload } from '@/api/auth';
 import { saveAuthData, saveRememberedEmail, getRememberedEmail, dispatchSessionActivityEvent } from '@/api/request';
 import { useUserStore } from '@/stores/user';
 
@@ -133,7 +133,7 @@ const mapRoleToUserRole = (role: string) => {
   }
 };
 
-const askRememberMeChoice = async (defaultChecked: boolean): Promise<boolean> => {
+const askRememberMeChoice = async (): Promise<boolean> => {
   try {
     await ElMessageBox.confirm(
       'After successful login, will the password be remembered and the login status be maintained?',
@@ -172,7 +172,7 @@ async function handleLogin() {
     };
 
     const response = await login(payload);
-    const rememberChoice = await askRememberMeChoice(rememberSession.value);
+    const rememberChoice = await askRememberMeChoice();
     const rememberMe = Boolean(rememberChoice);
 
     saveAuthData(

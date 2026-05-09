@@ -11,6 +11,7 @@ import edu.xjtlu.cpt202.backend.common.enums.UserRoleEnum;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSpecialistSearchIndexService;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.CancelReasonEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
@@ -61,6 +62,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     private final UserMapper userMapper;
     private final UserAccountService userAccountService;
     private final SpecialistProfileMapper specialistProfileMapper;
+    private final AiSpecialistSearchIndexService aiSpecialistSearchIndexService;
     private final JavaMailSender mailSender;
     private final Environment env;
     private final PasswordEncoder passwordEncoder;
@@ -100,6 +102,12 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 UserRoleEnum.SPECIALIST.name(),
                 normalizedName
         );
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(normalizedAvatarUrl);
+            if (userMapper.updateById(user) == 0) {
+                throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to initialize specialist avatar");
+            }
+        }
 
         SpecialistProfile specialistProfile = SpecialistProfile.builder()
                 .userId(user.getId())
@@ -111,6 +119,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
                 .status(mappedStatus)
                 .build();
         specialistProfileMapper.insert(specialistProfile);
+        aiSpecialistSearchIndexService.upsertSpecialist(specialistProfile.getId());
 
         CompletableFuture.runAsync(() -> sendSpecialistRegistrationNotification(
                 specialistProfile.getId(),
@@ -184,7 +193,17 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
         saveFeeChangeRecordIfNeeded(id, existing, normalizedLevel, request.getConsultationFee());
         String passwordHash = normalizedPassword == null ? null : passwordEncoder.encode(normalizedPassword);
-        adminSpecialistMapper.updateUserAccountById(userId, normalizedName, normalizedEmail, passwordHash);
+        int updatedUserRows = adminSpecialistMapper.updateUserAccountById(
+                userId,
+                normalizedName,
+                normalizedEmail,
+                normalizedAvatarUrl,
+                passwordHash
+        );
+        if (updatedUserRows == 0) {
+            throw new BusinessException(ResultCodeEnum.NOT_FOUND);
+        }
+        aiSpecialistSearchIndexService.upsertSpecialist(id);
 
         if (resetPasswordToDefault) {
             CompletableFuture.runAsync(() -> sendSpecialistPasswordResetNotification(
@@ -209,6 +228,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         if (updatedRows == 0) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND);
         }
+        aiSpecialistSearchIndexService.upsertSpecialist(id);
 
         List<Booking> impactedBookings = List.of();
         if ("INACTIVE".equals(mappedStatus)) {

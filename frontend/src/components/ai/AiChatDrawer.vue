@@ -30,7 +30,25 @@
           :closable="false"
         />
 
-        <AiMessageList :messages="aiChatStore.messages" />
+        <div v-if="aiChatStore.messages.length === 0" class="ai-chat-drawer__welcome">
+          <div class="ai-chat-drawer__welcome-text">
+            <h3 class="welcome-title">Welcome! I'm your ExpertLink AI Assistant.</h3>
+            <p class="welcome-desc">I can answer questions about the platform and help you book, reschedule, or cancel consultations.</p>
+            <p class="welcome-hint">Try asking me:</p>
+          </div>
+          <div class="ai-chat-drawer__welcome-prompts">
+            <el-button
+              v-for="(prompt, index) in SUGGESTED_PROMPTS"
+              :key="index"
+              class="ai-chat-drawer__prompt-btn"
+              @click="handlePromptClick(prompt)"
+            >
+              {{ prompt }}
+            </el-button>
+          </div>
+        </div>
+
+        <AiMessageList v-else :messages="aiChatStore.messages" />
       </div>
 
       <div class="ai-chat-drawer__footer">
@@ -44,68 +62,88 @@
       </div>
     </div>
 
+    <BookingCancelDialog
+      v-model="showCancelDialog"
+      :booking-id="selectedCancelBookingId"
+      @success="handleCancelSuccess"
+    />
+    <BookingRescheduleDialog
+      v-model="showRescheduleDialog"
+      :booking="selectedRescheduleBooking"
+      :booking-id="selectedRescheduleBookingId"
+      :prefill-date="selectedRescheduleDate"
+      :prefill-slot-id="selectedRescheduleSlotId"
+      @success="handleRescheduleSuccess"
+    />
+
     <el-dialog
-      v-model="bookingConfirmDialogVisible"
+      v-model="showBookingDialog"
       title="Confirm Booking"
       width="520px"
       :close-on-click-modal="false"
-      :z-index="3500"
       append-to-body
     >
-      <div v-if="bookingPreview" class="booking-confirm-content">
-        <div class="booking-confirm-row">
+      <div v-if="selectedBookingPreview" class="ai-booking-dialog__content">
+        <div class="ai-booking-dialog__row">
           <span>Specialist</span>
-          <strong>{{ bookingPreview.specialistName || `#${bookingPreview.specialistId}` }}</strong>
+          <strong>{{ selectedBookingPreview.specialistName || `#${selectedBookingPreview.specialistId}` }}</strong>
         </div>
-        <div class="booking-confirm-row">
+        <div class="ai-booking-dialog__row">
           <span>Time</span>
-          <strong>{{ bookingPreview.slotDate }} {{ bookingPreview.startTime }} - {{ bookingPreview.endTime }}</strong>
+          <strong>{{ selectedBookingPreview.slotDate }} {{ selectedBookingPreview.startTime }} - {{ selectedBookingPreview.endTime }}</strong>
         </div>
-        <div class="booking-confirm-row">
+        <div class="ai-booking-dialog__row">
           <span>Price</span>
-          <strong>{{ formatFee(bookingPreview.consultationFee) }}</strong>
+          <strong>{{ formatFee(selectedBookingPreview.consultationFee) }}</strong>
         </div>
-        <div class="booking-confirm-row">
-          <span>Topic</span>
-          <strong>{{ bookingPreview.topic }}</strong>
-        </div>
-        <div class="booking-confirm-row">
-          <span>Notes</span>
-          <div class="booking-confirm-notes-input">
+
+        <el-form label-position="top" class="ai-booking-dialog__form">
+          <el-form-item label="Topic" required>
+            <el-select
+              v-model="selectedBookingTopic"
+              placeholder="Select a topic"
+              :disabled="bookingSubmitting"
+            >
+              <el-option
+                v-for="topic in bookingTopicOptions"
+                :key="topic"
+                :label="topic"
+                :value="topic"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Notes">
             <el-input
-              v-model="manualBookingNotes"
+              v-model="selectedBookingNotes"
               type="textarea"
               :rows="3"
-              maxlength="300"
+              maxlength="500"
               show-word-limit
-              placeholder="Enter notes manually"
+              placeholder="Optional details you want the specialist to know"
+              :disabled="bookingSubmitting"
             />
-          </div>
-        </div>
+          </el-form-item>
+        </el-form>
       </div>
-
       <template #footer>
-        <span class="dialog-footer">
-          <CustomButton :disabled="bookingSubmitting" @click="dismissBookingPreview">
-            Cancel
+        <div class="ai-booking-dialog__footer">
+          <CustomButton :disabled="bookingSubmitting" @click="closeBookingDialog">Cancel</CustomButton>
+          <CustomButton type="primary" :disabled="bookingSubmitting" @click="submitBookingFromDialog">
+            {{ bookingSubmitting ? 'Submitting...' : 'Confirm booking' }}
           </CustomButton>
-          <CustomButton type="primary" :loading="bookingSubmitting" @click="confirmBookingFromPreview">
-            Confirm booking
-          </CustomButton>
-        </span>
+        </div>
       </template>
     </el-dialog>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import CustomButton from '@/components/common/CustomButton.vue'
-import { createBooking } from '@/api/booking'
-import { getUser } from '@/api/request'
-import { fetchSpecialistAvailability, fetchSpecialists } from '@/api/specialist'
+import BookingCancelDialog from '@/components/business/BookingCancelDialog.vue'
+import BookingRescheduleDialog from '@/components/business/BookingRescheduleDialog.vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import {
   AI_CHAT_CLEAR_BUTTON_TEXT,
@@ -114,13 +152,25 @@ import {
   AI_DRAWER_SIZE,
   AI_DRAWER_TITLE
 } from '@/constants/ai'
+import { createBooking, getBookingDetail, getBookingTopics, type BookingListItem } from '@/api/booking'
 import AiComposer from './AiComposer.vue'
 import AiMessageList from './AiMessageList.vue'
 
 const aiChatStore = useAiChatStore()
 const router = useRouter()
+const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
+const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
-const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
+
+interface AiBookingCancelModalPayload {
+  bookingId: number
+}
+
+interface AiBookingRescheduleModalPayload {
+  bookingId: number
+  targetDate?: string | null
+  suggestedSlotId?: number | null
+}
 
 interface AiBookingSubmitPreviewPayload {
   specialistId: number
@@ -132,50 +182,34 @@ interface AiBookingSubmitPreviewPayload {
   consultationFee?: number | null
   topic: string
   customerNotes?: string | null
-  warnings?: string[]
+  availableTopics?: string[]
 }
 
-interface StoredSessionUser {
-  userId?: number | string | null
-  id?: number | string | null
-}
-
-interface AiBookingContextSlot {
-  id?: number
-  slotDate?: string
-  startTime?: string
-  endTime?: string
-  status?: string
-}
-
-interface AiBookingContextSpecialist {
-  id?: number
-  name?: string
-  consultationFee?: number
-}
-
-interface AiBookingPageContext {
-  specialistId?: number
-  specialistName?: string
-  consultationFee?: number
-  selectedDate?: string
-  selectedSlotId?: number
-  selectedSlotStartTime?: string
-  selectedSlotEndTime?: string
-  availableSlots?: AiBookingContextSlot[]
-  visibleSpecialists?: AiBookingContextSpecialist[]
-  selectedTopic?: string
-  selectedCustomerNotes?: string
-}
-
+const showCancelDialog = ref(false)
+const selectedCancelBookingId = ref<number | null>(null)
+const showRescheduleDialog = ref(false)
+const selectedRescheduleBooking = ref<BookingListItem | null>(null)
+const selectedRescheduleBookingId = ref<number | null>(null)
+const selectedRescheduleDate = ref('')
+const selectedRescheduleSlotId = ref<number | null>(null)
+const showBookingDialog = ref(false)
+const selectedBookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
+const selectedBookingTopic = ref('')
+const selectedBookingNotes = ref('')
+const bookingTopicOptions = ref<string[]>([])
 const bookingSubmitting = ref(false)
-const bookingPreview = ref<AiBookingSubmitPreviewPayload | null>(null)
-const bookingConfirmDialogVisible = ref(false)
-const manualBookingNotes = ref('')
-const lastPreviewKey = ref('')
-const dismissedPreviewKeys = new Set<string>()
-
 const isMobile = ref(window.innerWidth <= 640)
+
+const SUGGESTED_PROMPTS = [
+  "What is the platform's rescheduling policy?",
+  "Help me check my consultation last month.",
+  "My four-year-old son has allergic rhinitis, can you recommend a doctor for me?"
+]
+
+const handlePromptClick = (prompt: string) => {
+  aiChatStore.setInput(prompt)
+  void aiChatStore.sendMessage()
+}
 
 const updateMobileState = () => {
   isMobile.value = window.innerWidth <= 640
@@ -184,912 +218,167 @@ const updateMobileState = () => {
 const responsiveDirection = computed(() => isMobile.value ? 'btt' : AI_DRAWER_DIRECTION)
 const responsiveSize = computed(() => isMobile.value ? '85%' : AI_DRAWER_SIZE)
 
-const normalizeString = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
-    return null
+const openCancelModalFromAi = (bookingId: number) => {
+  if (!bookingId || bookingId <= 0) {
+    return
   }
-  const trimmed = value.trim()
-  return trimmed || null
+  selectedCancelBookingId.value = bookingId
+  showCancelDialog.value = true
 }
 
-const normalizeNumericId = (value: unknown): number | null => {
-  if (value === null || value === undefined || value === '') {
-    return null
-  }
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null
-  }
-  return Math.trunc(parsed)
+const resetCancelDialogState = () => {
+  selectedCancelBookingId.value = null
 }
 
-const normalizeTime = (value: string | null): string | null => {
-  if (!value) {
-    return null
-  }
-  const trimmed = value.trim()
-  const hhmm = trimmed.match(/^(\d{1,2}):(\d{2})$/)
-  if (hhmm) {
-    const hour = Number(hhmm[1])
-    const minute = Number(hhmm[2])
-    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`
-    }
-  }
-  const hhmmss = trimmed.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
-  if (hhmmss) {
-    const hour = Number(hhmmss[1])
-    const minute = Number(hhmmss[2])
-    const second = Number(hhmmss[3])
-    if (
-      hour >= 0 && hour <= 23 &&
-      minute >= 0 && minute <= 59 &&
-      second >= 0 && second <= 59
-    ) {
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
-    }
-  }
-  return null
+const handleCancelSuccess = () => {
+  resetCancelDialogState()
 }
 
-const normalizeDate = (value: string | null): string | null => {
-  if (!value) {
-    return null
-  }
-  const trimmed = value.trim()
-  const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!dateMatch) {
-    return null
-  }
-  return `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
+const resetRescheduleDialogState = () => {
+  selectedRescheduleBooking.value = null
+  selectedRescheduleBookingId.value = null
+  selectedRescheduleDate.value = ''
+  selectedRescheduleSlotId.value = null
 }
 
-const normalizeStatus = (value: unknown): string => {
-  if (typeof value !== 'string') {
-    return ''
-  }
-  return value.trim().toUpperCase()
+const resetBookingDialogState = () => {
+  selectedBookingPreview.value = null
+  selectedBookingTopic.value = ''
+  selectedBookingNotes.value = ''
+  bookingTopicOptions.value = []
+  bookingSubmitting.value = false
 }
 
-const normalizeDoctorName = (value: string | null): string => {
-  if (!value) {
-    return ''
-  }
-  return value
-    .replace(/\([^)]*\)|（[^）]*）/g, '')
-    .replace(/^doctor\s+/i, '')
-    .replace(/^dr\.?\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
+const handleRescheduleSuccess = () => {
+  resetRescheduleDialogState()
 }
 
-const normalizeDoctorNameSafe = (value: string | null): string => {
-  if (!value) {
-    return ''
-  }
-  return value
-    .replace(/\([^)]*\)|\uFF08[^\uFF09]*\uFF09/g, '')
-    .replace(/^doctor\s+/i, '')
-    .replace(/^dr\.?\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
+const closeBookingDialog = () => {
+  showBookingDialog.value = false
+  resetBookingDialogState()
 }
 
-const resolveSpecialistIdByName = (pageContext: AiBookingPageContext | null, specialistName: string | null): number | null => {
-  const normalizedTargetName = normalizeDoctorNameSafe(specialistName)
-  const visibleSpecialists = pageContext?.visibleSpecialists
-  if (!normalizedTargetName || !Array.isArray(visibleSpecialists) || visibleSpecialists.length === 0) {
-    return null
+const onAiBookingCancelModal = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingCancelModalPayload>
+  const bookingId = Number(customEvent.detail?.bookingId || 0)
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return
   }
-
-  const normalizedItems = visibleSpecialists
-    .map(item => ({
-      id: normalizeNumericId(item.id),
-      normalizedName: normalizeDoctorNameSafe(normalizeString(item.name)),
-    }))
-    .filter(item => Boolean(item.id) && Boolean(item.normalizedName))
-
-  const exact = normalizedItems.find(item => item.normalizedName === normalizedTargetName)
-  if (exact?.id) {
-    return exact.id
-  }
-
-  const fuzzy = normalizedItems.find(item =>
-    item.normalizedName.includes(normalizedTargetName) ||
-    normalizedTargetName.includes(item.normalizedName)
-  )
-  return fuzzy?.id || null
+  openCancelModalFromAi(bookingId)
 }
 
-const resolveSpecialistIdBySearchApi = async (
-  pageContext: AiBookingPageContext | null,
-  specialistName: string | null,
-  slotDate: string | null
-): Promise<number | null> => {
-  const normalizedDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
-  const normalizedTargetName = normalizeDoctorNameSafe(specialistName)
-  if (!normalizedTargetName) {
-    return null
+const mapBookingDetailToListItem = (detail: Awaited<ReturnType<typeof getBookingDetail>>): BookingListItem => ({
+  id: String(detail.bookingId),
+  specialistId: String(detail.specialistId),
+  specialistName: detail.specialistName,
+  specialistAvatar: detail.specialistAvatar,
+  appointmentDateTime: `${detail.slotDate} ${detail.startTime}`,
+  serviceName: detail.topic || 'Consultation',
+  status: String(detail.status || ''),
+  amount: Number(detail.price ?? 0)
+})
+
+const openRescheduleModalFromAi = async (payload: AiBookingRescheduleModalPayload) => {
+  if (!payload.bookingId || payload.bookingId <= 0) {
+    return
   }
-  const rawKeyword = normalizeString(specialistName)
-  const normalizedKeyword = normalizedTargetName
-
-  const mergeCandidates = (target: Array<{ id?: number; name?: string }>, source: Array<{ id?: number; name?: string }>) => {
-    const existing = new Set(target.map(item => normalizeNumericId(item.id)).filter(Boolean) as number[])
-    for (const item of source) {
-      const id = normalizeNumericId(item.id)
-      if (!id || existing.has(id)) {
-        continue
-      }
-      existing.add(id)
-      target.push(item)
-    }
-  }
-
-  try {
-    const candidates: Array<{ id?: number; name?: string }> = []
-    const keywordCandidates = [rawKeyword, normalizedKeyword].filter(
-      (value, index, arr) => Boolean(value) && arr.indexOf(value) === index
-    ) as string[]
-
-    for (const keyword of keywordCandidates) {
-      const withKeywordAndDate = await fetchSpecialists({
-        keyword,
-        date: normalizedDate || undefined,
-        pageNo: 1,
-        pageSize: 24,
-      })
-      mergeCandidates(candidates, withKeywordAndDate.list || [])
-      if (candidates.length) {
-        break
-      }
-    }
-
-    if (!candidates.length) {
-      for (const keyword of keywordCandidates) {
-        const withKeywordOnly = await fetchSpecialists({
-          keyword,
-          pageNo: 1,
-          pageSize: 24,
-        })
-        mergeCandidates(candidates, withKeywordOnly.list || [])
-        if (candidates.length) {
-          break
-        }
-      }
-    }
-
-    if (!candidates.length && normalizedDate) {
-      const withDateOnly = await fetchSpecialists({
-        date: normalizedDate,
-        pageNo: 1,
-        pageSize: 24,
-      })
-      mergeCandidates(candidates, withDateOnly.list || [])
-    }
-
-    if (!candidates.length && Array.isArray(pageContext?.visibleSpecialists)) {
-      mergeCandidates(candidates, pageContext.visibleSpecialists as Array<{ id?: number; name?: string }>)
-    }
-
-    const normalizedItems = candidates
-      .map(item => ({
-        id: normalizeNumericId(item.id),
-        normalizedName: normalizeDoctorNameSafe(normalizeString(item.name)),
-      }))
-      .filter(item => Boolean(item.id) && Boolean(item.normalizedName))
-
-    const exact = normalizedItems.find(item => item.normalizedName === normalizedTargetName)
-    if (exact?.id) {
-      return exact.id
-    }
-
-    const fuzzy = normalizedItems.find(item =>
-      item.normalizedName.includes(normalizedTargetName) ||
-      normalizedTargetName.includes(item.normalizedName)
-    )
-    return fuzzy?.id || null
-  } catch {
-    return null
-  }
+  const detail = await getBookingDetail(payload.bookingId)
+  selectedRescheduleBooking.value = mapBookingDetailToListItem(detail)
+  selectedRescheduleBookingId.value = payload.bookingId
+  selectedRescheduleDate.value = payload.targetDate || ''
+  selectedRescheduleSlotId.value = payload.suggestedSlotId || null
+  showRescheduleDialog.value = true
 }
 
-const extractSpecialistNameFromContent = (content: string): string | null => {
-  const fromLabel = normalizeLineValue(extractFirstMatch(content, [
-    /(?:\*\*|__)?\s*specialistName\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\*\*|__)?\s*(?:\u533b\u751f|\u4e13\u5bb6|specialist|doctor)\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-  ]))
-  if (fromLabel) {
-    return fromLabel
+const onAiBookingRescheduleModal = (event: Event): void => {
+  const customEvent = event as CustomEvent<AiBookingRescheduleModalPayload>
+  const bookingId = Number(customEvent.detail?.bookingId || 0)
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return
   }
-
-  const drMatched = content.match(/\bDr\.?\s+[A-Za-z][A-Za-z\s'.-]{1,80}/)
-  if (drMatched?.[0]) {
-    return normalizeLineValue(drMatched[0])
-  }
-
-  return null
-}
-
-const extractSpecialistNameHeuristic = (content: string): string | null => {
-  return normalizeLineValue(extractFirstMatch(content, [
-    /(?:\u9884\u7ea6|book(?:ing)?(?:\s+with|\s+for)?)\s+([A-Za-z][A-Za-z0-9_.\- ]{1,60})/i,
-    /(?:expert|doctor|specialist)\s+([A-Za-z][A-Za-z0-9_.\- ]{1,60})/i,
-  ]))
-}
-
-const resolveSpecialistNameByVisibleList = (
-  content: string,
-  pageContext: AiBookingPageContext | null
-): string | null => {
-  const visibleSpecialists = pageContext?.visibleSpecialists
-  if (!Array.isArray(visibleSpecialists) || !visibleSpecialists.length) {
-    return null
-  }
-
-  const normalizedContent = normalizeDoctorNameSafe(content)
-  if (!normalizedContent) {
-    return null
-  }
-
-  for (const item of visibleSpecialists) {
-    const candidateName = normalizeString(item.name)
-    const normalizedCandidate = normalizeDoctorNameSafe(candidateName)
-    if (normalizedCandidate && normalizedContent.includes(normalizedCandidate)) {
-      return candidateName
-    }
-  }
-
-  return null
-}
-
-const resolveCurrentPageSpecialistId = (): number | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  const matched = (window.location.pathname || '').match(/^\/customer\/specialists\/(\d+)\/book$/)
-  if (!matched?.[1]) {
-    return null
-  }
-  return normalizeNumericId(matched[1])
-}
-
-const resolveSlotIdByContext = (
-  pageContext: AiBookingPageContext | null,
-  slotDate: string | null,
-  startTime: string | null,
-  endTime: string | null
-): number | null => {
-  const contextSlots = pageContext?.availableSlots
-  if (!Array.isArray(contextSlots) || contextSlots.length === 0) {
-    return null
-  }
-
-  const targetDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
-  const targetStartTime = normalizeTime(startTime)
-  const targetEndTime = normalizeTime(endTime)
-
-  const normalizedSlots = contextSlots
-    .map(slot => ({
-      id: normalizeNumericId(slot.id),
-      slotDate: normalizeDate(normalizeString(slot.slotDate)),
-      startTime: normalizeTime(normalizeString(slot.startTime)),
-      endTime: normalizeTime(normalizeString(slot.endTime)),
-      status: normalizeStatus(slot.status),
-    }))
-    .filter(slot => Boolean(slot.id))
-
-  const candidates = normalizedSlots.filter(slot => {
-    if (targetDate && slot.slotDate !== targetDate) {
-      return false
-    }
-    if (targetStartTime && slot.startTime !== targetStartTime) {
-      return false
-    }
-    if (targetEndTime && slot.endTime !== targetEndTime) {
-      return false
-    }
-    return true
+  void openRescheduleModalFromAi({
+    bookingId,
+    targetDate: customEvent.detail?.targetDate || null,
+    suggestedSlotId: customEvent.detail?.suggestedSlotId || null
   })
-
-  if (!candidates.length) {
-    return null
-  }
-
-  const available = candidates.find(slot => slot.status === 'AVAILABLE')
-  return available?.id || candidates[0]?.id || null
 }
 
-const isSlotAvailableInContext = (pageContext: AiBookingPageContext | null, slotId: number): boolean | null => {
-  const contextSlots = pageContext?.availableSlots
-  if (!Array.isArray(contextSlots) || contextSlots.length === 0) {
-    return null
-  }
-  const matched = contextSlots.find(slot => normalizeNumericId(slot.id) === slotId)
-  if (!matched) {
-    return null
-  }
-  return normalizeStatus(matched.status) === 'AVAILABLE'
-}
-
-const resolveSlotIdByAvailabilityApi = async (
-  specialistId: number,
-  slotDate: string,
-  startTime: string,
-  endTime: string
-): Promise<number | null> => {
-  const normalizedDate = normalizeDate(slotDate)
-  const normalizedStart = normalizeTime(startTime)
-  const normalizedEnd = normalizeTime(endTime)
-  if (!normalizedDate || !normalizedStart || !normalizedEnd) {
-    return null
-  }
-
-  try {
-    const slots = await fetchSpecialistAvailability(specialistId, normalizedDate)
-    const matchedSlot = slots.find(slot =>
-      normalizeStatus(slot.status) === 'AVAILABLE' &&
-      normalizeTime(normalizeString(slot.startTime)) === normalizedStart &&
-      normalizeTime(normalizeString(slot.endTime)) === normalizedEnd
-    )
-    return normalizeNumericId(matchedSlot?.id) || null
-  } catch {
-    return null
-  }
-}
-
-const resolveSpecialistIdBySlotIdInVisibleSpecialists = async (
-  pageContext: AiBookingPageContext | null,
-  slotId: number,
-  slotDate: string,
-  specialistName?: string | null
-): Promise<number | null> => {
-  const targetSlotId = normalizeNumericId(slotId)
-  const normalizedDate = normalizeDate(slotDate) || normalizeDate(normalizeString(pageContext?.selectedDate))
-  if (!targetSlotId || !normalizedDate) {
-    return null
-  }
-
-  const candidates: Array<{ id?: number; name?: string }> = []
-  const appendCandidates = (source: Array<{ id?: number; name?: string }>) => {
-    const existing = new Set(candidates.map(item => normalizeNumericId(item.id)).filter(Boolean) as number[])
-    for (const item of source) {
-      const id = normalizeNumericId(item.id)
-      if (!id || existing.has(id)) {
-        continue
-      }
-      existing.add(id)
-      candidates.push(item)
-    }
-  }
-
-  if (Array.isArray(pageContext?.visibleSpecialists) && pageContext.visibleSpecialists.length > 0) {
-    appendCandidates(pageContext.visibleSpecialists as Array<{ id?: number; name?: string }>)
-  }
-
-  try {
-    const rawKeyword = normalizeString(specialistName)
-    const normalizedKeyword = normalizeDoctorNameSafe(specialistName || null)
-    const keywordCandidates = [rawKeyword, normalizedKeyword].filter(
-      (value, index, arr) => Boolean(value) && arr.indexOf(value) === index
-    ) as string[]
-
-    for (const keyword of keywordCandidates) {
-      const byKeyword = await fetchSpecialists({
-        keyword,
-        date: normalizedDate,
-        pageNo: 1,
-        pageSize: 24,
-      })
-      appendCandidates((byKeyword.list || []) as Array<{ id?: number; name?: string }>)
-    }
-
-    if (!candidates.length) {
-      const byDateOnly = await fetchSpecialists({
-        date: normalizedDate,
-        pageNo: 1,
-        pageSize: 24,
-      })
-      appendCandidates((byDateOnly.list || []) as Array<{ id?: number; name?: string }>)
-    }
-  } catch {
-    // ignore search failure and fallback to current candidates
-  }
-
-  if (!candidates.length) {
-    return null
-  }
-
-  for (const specialist of candidates) {
-    const specialistId = normalizeNumericId(specialist.id)
-    if (!specialistId) {
-      continue
-    }
-    try {
-      const slots = await fetchSpecialistAvailability(specialistId, normalizedDate)
-      const matched = slots.some(slot => normalizeNumericId(slot.id) === targetSlotId)
-      if (matched) {
-        return specialistId
-      }
-    } catch {
-      // ignore single specialist availability lookup failure and continue
-    }
-  }
-
-  return null
-}
-
-const normalizeLineValue = (value: string | null): string | null => {
-  if (!value) {
-    return null
-  }
-  const sanitized = value
-    .replace(/^[\u2022\-*\d.)\s]+/, '')
-    .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
-    .trim()
-  return sanitized || null
-}
-
-const extractFirstMatch = (content: string, patterns: RegExp[]): string | null => {
-  for (const pattern of patterns) {
-    const matched = content.match(pattern)
-    if (matched?.[1]) {
-      return matched[1].trim()
-    }
-  }
-  return null
-}
-
-const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
-  const lineCandidate = extractFirstMatch(content, [
-    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D?-]?\s*([^\n\r]+)/i,
-  ])
-  const segment = lineCandidate || content
-  const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
-  if (segmentTimes && segmentTimes.length >= 2) {
-    return [segmentTimes[0] ?? null, segmentTimes[1] ?? null]
-  }
-
-  const allTimes = content.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
-  if (allTimes && allTimes.length >= 2) {
-    return [allTimes[0] ?? null, allTimes[1] ?? null]
-  }
-
-  return [null, null]
-}
-
-const normalizeNumber = (value: unknown): number | null => {
-  if (value === null || value === undefined || value === '') {
-    return null
+const formatFee = (value?: number | null): string => {
+  if (value === null || value === undefined) {
+    return 'N/A'
   }
   const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-const resolveCurrentUserId = (): number | null => {
-  const storedUser = getUser() as StoredSessionUser | null
-  const rawUserId = storedUser?.userId ?? storedUser?.id
-  const parsedUserId = Number(rawUserId)
-  if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
-    return null
+  if (!Number.isFinite(parsed)) {
+    return 'N/A'
   }
-  return Math.trunc(parsedUserId)
+  return `CNY ${parsed.toFixed(2)}`
 }
 
-const resolveAiBookingContextStorageKey = (): string => {
-  const currentUserId = resolveCurrentUserId()
-  return currentUserId
-    ? `${AI_BOOKING_CONTEXT_STORAGE_KEY}:${currentUserId}`
-    : AI_BOOKING_CONTEXT_STORAGE_KEY
-}
-
-const readAiBookingPageContext = (): AiBookingPageContext | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
+const openBookingDialogFromAi = async (payload: AiBookingSubmitPreviewPayload) => {
+  let topics: string[] = []
   try {
-    const scopedStorageKey = resolveAiBookingContextStorageKey()
-    let raw = window.sessionStorage.getItem(scopedStorageKey)
-    if (!raw && scopedStorageKey !== AI_BOOKING_CONTEXT_STORAGE_KEY) {
-      raw = window.sessionStorage.getItem(AI_BOOKING_CONTEXT_STORAGE_KEY)
-    }
-    if (!raw) {
-      return null
-    }
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') {
-      return null
-    }
-    return parsed as AiBookingPageContext
+    topics = await getBookingTopics()
   } catch {
-    return null
+    topics = []
   }
-}
-
-const getParsedValueByAliases = (parsed: Record<string, unknown>, aliases: string[]): unknown => {
-  for (const alias of aliases) {
-    if (alias in parsed) {
-      return parsed[alias]
-    }
-  }
-  return undefined
-}
-
-const parseJsonLikeContent = (content: string): Record<string, unknown> | null => {
-  const trimmed = content.trim()
-  if (!trimmed) {
-    return null
-  }
-
-  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = codeBlockMatch?.[1]?.trim() || trimmed
-
-  const tryParse = (raw: string): Record<string, unknown> | null => {
-    try {
-      const parsed = JSON.parse(raw)
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : null
-    } catch {
-      return null
-    }
-  }
-
-  const parsedCandidate = tryParse(candidate)
-  if (parsedCandidate) {
-    return parsedCandidate
-  }
-
-  const start = candidate.indexOf('{')
-  const end = candidate.lastIndexOf('}')
-  if (start < 0 || end <= start) {
-    return null
-  }
-
-  return tryParse(candidate.slice(start, end + 1))
-}
-
-const parsePreviewFromAssistantMessage = (content: string): AiBookingSubmitPreviewPayload | null => {
-  const pageContext = readAiBookingPageContext()
-
-  const parsed = parseJsonLikeContent(content)
-  if (parsed) {
-    const specialistIdFromJsonRaw = normalizeNumericId(
-      getParsedValueByAliases(parsed, ['specialistId', 'specialist_id', '\u533b\u751fID', '\u4e13\u5bb6ID'])
-    )
-    const slotIdFromJsonRaw = normalizeNumericId(
-      getParsedValueByAliases(parsed, ['slotId', 'slot_id', '\u65f6\u6bb5ID'])
-    )
-    const topicFromJson = normalizeString(
-      getParsedValueByAliases(parsed, ['topic', '\u4e3b\u9898'])
-    )
-    const slotDateFromJson = normalizeString(
-      getParsedValueByAliases(parsed, ['slotDate', 'slot_date', '\u65e5\u671f'])
-    )
-    const startTimeFromJson = normalizeTime(normalizeString(
-      getParsedValueByAliases(parsed, ['startTime', 'start_time', '\u5f00\u59cb\u65f6\u95f4'])
-    ))
-    const endTimeFromJson = normalizeTime(normalizeString(
-      getParsedValueByAliases(parsed, ['endTime', 'end_time', '\u7ed3\u675f\u65f6\u95f4'])
-    ))
-    const specialistNameFromJson = normalizeString(
-      getParsedValueByAliases(parsed, ['specialistName', 'specialist_name', '\u533b\u751f', '\u4e13\u5bb6'])
-    )
-    const specialistNameFromText = extractSpecialistNameFromContent(content)
-    const specialistNameFromHeuristic = extractSpecialistNameHeuristic(content)
-    const specialistNameFromVisibleList = resolveSpecialistNameByVisibleList(content, pageContext)
-    const resolvedSpecialistName =
-      specialistNameFromJson || specialistNameFromText || specialistNameFromHeuristic || specialistNameFromVisibleList
-    const customerNotesFromJson = normalizeString(
-      getParsedValueByAliases(parsed, ['customerNotes', 'customer_notes', 'notes', '\u5907\u6ce8'])
-    )
-    const consultationFeeFromJson = normalizeNumber(
-      getParsedValueByAliases(parsed, ['consultationFee', 'consultation_fee', 'fee', 'price', '\u54a8\u8be2\u8d39'])
-    )
-
-    const resolvedSlotDateFromJson = slotDateFromJson || normalizeString(pageContext?.selectedDate)
-    const resolvedStartTimeFromJson =
-      startTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
-    const resolvedEndTimeFromJson =
-      endTimeFromJson || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
-
-    const specialistIdFromJson =
-      specialistIdFromJsonRaw ||
-      resolveCurrentPageSpecialistId() ||
-      resolveSpecialistIdByName(pageContext, resolvedSpecialistName) ||
-      normalizeNumericId(pageContext?.specialistId)
-    const slotIdFromJson =
-      slotIdFromJsonRaw ||
-      resolveSlotIdByContext(pageContext, resolvedSlotDateFromJson, resolvedStartTimeFromJson, resolvedEndTimeFromJson) ||
-      normalizeNumericId(pageContext?.selectedSlotId)
-
-    if (specialistIdFromJson || resolvedSpecialistName) {
-      return {
-        specialistId: specialistIdFromJson || 0,
-        slotId: slotIdFromJson || 0,
-        slotDate: resolvedSlotDateFromJson || 'N/A',
-        startTime: resolvedStartTimeFromJson || '--:--:--',
-        endTime: resolvedEndTimeFromJson || '--:--:--',
-        specialistName: resolvedSpecialistName || normalizeString(pageContext?.specialistName),
-        consultationFee: consultationFeeFromJson ?? normalizeNumber(pageContext?.consultationFee),
-        topic: topicFromJson || normalizeString(pageContext?.selectedTopic) || '',
-        customerNotes: customerNotesFromJson || normalizeString(pageContext?.selectedCustomerNotes),
-      }
-    }
-  }
-
-  const specialistIdRaw = normalizeNumericId(
-    extractFirstMatch(content, [
-      /specialistId\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /specialistId\s*[^\d\n\r]{0,8}(\d+)/i,
-      /specialist\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
-      /specialist\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u533b\u751f|\u4e13\u5bb6)\s*id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-    ])
-  )
-  const slotIdRaw = normalizeNumericId(
-    extractFirstMatch(content, [
-      /slotId\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
-      /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
-      /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D?]?\s*(\d+)/i,
-      /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
-    ])
-  )
-  const slotDate = normalizeString(
-    extractFirstMatch(content, [
-      /slotDate\s*[:=\uFF1A\uFF1D]\s*(\d{4}-\d{2}-\d{2})/i,
-      /(\d{4}-\d{2}-\d{2})/,
-    ])
-  )
-
-  const startTimeDirect = extractFirstMatch(content, [
-    /startTime\s*[:=\uFF1A\uFF1D]\s*(\d{1,2}:\d{2}(?::\d{2})?)/i,
-  ])
-  const endTimeDirect = extractFirstMatch(content, [
-    /endTime\s*[:=\uFF1A\uFF1D]\s*(\d{1,2}:\d{2}(?::\d{2})?)/i,
-  ])
-  const [rangeStartTime, rangeEndTime] = extractTimeRangeFromContent(content)
-  const startTime = normalizeTime(startTimeDirect || rangeStartTime || null)
-  const endTime = normalizeTime(endTimeDirect || rangeEndTime || null)
-
-  const topic = normalizeLineValue(extractFirstMatch(content, [
-    /(?:\*\*|__)?\s*topic\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\*\*|__)?\s*customer\s*topic\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\*\*|__)?\s*\u4e3b\u9898\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
-    /(?:\*\*|__)?\s*(?:\u4e3b\u9898|topic)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
-  ]))
-  const customerNotes = normalizeLineValue(extractFirstMatch(content, [
-    /(?:\*\*|__)?\s*customerNotes\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\*\*|__)?\s*notes?\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/i,
-    /(?:\*\*|__)?\s*\u5907\u6ce8\s*(?:\*\*|__)?\s*[:\uFF1A=]\s*([^\n\r]+)/,
-    /(?:\*\*|__)?\s*(?:\u5907\u6ce8|notes?|customerNotes)\s*[^\n\r]{0,4}\s*([^\n\r]+)/i,
-  ]))
-  const specialistName =
-    extractSpecialistNameFromContent(content) ||
-    extractSpecialistNameHeuristic(content) ||
-    resolveSpecialistNameByVisibleList(content, pageContext)
-  const consultationFee = normalizeNumber(extractFirstMatch(content, [
-    /consultationFee\s*[:=\uFF1A\uFF1D]\s*([0-9]+(?:\.[0-9]+)?)/i,
-    /(?:\*\*|__)?\s*(?:consultation\s*fee|fee|price)\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/i,
-    /(?:\*\*|__)?\s*\u54a8\u8be2\u8d39\s*(?:\*\*|__)?\s*[:\uFF1A=]?\s*[^\d\n\r]*([0-9]+(?:\.[0-9]+)?)/,
-    /(?:\u8d39\u7528|\u54a8\u8be2\u8d39|price|fee|consultation\s*fee)\s*[^\d\n\r]{0,6}([0-9]+(?:\.[0-9]+)?)/i,
+  const normalizedTopics = Array.isArray(topics)
+    ? topics.filter(topic => typeof topic === 'string').map(topic => topic.trim()).filter(Boolean)
+    : []
+  const mergedTopics = Array.from(new Set([
+    ...normalizedTopics,
+    ...(payload.availableTopics || []).filter(topic => typeof topic === 'string' && topic.trim()).map(topic => topic.trim()),
   ]))
 
-  const resolvedSlotDate = slotDate || normalizeString(pageContext?.selectedDate)
-  const resolvedStartTime =
-    startTime || normalizeTime(normalizeString(pageContext?.selectedSlotStartTime))
-  const resolvedEndTime =
-    endTime || normalizeTime(normalizeString(pageContext?.selectedSlotEndTime))
-  const specialistId =
-    specialistIdRaw ||
-    resolveCurrentPageSpecialistId() ||
-    resolveSpecialistIdByName(pageContext, specialistName) ||
-    normalizeNumericId(pageContext?.specialistId)
-  const slotId =
-    slotIdRaw ||
-    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
-    normalizeNumericId(pageContext?.selectedSlotId)
-  if (!specialistId && !specialistName) {
-    return null
-  }
-
-  return {
-    specialistId: specialistId || 0,
-    slotId: slotId || 0,
-    slotDate: resolvedSlotDate || 'N/A',
-    startTime: resolvedStartTime || '--:--:--',
-    endTime: resolvedEndTime || '--:--:--',
-    specialistName: specialistName || normalizeString(pageContext?.specialistName),
-    consultationFee: consultationFee ?? normalizeNumber(pageContext?.consultationFee),
-    topic: topic || normalizeString(pageContext?.selectedTopic) || '',
-    customerNotes: customerNotes || normalizeString(pageContext?.selectedCustomerNotes),
-  }
-}
-
-const buildPreviewKey = (preview: AiBookingSubmitPreviewPayload): string => {
-  return [
-    preview.specialistId,
-    preview.slotId,
-    preview.slotDate,
-    preview.startTime,
-    preview.endTime,
-    preview.topic,
-    preview.customerNotes || '',
-  ].join('|')
-}
-
-const BOOKING_CONFLICT_PATTERN = /("success"\s*:\s*false|"readyToSubmit"\s*:\s*false|readyToSubmit\s*[:=\uFF1A\uFF1D]\s*false|not\s+available|already\s+booked|booking\s+conflict|requested\s+slot\s+is\s+not\s+available|time\s+slot\s+is\s+no\s+longer\s+available|please\s+choose\s+another|failed\s+to\s+create\s+booking|failed\s+to\s+submit\s+booking|\u9884\u7ea6\u51b2\u7a81|\u5df2\u88ab\u9884\u7ea6|\u5df2\u88ab\u5360\u7528|\u4e0d\u53ef\u7528|\u9884\u7ea6\u5931\u8d25|\u65f6\u6bb5\u4e0d\u53ef\u7528|\u8bf7\u9009\u62e9\u5176\u4ed6\u65f6\u6bb5)/i
-
-const isBookingConflictContent = (content: string): boolean => {
-  return BOOKING_CONFLICT_PATTERN.test(content || '')
-}
-
-const hasBookingIntent = (content: string): boolean => {
-  const text = content || ''
-  return /(\u9884\u7ea6|book|booking)/i.test(text)
-}
-
-const openBookingPreview = async (preview: AiBookingSubmitPreviewPayload): Promise<void> => {
-  const latestAssistant = aiChatStore.messages
-    .slice()
-    .reverse()
-    .find(message => message.role === 'assistant' && message.content?.trim())
-  if (latestAssistant?.content && isBookingConflictContent(latestAssistant.content)) {
-    return
-  }
-  const fallback = latestAssistant ? parsePreviewFromAssistantMessage(latestAssistant.content) : null
-  const pageContext = readAiBookingPageContext()
-  const resolvedSlotDate =
-    (preview.slotDate && preview.slotDate !== 'N/A' ? preview.slotDate : null) ||
-    fallback?.slotDate ||
-    normalizeString(pageContext?.selectedDate) ||
-    'N/A'
-  const resolvedStartTime =
-    (preview.startTime && preview.startTime !== '--:--:--' ? preview.startTime : null) ||
-    fallback?.startTime ||
-    normalizeTime(normalizeString(pageContext?.selectedSlotStartTime)) ||
-    '--:--:--'
-  const resolvedEndTime =
-    (preview.endTime && preview.endTime !== '--:--:--' ? preview.endTime : null) ||
-    fallback?.endTime ||
-    normalizeTime(normalizeString(pageContext?.selectedSlotEndTime)) ||
-    '--:--:--'
-  const hintedSlotId =
-    preview.slotId ||
-    fallback?.slotId ||
-    resolveSlotIdByContext(pageContext, resolvedSlotDate, resolvedStartTime, resolvedEndTime) ||
-    normalizeNumericId(pageContext?.selectedSlotId) ||
-    0
-  let resolvedSpecialistId =
-    preview.specialistId ||
-    fallback?.specialistId ||
-    resolveCurrentPageSpecialistId() ||
-    resolveSpecialistIdByName(pageContext, preview.specialistName || fallback?.specialistName || null) ||
-    normalizeNumericId(pageContext?.specialistId) ||
-    0
-  if (!resolvedSpecialistId && hintedSlotId) {
-    resolvedSpecialistId = await resolveSpecialistIdBySlotIdInVisibleSpecialists(
-      pageContext,
-      hintedSlotId,
-      resolvedSlotDate,
-      preview.specialistName || fallback?.specialistName || null
-    ) || 0
-  }
-  if (!resolvedSpecialistId) {
-    resolvedSpecialistId = await resolveSpecialistIdBySearchApi(
-      pageContext,
-      preview.specialistName || fallback?.specialistName || null,
-      resolvedSlotDate
-    ) || 0
-  }
-  let resolvedSlotId =
-    hintedSlotId
-  if (!resolvedSlotId && resolvedSpecialistId) {
-    resolvedSlotId = await resolveSlotIdByAvailabilityApi(
-      resolvedSpecialistId,
-      resolvedSlotDate,
-      resolvedStartTime,
-      resolvedEndTime
-    ) || 0
-  }
-  if (!resolvedSpecialistId || !resolvedSlotId) {
-    return
-  }
-  const slotAvailable = isSlotAvailableInContext(pageContext, resolvedSlotId)
-  if (slotAvailable === false) {
-    return
-  }
-
-  const mergedPreview: AiBookingSubmitPreviewPayload = {
-    specialistId: resolvedSpecialistId,
-    slotId: resolvedSlotId,
-    slotDate: resolvedSlotDate,
-    startTime: resolvedStartTime,
-    endTime: resolvedEndTime,
-    specialistName: preview.specialistName || fallback?.specialistName || normalizeString(pageContext?.specialistName) || null,
-    consultationFee: preview.consultationFee ?? fallback?.consultationFee ?? normalizeNumber(pageContext?.consultationFee),
-    topic: (preview.topic || fallback?.topic || normalizeString(pageContext?.selectedTopic) || '').trim(),
-    customerNotes: (preview.customerNotes || fallback?.customerNotes || normalizeString(pageContext?.selectedCustomerNotes) || '').trim() || null,
-    warnings: preview.warnings
-  }
-
-  const previewKey = buildPreviewKey(mergedPreview)
-  if (dismissedPreviewKeys.has(previewKey)) {
-    return
-  }
-  if (previewKey === lastPreviewKey.value && bookingConfirmDialogVisible.value) {
-    return
-  }
-  lastPreviewKey.value = previewKey
-  bookingPreview.value = mergedPreview
-  manualBookingNotes.value = ''
-  bookingConfirmDialogVisible.value = true
+  selectedBookingPreview.value = payload
+  bookingTopicOptions.value = mergedTopics
+  selectedBookingTopic.value = mergedTopics.includes(payload.topic)
+    ? payload.topic
+    : (mergedTopics[0] || payload.topic || '')
+  selectedBookingNotes.value = payload.customerNotes || ''
+  showBookingDialog.value = true
 }
 
 const onAiBookingSubmitPreview = (event: Event): void => {
   const customEvent = event as CustomEvent<AiBookingSubmitPreviewPayload>
-  if (!customEvent.detail) {
+  const payload = customEvent.detail
+  if (
+    !payload ||
+    !Number.isFinite(Number(payload.specialistId)) ||
+    !Number.isFinite(Number(payload.slotId)) ||
+    Number(payload.specialistId) <= 0 ||
+    Number(payload.slotId) <= 0
+  ) {
     return
   }
-  dismissedPreviewKeys.clear()
-  void openBookingPreview(customEvent.detail)
-
-  if (customEvent.detail.warnings?.length) {
-    ElMessage.warning(`AI draft warning: ${customEvent.detail.warnings[0]}`)
-  }
+  void openBookingDialogFromAi(payload).catch(() => {
+    ElMessage.error('Failed to open booking dialog from AI preview.')
+  })
 }
 
-const dismissBookingPreview = () => {
-  if (bookingSubmitting.value) {
+const submitBookingFromDialog = async () => {
+  if (bookingSubmitting.value || !selectedBookingPreview.value) {
     return
   }
-  if (bookingPreview.value) {
-    dismissedPreviewKeys.add(buildPreviewKey(bookingPreview.value))
-  }
-  bookingConfirmDialogVisible.value = false
-  bookingPreview.value = null
-  manualBookingNotes.value = ''
-  lastPreviewKey.value = ''
-}
-
-const formatFee = (fee?: number | null) => {
-  if (fee === null || fee === undefined) {
-    return 'N/A'
-  }
-  const amount = Number(fee)
-  return Number.isFinite(amount) ? `CNY ${amount.toFixed(2)}` : 'N/A'
-}
-
-const confirmBookingFromPreview = async () => {
-  if (!bookingPreview.value || bookingSubmitting.value) {
+  const topic = selectedBookingTopic.value.trim()
+  if (!topic) {
+    ElMessage.warning('Please choose a booking topic.')
     return
   }
 
   bookingSubmitting.value = true
   try {
-    const created = await createBooking({
-      specialistId: bookingPreview.value.specialistId,
-      slotId: bookingPreview.value.slotId,
-      topic: bookingPreview.value.topic,
-      customerNotes: manualBookingNotes.value.trim(),
+    const createdBooking = await createBooking({
+      specialistId: selectedBookingPreview.value.specialistId,
+      slotId: selectedBookingPreview.value.slotId,
+      topic,
+      customerNotes: selectedBookingNotes.value.trim(),
     }, true)
-
-    bookingPreview.value = null
-    bookingConfirmDialogVisible.value = false
-    manualBookingNotes.value = ''
-    lastPreviewKey.value = ''
+    closeBookingDialog()
     aiChatStore.closeDrawer()
-    ElMessage.success(`Booking created successfully. Status: ${created.status}.`)
-    void router.push({
-      path: '/customer/bookings'
-    })
+    ElMessage.success(`Booking created successfully. Status: ${createdBooking.status}.`)
+    await router.push('/customer/bookings')
   } catch (error: any) {
-    const message = error?.message || 'Failed to create booking.'
-    ElMessage.error(message)
+    ElMessage.error(error?.message || 'Failed to create booking.')
   } finally {
     bookingSubmitting.value = false
   }
@@ -1097,51 +386,22 @@ const confirmBookingFromPreview = async () => {
 
 onMounted(() => {
   window.addEventListener('resize', updateMobileState)
+  window.addEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
+  window.addEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
   window.addEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
 })
 
-watch(
-  () => {
-    const latest = aiChatStore.messages[aiChatStore.messages.length - 1]
-    if (!latest) {
-      return ''
-    }
-    return `${latest.id}|${latest.role}|${latest.status}|${latest.content}`
-  },
-  snapshot => {
-    if (!snapshot) {
-      return
-    }
-    const latestMessage = aiChatStore.messages[aiChatStore.messages.length - 1]
-    if (!latestMessage || latestMessage.status !== 'done') {
-      return
-    }
-
-    const isAssistantMessage = latestMessage.role === 'assistant'
-    const isUserBookingMessage = latestMessage.role === 'user' && hasBookingIntent(latestMessage.content || '')
-    if (!isAssistantMessage && !isUserBookingMessage) {
-      return
-    }
-    if (isAssistantMessage && isBookingConflictContent(latestMessage.content || '')) {
-      return
-    }
-
-    dismissedPreviewKeys.clear()
-    const parsedPreview = parsePreviewFromAssistantMessage(latestMessage.content || '')
-    if (parsedPreview) {
-      void openBookingPreview(parsedPreview)
-    }
-  }
-)
-
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateMobileState)
+  window.removeEventListener(AI_BOOKING_CANCEL_MODAL_EVENT, onAiBookingCancelModal as EventListener)
+  window.removeEventListener(AI_BOOKING_RESCHEDULE_MODAL_EVENT, onAiBookingRescheduleModal as EventListener)
   window.removeEventListener(AI_BOOKING_SUBMIT_PREVIEW_EVENT, onAiBookingSubmitPreview as EventListener)
-  bookingConfirmDialogVisible.value = false
-  bookingPreview.value = null
-  bookingSubmitting.value = false
-  manualBookingNotes.value = ''
-  lastPreviewKey.value = ''
+  showCancelDialog.value = false
+  showRescheduleDialog.value = false
+  showBookingDialog.value = false
+  resetCancelDialogState()
+  resetRescheduleDialogState()
+  resetBookingDialogState()
 })
 
 const drawerVisible = computed<boolean>({
@@ -1153,10 +413,12 @@ const drawerVisible = computed<boolean>({
     }
 
     aiChatStore.closeDrawer()
-    bookingConfirmDialogVisible.value = false
-    bookingPreview.value = null
-    manualBookingNotes.value = ''
-    lastPreviewKey.value = ''
+    showCancelDialog.value = false
+    showRescheduleDialog.value = false
+    showBookingDialog.value = false
+    resetCancelDialogState()
+    resetRescheduleDialogState()
+    resetBookingDialogState()
   }
 })
 </script>
@@ -1213,6 +475,73 @@ const drawerVisible = computed<boolean>({
   }
 }
 
+.ai-chat-drawer__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.ai-chat-drawer__welcome-text {
+  text-align: center;
+  margin-bottom: var(--space-6);
+
+  .welcome-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 var(--space-3) 0;
+  }
+
+  .welcome-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-regular);
+    margin: 0 0 var(--space-4) 0;
+  }
+
+  .welcome-hint {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+}
+
+.ai-chat-drawer__welcome-prompts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 400px;
+}
+
+.ai-chat-drawer__prompt-btn {
+  width: 100%;
+  margin: 0 !important; /* Fix Element Plus sibling button left margin */
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding: var(--space-3);
+  line-height: 1.4;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-background-soft);
+  color: var(--color-text-primary);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
 .ai-chat-drawer__footer {
   flex-shrink: 0;
   position: relative;
@@ -1221,37 +550,34 @@ const drawerVisible = computed<boolean>({
   background-color: var(--color-bg-surface);
 }
 
-.booking-confirm-content {
+.ai-booking-dialog__content {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
-.booking-confirm-row {
+.ai-booking-dialog__row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--color-border);
+  gap: var(--space-4);
+
+  span {
+    color: var(--color-text-secondary);
+  }
+
+  strong {
+    color: var(--color-text-primary);
+    text-align: right;
+  }
 }
 
-.booking-confirm-row:first-child {
-  border-top: none;
-  padding-top: 0;
+.ai-booking-dialog__form {
+  margin-top: var(--space-2);
 }
 
-.booking-confirm-row span {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-.booking-confirm-row strong {
-  color: var(--color-text-primary);
-  text-align: right;
-}
-
-.booking-confirm-notes-input {
-  width: 260px;
+.ai-booking-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 
 :deep(.ai-chat-drawer__message-area .ai-message-list) {
@@ -1262,7 +588,7 @@ const drawerVisible = computed<boolean>({
 @media (max-width: 640px) {
   .ai-chat-drawer__header {
     align-items: center;
-    flex-direction: row; // Keep header items side by side on mobile for space efficiency
+    flex-direction: row;
   }
 }
 </style>
@@ -1272,12 +598,12 @@ const drawerVisible = computed<boolean>({
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-surface);
-  border-radius: 28px 0 0 28px !important; // Desktop rounded
+  border-radius: 28px 0 0 28px !important;
   box-shadow: none !important;
   border-left: 1px solid var(--color-border);
 
   &.btt {
-    border-radius: 28px 28px 0 0 !important; // Mobile bottom-to-top mode rounded top
+    border-radius: 28px 28px 0 0 !important;
     border-left: none;
     border-top: 1px solid var(--color-border);
   }

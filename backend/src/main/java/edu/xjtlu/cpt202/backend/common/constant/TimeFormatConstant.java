@@ -25,6 +25,6 @@ public class TimeFormatConstant {
     /**
      * The default timezone used by the application for LocalDateTime conversions.
      */
-    public static final String DEFAULT_TIMEZONE = "GMT+8";
+    public static final String DEFAULT_TIMEZONE = "Asia/Shanghai";
 }
 

@@ -79,22 +79,35 @@ Defines the following services:
    ```
 
 ## Development (`docker-compose.dev.yml`)
-This mode mounts source code into containers for faster iteration.
+This mode runs infrastructure services in Docker and keeps the backend on the host for faster Java iteration.
 
 1. Create `.env`:
    ```bash
    cp .env.example .env
    ```
-2. Start dev services:
+2. Start Docker services:
    ```bash
    docker compose -f docker-compose.dev.yml up -d
    ```
-3. Access:
+   This starts MySQL, Redis, RedisInsight, phpMyAdmin, and the dev frontend. The backend container is disabled by default.
+
+3. Start the backend locally:
+   ```bash
+   scripts\run-local-backend.cmd
+   ```
+   The dev profile connects to Docker MySQL on `127.0.0.1:9001` and Docker Redis on `127.0.0.1:9002` by default.
+
+4. Access:
    - **Frontend (Vite)**: `http://localhost:5331`
    - **Backend (dev profile)**: `http://localhost:8081`
    - **Swagger UI**: `http://localhost:8081/swagger-ui/index.html`
    - **phpMyAdmin**: `http://localhost:9003`
    - **RedisInsight**: `http://localhost:5540`
+
+If you explicitly want the backend inside Docker, run it with the profile:
+```bash
+docker compose -f docker-compose.dev.yml --profile docker-backend up -d backend
+```
 
 
 ## Notes

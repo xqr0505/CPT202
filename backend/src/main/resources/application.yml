@@ -53,6 +53,34 @@ ai:
       api-key: ${DASHSCOPE_API_KEY:}
       model-name: ${DASHSCOPE_EMBEDDING_MODEL_NAME:text-embedding-v2}
       dimension: ${DASHSCOPE_EMBEDDING_DIMENSION:1536}
+  cache:
+    qa:
+      enabled: ${AI_CACHE_QA_ENABLED:true}
+      exact-prefix: ${AI_CACHE_QA_EXACT_PREFIX:expertlink:ai:cache:qa:exact:}
+      doc-prefix: ${AI_CACHE_QA_DOC_PREFIX:expertlink:ai:cache:qa:}
+      index-name: ${AI_CACHE_QA_INDEX_NAME:expertlink:qa:cache}
+      semantic-enabled: ${AI_CACHE_QA_SEMANTIC_ENABLED:true}
+      similarity-threshold: ${AI_CACHE_QA_SIMILARITY_THRESHOLD:0.95}
+      max-results: ${AI_CACHE_QA_MAX_RESULTS:1}
+      ttl-seconds: ${AI_CACHE_QA_TTL_SECONDS:604800}
+  search:
+    specialist:
+      enabled: ${AI_SEARCH_SPECIALIST_ENABLED:true}
+      doc-prefix: ${AI_SEARCH_SPECIALIST_DOC_PREFIX:expertlink:ai:specialist:}
+      index-name: ${AI_SEARCH_SPECIALIST_INDEX_NAME:expertlink:ai:specialist}
+      top-k: ${AI_SEARCH_SPECIALIST_TOP_K:10}
+      max-results: ${AI_SEARCH_SPECIALIST_MAX_RESULTS:5}
+      similarity-threshold: ${AI_SEARCH_SPECIALIST_SIMILARITY_THRESHOLD:0.90}
+      strong-keyword-similarity-threshold: ${AI_SEARCH_SPECIALIST_STRONG_KEYWORD_SIMILARITY_THRESHOLD:0.88}
+      semantic-weight: ${AI_SEARCH_SPECIALIST_SEMANTIC_WEIGHT:0.60}
+      keyword-weight: ${AI_SEARCH_SPECIALIST_KEYWORD_WEIGHT:0.40}
+      include-inactive: ${AI_SEARCH_SPECIALIST_INCLUDE_INACTIVE:false}
+  intent:
+    router:
+      api-key: ${AI_INTENT_ROUTER_API_KEY:${OPENAI_API_KEY:}}
+      model-name: ${AI_INTENT_ROUTER_MODEL_NAME:${AI_RAG_REWRITE_LIGHT_MODEL_NAME:${OPENAI_MODEL_NAME:}}}
+      base-url: ${AI_INTENT_ROUTER_BASE_URL:${OPENAI_BASE_URL:}}
+      timeout-ms: ${AI_INTENT_ROUTER_TIMEOUT_MS:3500}
   rag:
     enabled: ${AI_RAG_ENABLED:true}
     knowledge-location: ${AI_RAG_KNOWLEDGE_LOCATION:classpath*:/knowledge/**/*.md}

@@ -18,7 +18,12 @@ import {
 
 const AI_BOOKING_DRAFT_EVENT = 'ai-booking-form-draft'
 const AI_BOOKING_SUBMIT_PREVIEW_EVENT = 'ai-booking-submit-preview'
+const AI_BOOKING_CANCEL_MODAL_EVENT = 'ai-booking-cancel-modal'
+const AI_BOOKING_RESCHEDULE_MODAL_EVENT = 'ai-booking-reschedule-modal'
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context'
+const CANCEL_MODAL_PATTERN = /\[TRIGGER_CANCEL_MODAL:(\d+)\]/i
+const RESCHEDULE_MODAL_PATTERN = /\[TRIGGER_RESCHEDULE_MODAL:(\d+):((?:\d{4}-\d{2}-\d{2})|N\/A)?:(\d*)\]/i
+const WORKFLOW_ABORT_MARKER_PATTERN = /\[(?:BOOKING|CANCEL|RESCHEDULE)_TASK_ABORTED\]\s*/gi
 
 interface StoredSessionUser {
   userId?: number | string | null
@@ -44,7 +49,18 @@ interface AiBookingSubmitPreviewPayload {
   consultationFee?: number | null
   topic: string
   customerNotes?: string | null
+  availableTopics?: string[]
   warnings?: string[]
+}
+
+interface AiBookingCancelModalPayload {
+  bookingId: number
+}
+
+interface AiBookingRescheduleModalPayload {
+  bookingId: number
+  targetDate?: string | null
+  suggestedSlotId?: number | null
 }
 
 const resolveErrorMessage = (error: unknown): string => {
@@ -247,7 +263,7 @@ const normalizeLineValue = (value: string | null): string | null => {
     return null
   }
   const sanitized = value
-    .replace(/^[\u2022\-\*\d.)\s]+/, '')
+    .replace(/^[\u2022\-*\d.)\s]+/, '')
     .replace(/[\uFF08(][^)\uFF09]*?(specialistId|slotId)\s*[:=\uFF1A\uFF1D].*$/i, '')
     .trim()
   return sanitized || null
@@ -271,7 +287,7 @@ const isBookingConflictContent = (content: string): boolean => {
 
 const extractTimeRangeFromContent = (content: string): [string | null, string | null] => {
   const lineCandidate = extractFirstMatch(content, [
-    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D\?\-]?\s*([^\n\r]+)/i,
+    /(?:\u65f6\u6bb5|time(?:\s*slot)?|slot)\s*[:=\uFF1A\uFF1D?-]?\s*([^\n\r]+)/i,
   ])
   const segment = lineCandidate || content
   const segmentTimes = segment.match(/\d{1,2}:\d{2}(?::\d{2})?/g)
@@ -307,7 +323,7 @@ const tryExtractBookingSubmitPreviewFromText = (content: string): AiBookingSubmi
       /slotId\s*[^\d\n\r]{0,8}(\d+)/i,
       /slot\s*id\s*[:=\uFF1A\uFF1D]?\s*(\d+)/i,
       /slot\s+id\s*[:=\uFF1A\uFF1D]\s*(\d+)/i,
-      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D\?]?\s*(\d+)/i,
+      /(?:\u65f6\u6bb5|time\s*slot)\s*id\s*[:=\uFF1A\uFF1D?]?\s*(\d+)/i,
       /(?:slot\s*id|\u65f6\u6bb5\s*id|\u65f6\u6bb5id)\s*[^\d\n\r]{0,8}(\d+)/i,
     ])
   )
@@ -415,6 +431,10 @@ const tryExtractBookingSubmitPreview = (content: string): AiBookingSubmitPreview
     const warnings = Array.isArray(warningsRaw)
       ? warningsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
       : undefined
+    const availableTopicsRaw = getParsedValueByAliases(parsed, ['availableTopics', 'available_topics', '\u53ef\u9009\u4e3b\u9898'])
+    const availableTopics = Array.isArray(availableTopicsRaw)
+      ? availableTopicsRaw.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : undefined
 
     const hasStructuredBookingFields = Boolean(
       specialistIdRaw || slotIdRaw || topic || slotDate || startTime || endTime || specialistName
@@ -438,6 +458,7 @@ const tryExtractBookingSubmitPreview = (content: string): AiBookingSubmitPreview
         specialistName: specialistName || normalizeString(pageContext?.specialistName),
         consultationFee: consultationFee ?? normalizeNumber(pageContext?.consultationFee),
         customerNotes: customerNotes || normalizeString(pageContext?.selectedCustomerNotes),
+        availableTopics,
         warnings
       }
     }
@@ -457,6 +478,75 @@ const emitBookingSubmitPreview = (assistantContent: string): void => {
   window.dispatchEvent(new CustomEvent<AiBookingSubmitPreviewPayload>(AI_BOOKING_SUBMIT_PREVIEW_EVENT, {
     detail: preview
   }))
+}
+
+const extractCancelModalBookingId = (content: string): number | null => {
+  const matched = content.match(CANCEL_MODAL_PATTERN)
+  if (!matched?.[1]) {
+    return null
+  }
+  const parsed = Number(matched[1])
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+  return Math.trunc(parsed)
+}
+
+const extractRescheduleModalPayload = (content: string): AiBookingRescheduleModalPayload | null => {
+  const matched = content.match(RESCHEDULE_MODAL_PATTERN)
+  if (!matched?.[1]) {
+    return null
+  }
+  const bookingId = Number(matched[1])
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return null
+  }
+  const rawTargetDate = normalizeString(matched[2] || null)
+  const targetDate = rawTargetDate === 'N/A' ? null : rawTargetDate
+  const suggestedSlotId = normalizeNumericId(matched[3] || null) ?? null
+  return {
+    bookingId: Math.trunc(bookingId),
+    targetDate,
+    suggestedSlotId
+  }
+}
+
+const stripCancelModalMarker = (content: string): string => {
+  return content.replace(CANCEL_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const stripRescheduleModalMarker = (content: string): string => {
+  return content.replace(RESCHEDULE_MODAL_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const stripWorkflowAbortMarker = (content: string): string => {
+  return content.replace(WORKFLOW_ABORT_MARKER_PATTERN, '').trim()
+}
+
+const emitCancelModal = (assistantContent: string): string => {
+  if (typeof window === 'undefined') {
+    return assistantContent
+  }
+  const bookingId = extractCancelModalBookingId(assistantContent)
+  if (bookingId) {
+    window.dispatchEvent(new CustomEvent<AiBookingCancelModalPayload>(AI_BOOKING_CANCEL_MODAL_EVENT, {
+      detail: { bookingId }
+    }))
+  }
+  return stripCancelModalMarker(assistantContent)
+}
+
+const emitRescheduleModal = (assistantContent: string): string => {
+  if (typeof window === 'undefined') {
+    return assistantContent
+  }
+  const payload = extractRescheduleModalPayload(assistantContent)
+  if (payload) {
+    window.dispatchEvent(new CustomEvent<AiBookingRescheduleModalPayload>(AI_BOOKING_RESCHEDULE_MODAL_EVENT, {
+      detail: payload
+    }))
+  }
+  return stripRescheduleModalMarker(assistantContent)
 }
 
 interface AiBookingPageContext {
@@ -630,8 +720,9 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
 
   const finalizeAssistantMessage = (messageId: string): void => {
     updateMessage(messageId, message => {
-      message.content = message.content.trim()
-        ? message.content
+      const normalizedContent = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(message.content.trim())))
+      message.content = normalizedContent.trim()
+        ? normalizedContent
         : AI_CHAT_EMPTY_RESPONSE_TEXT
       message.status = AI_CHAT_MESSAGE_STATUS.done
       emitBookingDraft(message.content)
@@ -715,10 +806,14 @@ export const useAiChatStore = defineStore(AI_CHAT_STORE_ID, () => {
         removeMessage(assistantMessageId)
       } else {
         updateMessage(assistantMessageId, currentMessage => {
+          currentMessage.content = stripWorkflowAbortMarker(emitRescheduleModal(emitCancelModal(currentMessage.content)))
           currentMessage.status = AI_CHAT_MESSAGE_STATUS.done
         })
-        emitBookingDraft(assistantMessage.content)
-        emitBookingSubmitPreview(assistantMessage.content)
+        const finalAssistantMessage = messages.value.find(messageItem => messageItem.id === assistantMessageId)
+        if (finalAssistantMessage) {
+          emitBookingDraft(finalAssistantMessage.content)
+          emitBookingSubmitPreview(finalAssistantMessage.content)
+        }
       }
       errorMessage.value = resolveErrorMessage(error)
       state.value = AI_CHAT_STATE.error

@@ -1,11 +1,19 @@
 package edu.xjtlu.cpt202.backend.modules.ai.service.impl;
 
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.utils.SecurityUtils;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.BookingWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.CancelWorkflowService;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleTaskStateStore;
+import edu.xjtlu.cpt202.backend.modules.ai.service.RescheduleWorkflowService;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
@@ -23,16 +31,34 @@ public class AiChatServiceImpl implements AiChatService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z");
 
     private final Assistant assistant;
+    private final BookingWorkflowService bookingWorkflowService;
+    private final CancelWorkflowService cancelWorkflowService;
+    private final RescheduleWorkflowService rescheduleWorkflowService;
     private final ChatMemoryStore chatMemoryStore;
+    private final BookingTaskStateStore bookingTaskStateStore;
+    private final CancelTaskStateStore cancelTaskStateStore;
+    private final RescheduleTaskStateStore rescheduleTaskStateStore;
     private final AiChatProfiler aiChatProfiler;
 
     public AiChatServiceImpl(
             Assistant assistant,
+            BookingWorkflowService bookingWorkflowService,
+            CancelWorkflowService cancelWorkflowService,
+            RescheduleWorkflowService rescheduleWorkflowService,
             ChatMemoryStore chatMemoryStore,
+            BookingTaskStateStore bookingTaskStateStore,
+            CancelTaskStateStore cancelTaskStateStore,
+            RescheduleTaskStateStore rescheduleTaskStateStore,
             AiChatProfiler aiChatProfiler
     ) {
         this.assistant = assistant;
+        this.bookingWorkflowService = bookingWorkflowService;
+        this.cancelWorkflowService = cancelWorkflowService;
+        this.rescheduleWorkflowService = rescheduleWorkflowService;
         this.chatMemoryStore = chatMemoryStore;
+        this.bookingTaskStateStore = bookingTaskStateStore;
+        this.cancelTaskStateStore = cancelTaskStateStore;
+        this.rescheduleTaskStateStore = rescheduleTaskStateStore;
         this.aiChatProfiler = aiChatProfiler;
     }
 
@@ -45,6 +71,25 @@ public class AiChatServiceImpl implements AiChatService {
                 "userId", userId,
                 "messageLength", normalizedUserMessage.length()
         ));
+        String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+        if (bookingWorkflowService.hasActiveTask(userId)) {
+            return bookingWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.hasActiveTask(userId)) {
+            return cancelWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.hasActiveTask(userId)) {
+            return rescheduleWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return cancelWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return rescheduleWorkflowService.handle(userId, normalizedUserMessage);
+        }
+        if (bookingWorkflowService.shouldStartWorkflow(userId, originalUserMessage)) {
+            return bookingWorkflowService.handle(userId, normalizedUserMessage);
+        }
         return assistant.chat(userId, normalizedUserMessage);
     }
 
@@ -57,12 +102,36 @@ public class AiChatServiceImpl implements AiChatService {
                 "memoryId", memoryId,
                 "messageLength", normalizedUserMessage.length()
         ));
+        String originalUserMessage = ParallelToolAssistant.extractOriginalUserMessage(normalizedUserMessage);
+        if (bookingWorkflowService.hasActiveTask(memoryId)) {
+            return bookingWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.hasActiveTask(memoryId)) {
+            return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.hasActiveTask(memoryId)) {
+            return rescheduleWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (cancelWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return cancelWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (rescheduleWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return rescheduleWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
+        if (bookingWorkflowService.shouldStartWorkflow(memoryId, originalUserMessage)) {
+            return bookingWorkflowService.streamHandle(memoryId, normalizedUserMessage);
+        }
         return assistant.streamChat(memoryId, normalizedUserMessage);
     }
 
     @Override
     public void clearCurrentUserMemory() {
-        chatMemoryStore.deleteMessages(currentUserId());
+        Long userId = currentUserId();
+        chatMemoryStore.deleteMessages(userId);
+        // Clearing chat history should also clear any active workflow state so the UI truly "resets".
+        bookingTaskStateStore.clear(userId);
+        cancelTaskStateStore.clear(userId);
+        rescheduleTaskStateStore.clear(userId);
     }
 
     private Long currentUserId() {
@@ -85,4 +154,60 @@ public class AiChatServiceImpl implements AiChatService {
         return (System.nanoTime() - startNs) / 1_000_000;
     }
 
+    private static class SingleReplyTokenStream implements TokenStream {
+
+        private final String reply;
+        private java.util.function.Consumer<String> onNext = ignored -> { };
+        private java.util.function.Consumer<Response<AiMessage>> onComplete = ignored -> { };
+        private java.util.function.Consumer<Throwable> onError = ignored -> { };
+
+        private SingleReplyTokenStream(String reply) {
+            this.reply = reply;
+        }
+
+        @Override
+        public TokenStream onRetrieved(java.util.function.Consumer<java.util.List<dev.langchain4j.rag.content.Content>> consumer) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onToolExecuted(java.util.function.Consumer<dev.langchain4j.service.tool.ToolExecution> consumer) {
+            return this;
+        }
+
+        @Override
+        public TokenStream onComplete(java.util.function.Consumer<Response<AiMessage>> consumer) {
+            this.onComplete = consumer;
+            return this;
+        }
+
+        @Override
+        public TokenStream onError(java.util.function.Consumer<Throwable> consumer) {
+            this.onError = consumer;
+            return this;
+        }
+
+        @Override
+        public TokenStream ignoreErrors() {
+            return this;
+        }
+
+        @Override
+        public void start() {
+            try {
+                if (reply != null && !reply.isBlank()) {
+                    onNext.accept(reply);
+                }
+                onComplete.accept(Response.from(AiMessage.from(reply == null ? "" : reply)));
+            } catch (Throwable throwable) {
+                onError.accept(throwable);
+            }
+        }
+
+        @Override
+        public TokenStream onNext(java.util.function.Consumer<String> consumer) {
+            this.onNext = consumer;
+            return this;
+        }
+    }
 }

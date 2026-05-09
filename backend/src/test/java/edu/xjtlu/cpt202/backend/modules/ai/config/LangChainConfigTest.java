@@ -5,9 +5,11 @@ import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.modules.ai.profiling.AiChatProfiler;
 import edu.xjtlu.cpt202.backend.modules.ai.service.Assistant;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSemanticCacheService;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingFormTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiBookingSubmitTool;
+import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistSearchTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.AiSpecialistAvailabilityTool;
 import edu.xjtlu.cpt202.backend.modules.ai.tool.KnowledgeTools;
 import org.junit.jupiter.api.Test;
@@ -35,7 +37,9 @@ class LangChainConfigTest {
             .withBean(AiBookingSearchTool.class, () -> mock(AiBookingSearchTool.class))
             .withBean(AiBookingFormTool.class, () -> mock(AiBookingFormTool.class))
             .withBean(AiBookingSubmitTool.class, () -> mock(AiBookingSubmitTool.class))
+            .withBean(AiSpecialistSearchTool.class, () -> mock(AiSpecialistSearchTool.class))
             .withBean(AiSpecialistAvailabilityTool.class, () -> mock(AiSpecialistAvailabilityTool.class))
+            .withBean(AiSemanticCacheService.class, () -> mock(AiSemanticCacheService.class))
             .withBean(KnowledgeTools.class, () -> mock(KnowledgeTools.class))
             .withBean(CommonProperties.class, CommonProperties::new)
             .withBean(AiChatProfiler.class, () -> new AiChatProfiler(new CommonProperties()))
@@ -47,7 +51,8 @@ class LangChainConfigTest {
     @Test
     void shouldLoadLangChainBeans() {
         contextRunner.run(context -> {
-            assertThat(context).hasSingleBean(ChatLanguageModel.class);
+            assertThat(context).hasBean("chatLanguageModel");
+            assertThat(context).hasBean("intentRouterChatLanguageModel");
             assertThat(context).hasSingleBean(Assistant.class);
             assertThat(context).hasSingleBean(ChatMemoryStore.class);
             assertThat(context.getBean(AiChatMemoryProperties.class).getMaxMessages()).isEqualTo(20);
@@ -70,6 +75,16 @@ class LangChainConfigTest {
                     assertThat(properties.getMaxMessages()).isEqualTo(8);
                     assertThat(properties.getTtlSeconds()).isEqualTo(120L);
                     assertThat(properties.getKeyPrefix()).isEqualTo("test:ai:memory");
+                });
+    }
+
+    @Test
+    void shouldOverrideModelProperties() {
+        contextRunner
+                .withPropertyValues("ai.model.max-output-tokens=256")
+                .run(context -> {
+                    AiModelProperties properties = context.getBean(AiModelProperties.class);
+                    assertThat(properties.getMaxOutputTokens()).isEqualTo(256);
                 });
     }
 }

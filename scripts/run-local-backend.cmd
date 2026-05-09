@@ -1,6 +1,14 @@
 @echo off
 setlocal
 
+if exist "%~dp0..\\.env" (
+    echo Loading environment variables from .env
+    for /f "usebackq tokens=1,* delims==" %%A in (`findstr /r /v "^# ^$" "%~dp0..\\.env"`) do (
+        set "%%A=%%B"
+    )
+    echo.
+)
+
 set "PORT_PID="
 for /f %%i in ('powershell -NoProfile -Command "$conn = Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if ($conn) { $conn }"') do set "PORT_PID=%%i"
 if defined PORT_PID (

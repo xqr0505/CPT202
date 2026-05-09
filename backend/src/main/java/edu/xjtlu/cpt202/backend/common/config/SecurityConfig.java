@@ -145,6 +145,7 @@ public class SecurityConfig {
         }
 
         configuration.addAllowedOrigin("http://120.26.245.169");
+        configuration.addAllowedOrigin("https://120.26.245.169");
 
         configuration.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"

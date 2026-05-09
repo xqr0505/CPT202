@@ -13,6 +13,7 @@ import edu.xjtlu.cpt202.backend.modules.ai.service.AiChatService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 /**
@@ -50,9 +52,12 @@ public class AiChatController {
 
     @PreAuthorize(AiConstant.AI_CHAT_ACCESS_EXPRESSION)
     @PostMapping(value = AiConstant.CHAT_PATH, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chat(@Valid @RequestBody ChatRequestDTO chatRequestDTO) {
+    public SseEmitter chat(@Valid @RequestBody ChatRequestDTO chatRequestDTO, HttpServletResponse response) {
         long requestStartNs = System.nanoTime();
         Long userId = SecurityUtils.getCurrentUserId();
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache, no-transform");
+        response.setHeader(HttpHeaders.CONNECTION, "keep-alive");
         String traceId = aiChatProfiler.startTrace(
                 "controller.chat.request",
                 userId,

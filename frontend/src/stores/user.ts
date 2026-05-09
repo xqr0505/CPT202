@@ -1,7 +1,15 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as apiLogout } from '@/api/auth'
-import { getAuthToken, getUser, isRememberMeSession, logout as clearLocalAuth, saveToken, saveUser } from '@/api/request'
+import {
+  getAuthToken,
+  getUser,
+  isRememberMeSession,
+  logout as clearLocalAuth,
+  saveToken,
+  saveUser,
+  type StoredUser
+} from '@/api/request'
 import { fetchUserProfile, type UserProfile } from '@/api/user'
 import { USER_ROLES, type UserRoleType } from '@/constants/roles'
 
@@ -16,17 +24,6 @@ export interface UserInfo {
 }
 
 export type UserRole = UserRoleType | null
-
-interface StoredUser {
-  userId?: number
-  id?: number
-  role?: string
-  email?: string
-  displayName?: string
-  fullName?: string
-  phoneNumber?: string
-  avatar?: string
-}
 
 const normalizeRole = (role?: string | null): UserRole => {
   if (!role) return null
@@ -44,7 +41,15 @@ const normalizeRole = (role?: string | null): UserRole => {
 }
 
 const getStoredSession = (): { token: string | null; userInfo: UserInfo | null; role: UserRole } => {
-  const storedUser = getUser() as StoredUser | null
+  const storedUser = getUser() as (StoredUser & {
+    userId?: number
+    id?: number
+    email?: string
+    displayName?: string
+    fullName?: string
+    phoneNumber?: string
+    avatar?: string
+  }) | null
 
   return {
     token: getAuthToken(),

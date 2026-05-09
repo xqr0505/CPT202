@@ -6,6 +6,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
+      TZ: Asia/Shanghai
+    command: ["--default-time-zone=+08:00"]
     ports:
       - "9001:3306"
     volumes:
@@ -30,9 +32,11 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/${DB_NAME}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/${DB_NAME}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia%2FShanghai
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - TZ=Asia/Shanghai
+      - JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Shanghai
       - MAIL_PASSWORD=${MAIL_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - REDIS_HOST=${REDIS_HOST:-redis}
@@ -43,6 +47,10 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - AI_INTENT_ROUTER_API_KEY=${AI_INTENT_ROUTER_API_KEY:-${OPENAI_API_KEY}}
+      - AI_INTENT_ROUTER_MODEL_NAME=${AI_INTENT_ROUTER_MODEL_NAME:-${AI_RAG_REWRITE_LIGHT_MODEL_NAME:-${OPENAI_MODEL_NAME}}}
+      - AI_INTENT_ROUTER_BASE_URL=${AI_INTENT_ROUTER_BASE_URL:-${OPENAI_BASE_URL}}
+      - AI_INTENT_ROUTER_TIMEOUT_MS=${AI_INTENT_ROUTER_TIMEOUT_MS:-3500}
       - AI_RAG_ENABLED=${AI_RAG_ENABLED:-true}
       - AI_RAG_REDIS_HOST=${REDIS_HOST:-redis}
       - AI_RAG_REDIS_PORT=${REDIS_PORT:-6379}
@@ -75,6 +83,10 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/expertlink/ssl:/etc/nginx/ssl:ro
+      - /opt/expertlink/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
 

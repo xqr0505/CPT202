@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.xjtlu.cpt202.backend.common.result.PageResult;
 import edu.xjtlu.cpt202.backend.common.exception.BusinessException;
+import edu.xjtlu.cpt202.backend.modules.ai.service.AiSpecialistSearchIndexService;
 import edu.xjtlu.cpt202.backend.modules.booking.enums.BookingStatusEnum;
 import edu.xjtlu.cpt202.backend.modules.booking.mapper.BookingMapper;
 import edu.xjtlu.cpt202.backend.modules.booking.model.entity.Booking;
@@ -58,6 +59,9 @@ class AdminSpecialistServiceImplTest {
 
     @Mock
     private SpecialistProfileMapper specialistProfileMapper;
+
+    @Mock
+    private AiSpecialistSearchIndexService aiSpecialistSearchIndexService;
 
     @Mock
     private SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
@@ -170,13 +174,16 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("300.00"), null, null, "ACTIVE"
         )).thenReturn(1);
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, null
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("300.00"), null, null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
         ArgumentCaptor<SpecialistFeeChangeRecord> recordCaptor = ArgumentCaptor.forClass(SpecialistFeeChangeRecord.class);
         verify(specialistFeeChangeRecordMapper).insert(recordCaptor.capture());
         assertEquals(new BigDecimal("260.00"), recordCaptor.getValue().getOldFee());
@@ -204,13 +211,17 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, null
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
         verify(adminSpecialistMapper).updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         );
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
+        verify(aiSpecialistSearchIndexService).upsertSpecialist(1L);
     }
 
     @Test
@@ -235,6 +246,9 @@ class AdminSpecialistServiceImplTest {
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
         when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, "encoded-default-password"
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
@@ -243,6 +257,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 "encoded-default-password"
         );
         verify(mailSender, timeout(1000).atLeastOnce()).createMimeMessage();
@@ -269,6 +284,9 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, null
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
@@ -277,6 +295,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 null
         );
         verify(mailSender, never()).createMimeMessage();
@@ -305,6 +324,9 @@ class AdminSpecialistServiceImplTest {
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
         when(passwordEncoder.encode("12345Expertlink")).thenReturn("encoded-default-password");
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, "encoded-default-password"
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
@@ -313,6 +335,7 @@ class AdminSpecialistServiceImplTest {
                 101L,
                 "Dr. Emily Chen",
                 "emily.chen@example.com",
+                null,
                 "encoded-default-password"
         );
     }
@@ -336,6 +359,7 @@ class AdminSpecialistServiceImplTest {
 
         verify(userAccountService).createUser("new.specialist@example.com", "12345Expertlink", "SPECIALIST", "Dr. New Specialist");
         verify(specialistProfileMapper).insert(any());
+        verify(aiSpecialistSearchIndexService).upsertSpecialist(any());
         verify(mailSender, timeout(1000).atLeastOnce()).createMimeMessage();
     }
 
@@ -434,10 +458,13 @@ class AdminSpecialistServiceImplTest {
         when(adminSpecialistMapper.updateSpecialistProfileById(
                 1L, 1L, "CHIEF", new BigDecimal("260.00"), null, null, "ACTIVE"
         )).thenReturn(1);
+        when(adminSpecialistMapper.updateUserAccountById(
+                101L, "Dr. Emily Chen", "emily.chen@example.com", null, null
+        )).thenReturn(1);
 
         adminSpecialistService.updateSpecialist(1L, request);
 
-        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null);
+        verify(adminSpecialistMapper).updateUserAccountById(101L, "Dr. Emily Chen", "emily.chen@example.com", null, null);
         verify(specialistFeeChangeRecordMapper, never()).insert(any());
     }
 
@@ -453,6 +480,7 @@ class AdminSpecialistServiceImplTest {
         int cancelledBookingCount = adminSpecialistService.updateSpecialistStatus(1L, "Active");
 
         verify(adminSpecialistMapper).updateSpecialistStatusById(1L, "ACTIVE");
+        verify(aiSpecialistSearchIndexService).upsertSpecialist(1L);
         assertEquals(0, cancelledBookingCount);
     }
 

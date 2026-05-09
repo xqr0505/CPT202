@@ -48,6 +48,7 @@ public interface SpecialistQueryMapper {
                         FROM time_slots ts
                         WHERE ts.specialist_id = sp.id
                           AND ts.slot_date = #{query.date}
+                          AND ts.is_deleted = 0
                           AND ts.status = 'AVAILABLE'
                           AND (
                               ts.slot_date > #{today}
@@ -79,6 +80,7 @@ public interface SpecialistQueryMapper {
                         FROM time_slots ts_filter
                         WHERE ts_filter.specialist_id = sp.id
                           AND ts_filter.slot_date = #{query.date}
+                          AND ts_filter.is_deleted = 0
                           AND ts_filter.status = 'AVAILABLE'
                           AND (
                               ts_filter.slot_date > #{today}
@@ -165,6 +167,7 @@ public interface SpecialistQueryMapper {
             FROM time_slots ts
             WHERE ts.specialist_id = #{specialistId}
               AND ts.slot_date = #{date}
+              AND ts.is_deleted = 0
               AND ts.status IN ('AVAILABLE', 'BOOKED', 'LOCKED')
               AND (
                   ts.slot_date > #{today}

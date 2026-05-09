@@ -61,7 +61,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { Clock, ArrowRight } from '@element-plus/icons-vue'
 import { getUpcomingBookings } from '@/api/booking'
 import type { UpcomingBookingResponse } from '@/api/booking'

@@ -8,7 +8,7 @@ import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.springframework.stereotype.Component;
 
 /**
- *
+ * Tool for drafting booking forms based on user input and context.
  * @author QiranXiao
  * @since 2026/4/18
  */

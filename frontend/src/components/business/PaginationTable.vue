@@ -138,14 +138,12 @@ onMounted(() => {
 @use '@/styles/variables';
 
 .pagination-table {
-  /* Removed card background and shadow for flat design */
   background-color: var(---color-bg-page);
   border-radius: 0;
   box-shadow: none;
   padding: 0;
 
   .table-container {
-    /* Adjusted styles for flat design */
     border: 0px solid var(--color-border);
     border-radius: 8px;
     overflow: hidden;
@@ -161,7 +159,6 @@ onMounted(() => {
   }
 
   .pagination-container {
-    /* Adjusted styles for flat design */
     margin-top: 16px;
     display: flex;
     justify-content: center;

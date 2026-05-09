@@ -1,9 +1,12 @@
 package edu.xjtlu.cpt202.backend.modules.specialist.service.impl;
 
+import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSClientBuilder;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import edu.xjtlu.cpt202.backend.common.properties.CommonProperties;
 import edu.xjtlu.cpt202.backend.common.enums.AccountStatusEnum;
 import edu.xjtlu.cpt202.backend.common.enums.SpecialistLevelEnum;
 import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
@@ -42,11 +45,18 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -55,6 +65,8 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminSpecialistServiceImpl.class);
     private static final String DEFAULT_SPECIALIST_INITIAL_PASSWORD = "12345Expertlink";
+    private static final long MAX_IMAGE_SIZE = 2L * 1024 * 1024;
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png");
 
     private final AdminSpecialistMapper adminSpecialistMapper;
     private final SpecialistFeeChangeRecordMapper specialistFeeChangeRecordMapper;
@@ -66,6 +78,7 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
     private final JavaMailSender mailSender;
     private final Environment env;
     private final PasswordEncoder passwordEncoder;
+    private final CommonProperties commonProperties;
 
     @Override
     public PageResult<AdminSpecialistListVO> listSpecialists(AdminSpecialistListQueryDTO query) {
@@ -244,6 +257,44 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         });
 
         return impactedBookings.size();
+    }
+
+    @Override
+    public String uploadSpecialistAvatar(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Image file is required");
+        }
+        if (file.getSize() > MAX_IMAGE_SIZE) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Image size must not exceed 2MB");
+        }
+
+        String extension = resolveExtension(file.getOriginalFilename());
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Only JPG and PNG images are supported");
+        }
+
+        CommonProperties.Oss oss = commonProperties.getOss();
+        if (isBlank(oss.getEndpoint()) || isBlank(oss.getAccessKeyId()) || isBlank(oss.getAccessKeySecret()) || isBlank(oss.getBucketName())) {
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "OSS configuration is incomplete");
+        }
+
+        String datePath = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+        String objectKey = "specialists/" + datePath + "/" + UUID.randomUUID() + "." + extension;
+
+        OSS client = null;
+        try (InputStream inputStream = file.getInputStream()) {
+            client = new OSSClientBuilder().build(oss.getEndpoint(), oss.getAccessKeyId(), oss.getAccessKeySecret());
+            client.putObject(oss.getBucketName(), objectKey, inputStream);
+            return buildPublicUrl(oss.getEndpoint(), oss.getBucketName(), objectKey);
+        } catch (IOException ex) {
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to read image file");
+        } catch (Exception ex) {
+            throw new BusinessException(ResultCodeEnum.SYSTEM_ERROR.getCode(), "Failed to upload image");
+        } finally {
+            if (client != null) {
+                client.shutdown();
+            }
+        }
     }
 
     private void validateSpecialistLevel(String level) {
@@ -571,5 +622,26 @@ public class AdminSpecialistServiceImpl implements AdminSpecialistService {
         } catch (Exception ex) {
             log.error("Failed to send {} referenceId={}, reason={}", logContext, referenceId, ex.getMessage(), ex);
         }
+    }
+
+    private String resolveExtension(String originalFilename) {
+        if (originalFilename == null || !originalFilename.contains(".")) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR.getCode(), "Image file extension is required");
+        }
+        return originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String buildPublicUrl(String endpoint, String bucketName, String objectKey) {
+        String normalizedEndpoint = endpoint.trim();
+        if (normalizedEndpoint.startsWith("http://") || normalizedEndpoint.startsWith("https://")) {
+            String protocol = normalizedEndpoint.startsWith("https://") ? "https://" : "http://";
+            String host = normalizedEndpoint.replaceFirst("^https?://", "");
+            return protocol + bucketName + "." + host + "/" + objectKey;
+        }
+        return "https://" + bucketName + "." + normalizedEndpoint + "/" + objectKey;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

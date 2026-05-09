@@ -1202,13 +1202,27 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     private String resolveSpecialistText(Long specialistId, SpecialistDetailVO specialist) {
         String specialistName = specialist == null ? null : specialist.getName();
-        if (StringUtils.hasText(specialistName)) {
-            if (specialistId == null) {
-                return specialistName;
-            }
-            return specialistName + " (ID: " + specialistId + ")";
+        if (!StringUtils.hasText(specialistName)) {
+            specialistName = resolveSpecialistName(specialistId);
         }
-        return specialistId == null ? "N/A" : "ID: " + specialistId;
+        return StringUtils.hasText(specialistName) ? specialistName.trim() : "the specialist";
+    }
+
+    private String resolveSpecialistName(Long specialistId) {
+        if (specialistId == null) {
+            return null;
+        }
+        try {
+            SpecialistDetailVO detail = specialistQueryService.getSpecialistDetail(specialistId);
+            return detail == null ? null : detail.getName();
+        } catch (Exception exception) {
+            log.warn(
+                    "Failed to resolve specialist name for booking email: specialistId={}, reason={}",
+                    specialistId,
+                    exception.getMessage()
+            );
+            return null;
+        }
     }
 
     private String formatAppointmentTime(TimeSlot slot) {

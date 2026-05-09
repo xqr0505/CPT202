@@ -6,11 +6,6 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
-
-/**
- * AvailabilityRecurringRule entity for weekly recurring schedule patterns.
- * @author Schedule Module Team
- */
 @Data
 @TableName("availability_recurring_rules")
 public class AvailabilityRecurringRule {

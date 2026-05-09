@@ -13,11 +13,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
-/**
- * Controller for recurring availability rule management (Module 5).
- * @author Schedule Module Team
- */
 @Tag(name = "Recurring Rules Management", description = "APIs for managing recurring availability rules")
 @RestController
 @RequestMapping("/api/specialist/schedule/rules")

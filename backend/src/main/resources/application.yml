@@ -68,8 +68,8 @@ ai:
       enabled: ${AI_SEARCH_SPECIALIST_ENABLED:true}
       doc-prefix: ${AI_SEARCH_SPECIALIST_DOC_PREFIX:expertlink:ai:specialist:}
       index-name: ${AI_SEARCH_SPECIALIST_INDEX_NAME:expertlink:ai:specialist}
-      top-k: ${AI_SEARCH_SPECIALIST_TOP_K:10}
-      max-results: ${AI_SEARCH_SPECIALIST_MAX_RESULTS:5}
+      top-k: ${AI_SEARCH_SPECIALIST_TOP_K:5}
+      max-results: ${AI_SEARCH_SPECIALIST_MAX_RESULTS:2}
       similarity-threshold: ${AI_SEARCH_SPECIALIST_SIMILARITY_THRESHOLD:0.90}
       strong-keyword-similarity-threshold: ${AI_SEARCH_SPECIALIST_STRONG_KEYWORD_SIMILARITY_THRESHOLD:0.88}
       semantic-weight: ${AI_SEARCH_SPECIALIST_SEMANTIC_WEIGHT:0.60}

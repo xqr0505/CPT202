@@ -28,7 +28,7 @@ public class AiSpecialistSearchProperties {
     private int topK = 5;
 
     @Min(1)
-    private int maxResults = 3;
+    private int maxResults = 2;
 
     @DecimalMin("0.0")
     @DecimalMax("1.0")

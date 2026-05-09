@@ -13,13 +13,6 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-/**
- * Customer cancellation rules:
- * >24 hours to start: full refund;
- * >2 hours and <=24 hours to start: penalty applied;
- * <=2 hours to start: cannot cancel or reschedule;
- * only PENDING or CONFIRMED can be changed.
- */
 @Service
 @RequiredArgsConstructor
 public class CustomerBookingChangePolicyServiceImpl implements CustomerBookingChangePolicyService {

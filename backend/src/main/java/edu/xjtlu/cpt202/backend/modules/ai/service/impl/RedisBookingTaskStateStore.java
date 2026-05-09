@@ -11,12 +11,6 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Redis implementation of the booking workflow state store.
- *
- * @author QiranXiao
- * @since 2026/5/5
- */
 @Service
 @Slf4j
 public class RedisBookingTaskStateStore implements BookingTaskStateStore {
@@ -43,7 +37,6 @@ public class RedisBookingTaskStateStore implements BookingTaskStateStore {
             }
             return Optional.empty();
         } catch (RuntimeException ex) {
-            // Backward-compatible fallback for stale/corrupted Redis payloads.
             log.warn("Failed to deserialize booking workflow state, clearing key: {}", key, ex);
             jsonRedisTemplate.delete(key);
             return Optional.empty();

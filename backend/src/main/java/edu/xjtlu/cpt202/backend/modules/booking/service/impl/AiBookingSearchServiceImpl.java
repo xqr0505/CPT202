@@ -17,12 +17,6 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
 import java.util.List;
 
-
-/**
- *
- * @author QiranXiao
- * @since 2026/4/17
- */
 @Service
 public class AiBookingSearchServiceImpl implements AiBookingSearchService {
 

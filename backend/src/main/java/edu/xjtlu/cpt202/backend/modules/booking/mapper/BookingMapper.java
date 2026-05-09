@@ -25,10 +25,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * @author QiranXiao
- * @date 2026/4/1
- */
 @Mapper
 public interface BookingMapper extends BaseMapper<Booking> {
 

@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * @author QiranXiao
- * @since 2026/4/4
- */
 @Data
 @Builder
 @NoArgsConstructor

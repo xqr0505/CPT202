@@ -17,11 +17,6 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 
-/**
- *
- * @author QiranXiao
- * @since 2026/4/18
- */
 @Component
 public class AiBookingSubmitTool {
 

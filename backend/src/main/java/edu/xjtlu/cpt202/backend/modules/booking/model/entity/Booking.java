@@ -7,10 +7,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-/**
- * @author QiranXiao
- * @date 2026/4/1
- */
 @TableName("bookings")
 public class Booking {
 

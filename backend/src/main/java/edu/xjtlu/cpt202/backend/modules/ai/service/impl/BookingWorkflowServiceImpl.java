@@ -41,12 +41,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Dedicated hardcoded booking workflow.
- *
- * @author QiranXiao
- * @since 2026/5/5
- */
 @Service
 public class BookingWorkflowServiceImpl implements BookingWorkflowService {
 

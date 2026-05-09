@@ -10,11 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
-/**
- *
- * @author QiranXiao
- * @since 2026/4/17
- */
 @Component
 public class AiBookingSearchTool {
 

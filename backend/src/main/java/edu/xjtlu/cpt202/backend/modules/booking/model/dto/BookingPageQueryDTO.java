@@ -3,6 +3,10 @@ package edu.xjtlu.cpt202.backend.modules.booking.model.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/4
+ */
 @Data
 @Schema(description = "Booking List Pagination Query DTO")
 public class BookingPageQueryDTO {

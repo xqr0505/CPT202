@@ -26,6 +26,10 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.UsageSummaryVO;
 
 import java.util.List;
 
+/**
+ * @author QiranXiao
+ * @date 2026/4/1
+ */
 public interface BookingService extends IService<Booking> {
 
     List<UpcomingBookingVO> getUpcomingBookingsByCustomer(Long customerId, int limit);

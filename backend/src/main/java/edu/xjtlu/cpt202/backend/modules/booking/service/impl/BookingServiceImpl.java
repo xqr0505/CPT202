@@ -77,6 +77,10 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author QiranXiao
+ * @since 2026/4/1
+ */
 @Service
 public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> implements BookingService {
 
@@ -298,6 +302,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
                 cancelledCount++;
             } catch (BusinessException businessException) {
                 if (ResultCodeEnum.BAD_REQUEST.getCode().equals(businessException.getCode())) {
+                    // The booking may have been processed by another request/thread.
                     continue;
                 }
                 throw businessException;
@@ -433,6 +438,7 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
         Optional<PageResult> cachedPageResult = readCache(cacheKey, PageResult.class);
         if (cachedPageResult.isPresent()) {
+            //noinspection unchecked
             return (PageResult<BookingItemVO>) cachedPageResult.get();
         }
 

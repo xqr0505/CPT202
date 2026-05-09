@@ -8,6 +8,12 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
+/**
+ * Result payload for AI booking auto-submit tool.
+ *
+ * @author QiranXiao
+ * @since 2026/4/18
+ */
 @Data
 @Builder
 public class AiBookingAutoSubmitResultVO {

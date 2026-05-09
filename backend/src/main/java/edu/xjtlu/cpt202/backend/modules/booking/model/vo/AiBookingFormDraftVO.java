@@ -5,6 +5,12 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * Lightweight booking form draft used by AI tools.
+ *
+ * @author QiranXiao
+ * @since 2026/4/18
+ */
 @Data
 @Builder
 public class AiBookingFormDraftVO {

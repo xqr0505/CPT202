@@ -7,6 +7,11 @@ import edu.xjtlu.cpt202.backend.modules.booking.model.vo.AiBookingFormDraftVO;
 import edu.xjtlu.cpt202.backend.modules.booking.service.BookingService;
 import org.springframework.stereotype.Component;
 
+/**
+ *
+ * @author QiranXiao
+ * @since 2026/4/18
+ */
 @Component
 public class AiBookingFormTool {
 

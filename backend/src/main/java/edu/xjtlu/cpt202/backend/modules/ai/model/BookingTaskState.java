@@ -9,6 +9,12 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * Redis-backed state for the booking workflow.
+ *
+ * @author QiranXiao
+ * @since 2026/5/5
+ */
 @Data
 @Builder
 @NoArgsConstructor

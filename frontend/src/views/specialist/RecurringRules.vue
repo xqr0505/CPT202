@@ -10,7 +10,6 @@
       </div>
     </div>
 
-    <!-- Description -->
     <div class="info-card">
       <el-icon><InfoFilled /></el-icon>
       <span>
@@ -20,13 +19,11 @@
       </span>
     </div>
 
-    <!-- Loading State -->
     <div v-if="loading" class="loading-container">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>Loading rules...</span>
     </div>
 
-    <!-- Rules List -->
     <div v-else-if="rules.length > 0" class="rules-list">
       <el-card v-for="rule in rules" :key="rule.id" class="rule-card">
         <div class="rule-content">
@@ -64,7 +61,6 @@
       </el-card>
     </div>
 
-    <!-- Empty State -->
     <div v-else class="empty-state">
       <el-empty description="No recurring rules yet">
         <el-button type="primary" @click="showCreateDialog = true">
@@ -73,7 +69,6 @@
       </el-empty>
     </div>
 
-    <!-- Create Dialog -->
     <el-dialog
       v-model="showCreateDialog"
       title="Create Recurring Availability Rule"
@@ -168,7 +163,6 @@ import {
   type RecurringRuleVO,
 } from '@/api/schedule'
 
-// ============== State ==============
 const loading = ref(false)
 const submitting = ref(false)
 const rules = ref<RecurringRuleVO[]>([])
@@ -193,7 +187,6 @@ const form = ref<RecurringRuleForm>({
   effectiveEndDate: '',
 })
 
-// ============== Validation Rules ==============
 const validateTimeRange = (rule: any, value: any, callback: any) => {
   if (form.value.startTime && form.value.endTime) {
     if (form.value.startTime >= form.value.endTime) {
@@ -293,7 +286,6 @@ const rulesForm: FormRules = {
   ],
 }
 
-// ============== Methods ==============
 function disabledPastDates(date: Date): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -411,7 +403,6 @@ async function handleDelete(ruleId: number) {
   }
 }
 
-// ============== Lifecycle ==============
 onMounted(() => {
   fetchRules()
 })

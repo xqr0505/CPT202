@@ -1,6 +1,5 @@
 import request from './request'
 
-// ============== Types ==============
 export interface TimeSlotVO {
   id: number
   specialistId: number
@@ -53,7 +52,6 @@ export interface CreateRecurringRuleRequest {
   effectiveEndDate?: string | null
 }
 
-// ============== Time Slot APIs ==============
 export const getWeeklySchedule = (weekStartDate?: string): Promise<TimeSlotVO[]> => {
   const params = weekStartDate ? { weekStartDate } : {}
   return request.get('/specialist/schedule/slots/weekly', { params })
@@ -75,7 +73,6 @@ export const deleteSlot = (id: number): Promise<void> => {
   return request.delete(`/specialist/schedule/slots/${id}`)
 }
 
-// ============== Recurring Rule APIs ==============
 export const getAllRecurringRules = (): Promise<RecurringRuleVO[]> => {
   return request.get('/specialist/schedule/rules')
 }

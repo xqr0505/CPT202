@@ -6,10 +6,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
-/**
- * VO for time slot details.
- * @author Schedule Module Team
- */
 @Data
 public class TimeSlotVO {
 

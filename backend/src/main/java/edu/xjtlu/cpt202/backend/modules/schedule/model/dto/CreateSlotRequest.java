@@ -6,10 +6,6 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
-/**
- * DTO for creating a new time slot.
- * @author Schedule Module Team
- */
 @Data
 public class CreateSlotRequest {
 

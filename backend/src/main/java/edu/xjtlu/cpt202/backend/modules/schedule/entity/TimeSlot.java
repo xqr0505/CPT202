@@ -8,10 +8,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
 
-/**
- * TimeSlot entity for specialist availability management.
- * @author Schedule Module Team
- */
 @Data
 @TableName("time_slots")
 public class TimeSlot {

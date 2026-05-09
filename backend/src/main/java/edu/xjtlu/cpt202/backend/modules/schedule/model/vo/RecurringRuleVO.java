@@ -6,10 +6,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
-/**
- * VO for recurring rule details.
- * @author Schedule Module Team
- */
 @Data
 public class RecurringRuleVO {
 

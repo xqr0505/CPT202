@@ -335,7 +335,7 @@ const restoreBookingFormDraft = () => {
       }
     }
   } catch {
-    // Ignore malformed browser session cache
+    return
   }
 }
 

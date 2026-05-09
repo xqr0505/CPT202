@@ -54,7 +54,6 @@ public class IdempotentAspect {
         // Generate unique key based on userId and endpoint URI
         String cacheKey = buildCacheKey(userId, method, uri);
 
-        // Prefer Redis for distributed idempotency; fallback to in-memory cache if Redis is unavailable.
         if (tryAcquireRedisLock(cacheKey, idempotent.timeout(), idempotent.message())) {
             return joinPoint.proceed();
         }
@@ -79,7 +78,6 @@ public class IdempotentAspect {
             }
             throw new BusinessException(ResultCodeEnum.DUPLICATE_REQUEST.getCode(), duplicateMessage);
         } catch (BusinessException businessException) {
-            // Redis is working; treat as duplicate submission.
             throw businessException;
         } catch (Exception exception) {
             log.warn("Redis idempotent check failed, fallback to in-memory: key={}, reason={}", cacheKey, exception.getMessage());

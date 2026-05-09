@@ -228,7 +228,7 @@ onMounted(() => {
   }
   void renderChart()
 
-  // Re-render chart options when theme changes so text colors follow CSS variables
+  // Re-render chart options when theme changes
   if (typeof MutationObserver !== 'undefined') {
     themeObserver = new MutationObserver(() => {
       if (chartInstance) {

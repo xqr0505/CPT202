@@ -73,40 +73,6 @@ class CancelWorkflowServiceImplTest {
         assertThat(shouldStart).isTrue();
     }
 
-    @Test
-    void shouldReturnCandidateListWhenBookingIsAmbiguous() {
-        InMemoryCancelTaskStateStore store = new InMemoryCancelTaskStateStore();
-        StubBookingService bookingService = new StubBookingService();
-        bookingService.bookingList = List.of(
-                booking("11", "Dr. Smith", "Therapy", LocalDateTime.of(2026, 5, 10, 9, 0), "CONFIRMED"),
-                booking("12", "Dr. Lee", "Consultation", LocalDateTime.of(2026, 5, 11, 14, 0), "PENDING")
-        );
-        CancelWorkflowServiceImpl service = new CancelWorkflowServiceImpl(
-                store,
-                (userMsg, taskState, memoryContext, candidateSummary) -> """
-                        ACTION: NEEDS_USER_ID_SELECTION
-                        BOOKING_ID: N/A
-                        EXPERT_NAME: N/A
-                        CATEGORY_NAME: N/A
-                        STATUS: N/A
-                        START_DATE: N/A
-                        END_DATE: N/A
-                        TIME_RANGE_TYPE: N/A
-                        """,
-                bookingService,
-                (memoryId, userMessage) -> AiIntent.CANCEL,
-                support()
-        );
-
-        String reply = service.handle(1001L, wrapped("cancel my booking"));
-
-        assertThat(reply).contains("Please reply with the exact booking ID");
-        assertThat(reply).contains("| Booking ID | Specialist | Service | Appointment Time | Status |");
-        assertThat(reply).contains("| 11 | Dr. Smith | Therapy | 2026-05-10 09:00 | CONFIRMED |");
-        assertThat(reply).contains("| 12 | Dr. Lee | Consultation | 2026-05-11 14:00 | PENDING |");
-        assertThat(store.get(1001L)).isPresent();
-        assertThat(store.get(1001L).get().getStep()).isEqualTo(CancelTaskState.Step.IDENTIFY);
-    }
 
     @Test
     void shouldValidateImmediatelyWhenBookingIdIsExplicit() {

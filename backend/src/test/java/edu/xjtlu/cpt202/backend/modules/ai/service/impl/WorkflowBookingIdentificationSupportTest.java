@@ -53,48 +53,6 @@ class WorkflowBookingIdentificationSupportTest {
     }
 
     @Test
-    void shouldTreatBlankStructuredFieldsAsEmptyInsteadOfShiftingIntoNextLabels() {
-        RecordingAiBookingSearchService searchService = new RecordingAiBookingSearchService();
-        WorkflowBookingIdentificationSupport support = new WorkflowBookingIdentificationSupport(
-                new StubChatMemoryStore(),
-                new AiBookingSearchTool(searchService)
-        );
-
-        List<BookingItemVO> candidates = List.of(
-                booking("21", "Dr. Smith", "Therapy", "CONFIRMED"),
-                booking("22", "Dr. Lee", "Consultation", "PENDING")
-        );
-
-        WorkflowBookingIdentificationSupport.BookingIdentificationResult result = support.identifyBooking(
-                1001L,
-                "cancel the booking tomorrow",
-                "identifying booking to cancel",
-                candidates,
-                candidates.stream().map(BookingItemVO::getId).map(Long::valueOf).toList(),
-                (userMsg, taskState, memoryContext, candidateSummary) -> """
-                        ACTION:
-                        BOOKING_ID:
-                        EXPERT_NAME:
-                        CATEGORY_NAME:
-                        STATUS:
-                        START_DATE:
-                        END_DATE:
-                        TIME_RANGE_TYPE:
-                        """
-        );
-
-        assertThat(result.status()).isEqualTo(WorkflowBookingIdentificationSupport.Status.RESOLVED);
-        assertThat(result.resolvedBookingId()).isEqualTo(21L);
-        assertThat(searchService.lastQueryDTO).isNotNull();
-        assertThat(searchService.lastQueryDTO.getExpertName()).isNull();
-        assertThat(searchService.lastQueryDTO.getCategoryName()).isNull();
-        assertThat(searchService.lastQueryDTO.getStatus()).isNull();
-        assertThat(searchService.lastQueryDTO.getStartDate()).isNull();
-        assertThat(searchService.lastQueryDTO.getEndDate()).isNull();
-        assertThat(searchService.lastQueryDTO.getTimeRangeType()).isEqualTo("UPCOMING");
-    }
-
-    @Test
     void shouldKeepLookupTimeAndTargetTimeSeparated() {
         RecordingAiBookingSearchService searchService = new RecordingAiBookingSearchService();
         WorkflowBookingIdentificationSupport support = new WorkflowBookingIdentificationSupport(

@@ -431,8 +431,7 @@ public class UserAccountServiceImpl implements UserAccountService {
                     "Failed to record security activity for user {} and event {}: {}",
                     userId,
                     activityType,
-                    exception.getMessage(),
-                    exception
+                    exception.getMessage()
             );
         }
     }

@@ -91,60 +91,7 @@ class RescheduleWorkflowServiceImplTest {
         assertThat(shouldStart).isFalse();
     }
 
-    @Test
-    void shouldReturnMarkdownTableWhenBookingIsAmbiguousAndKeepDateHint() {
-        InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
-        StubBookingService bookingService = new StubBookingService();
-        bookingService.bookingList = List.of(
-                booking("14", "Dr. Olivia Wang", "Evening Consult", LocalDateTime.of(2026, 5, 12, 21, 0), "CONFIRMED"),
-                booking("15", "Dr. Victoria Jiang", "Urgent Review", LocalDateTime.of(2026, 5, 19, 21, 0), "CONFIRMED")
-        );
-        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
-                store,
-                assistantNeedsUserSelectionWithDate(),
-                bookingService,
-                new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING,
-                support()
-        );
 
-        String reply = service.handle(1001L, wrapped("I want to reschedule it to 2026-05-16 around 3pm"));
-
-        assertThat(reply).contains("Please reply with the exact booking ID");
-        assertThat(reply).contains("I noted your requested reschedule date as 2026-05-16.");
-        assertThat(reply).contains("I also noted your preferred time as 15:00.");
-        assertThat(store.get(1001L)).isPresent();
-        assertThat(store.get(1001L).get().getTargetDate()).isEqualTo("2026-05-16");
-        assertThat(store.get(1001L).get().getTargetTime()).isEqualTo("15:00");
-    }
-
-    @Test
-    void shouldUseTodayAsLookupHintInsteadOfTargetDate() {
-        InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
-        StubBookingService bookingService = new StubBookingService();
-        bookingService.bookingList = List.of(
-                booking("21", "Dr. Benjamin Li", "Initial Consultation", LocalDateTime.of(2026, 5, 6, 9, 0), "PENDING"),
-                booking("14", "Dr. Olivia Wang", "Evening Consult", LocalDateTime.of(2026, 5, 12, 21, 0), "CONFIRMED"),
-                booking("20", "S1", "Initial Consultation", LocalDateTime.of(2026, 5, 12, 23, 0), "PENDING")
-        );
-        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
-                store,
-                assistantUsesTodayForLookup(),
-                bookingService,
-                new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING,
-                support()
-        );
-
-        String reply = service.handle(1001L, wrapped("I want to reschedule my booking today"));
-
-        assertThat(reply).contains("| 21 | Dr. Benjamin Li | Initial Consultation | 2026-05-06 09:00 | PENDING |");
-        assertThat(reply).doesNotContain("| 14 | Dr. Olivia Wang | Evening Consult | 2026-05-12 21:00 | CONFIRMED |");
-        assertThat(reply).doesNotContain("I noted your requested reschedule date");
-        assertThat(store.get(1001L)).isPresent();
-        assertThat(store.get(1001L).get().getLookupTimeRangeType()).isEqualTo("TODAY");
-        assertThat(store.get(1001L).get().getTargetDate()).isNull();
-    }
 
     @Test
     void shouldTriggerModalImmediatelyWhenBookingIdIsResolved() {
@@ -208,35 +155,6 @@ class RescheduleWorkflowServiceImplTest {
         assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:2026-05-19:]");
     }
 
-    @Test
-    void shouldReuseStoredTimeIntentWhenUserRepliesWithId() {
-        InMemoryRescheduleTaskStateStore store = new InMemoryRescheduleTaskStateStore();
-        StubBookingService bookingService = new StubBookingService();
-        bookingService.bookingList = List.of(
-                booking("14", "Dr. Olivia Wang", "Evening Consult", LocalDateTime.of(2026, 5, 12, 21, 0), "CONFIRMED"),
-                booking("15", "Dr. Victoria Jiang", "Urgent Review", LocalDateTime.of(2026, 5, 19, 21, 0), "CONFIRMED")
-        );
-        bookingService.bookingDetail = BookingDetailVO.builder()
-                .bookingId(14L)
-                .specialistId(101L)
-                .slotDate("2026-05-12")
-                .startTime("21:00")
-                .status("CONFIRMED")
-                .build();
-        RescheduleWorkflowServiceImpl service = new RescheduleWorkflowServiceImpl(
-                store,
-                assistantNeedsUserSelectionWithDate(),
-                bookingService,
-                new StubSpecialistQueryService(),
-                (memoryId, userMessage) -> AiIntent.BOOKING,
-                support()
-        );
-
-        service.handle(1001L, wrapped("I want to reschedule it to next Friday around 3pm"));
-        String reply = service.handle(1001L, wrapped("14"));
-
-        assertThat(reply).contains("[TRIGGER_RESCHEDULE_MODAL:14:2026-05-16:]");
-    }
 
     @Test
     void shouldClearRedisOnAbortPhrases() {

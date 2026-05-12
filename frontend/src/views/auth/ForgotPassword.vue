@@ -33,7 +33,7 @@
           {{ loading ? 'Sending...' : 'Send Verification Code' }}
         </button>
         <div class="back-link">
-          <router-link to="/auth">Back to Login</router-link>
+          <router-link :to="backToLoginPath">Back to Login</router-link>
         </div>
       </div>
 
@@ -97,14 +97,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, reactive, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { sendVerificationCode } from '@/api/auth';
 import request from '@/api/request';
 import { clearRememberedCredentials } from '@/utils/rememberCredentials';
+import { loginPathFromForgotPasswordPortalQuery } from '@/constants/authPortal';
 
 const router = useRouter();
+const route = useRoute();
+
+const backToLoginPath = computed(() => loginPathFromForgotPasswordPortalQuery(route.query.portal));
 const loading = ref(false);
 const currentStep = ref(1);
 const email = ref('');
@@ -205,7 +209,7 @@ async function resetPassword() {
     });
     clearRememberedCredentials();
     ElMessage.success('Password reset successfully. Please login with your new password.');
-    router.push('/auth');
+    router.push(loginPathFromForgotPasswordPortalQuery(route.query.portal));
   } catch (error: any) {
     ElMessage.error(error.message || 'Failed to reset password');
   } finally {

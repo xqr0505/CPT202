@@ -2,6 +2,7 @@
 import type { Router } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { getAuthToken, getRefreshToken, getUser, isTokenExpired, refreshAuthToken, clearAuthData } from '@/api/request';
+import { loginPathForProtectedRouteRole } from '@/constants/authPortal';
 
 const publicRoutes = [
   '/',
@@ -12,7 +13,15 @@ const publicRoutes = [
   '/error/500',
   '/error/global'
 ];
-const authRoutes = ['/auth', '/login', '/register', '/forgot-password'];
+const isAuthPortalPath = (path: string): boolean =>
+  path === '/auth' || path.startsWith('/auth/');
+
+/** Logged-in users are sent to their dashboard (not applicable to password reset). */
+const redirectToHomeWhenAuthenticated = (path: string): boolean =>
+  isAuthPortalPath(path) || path === '/login' || path === '/register';
+
+const isAnonymousAuthRelatedPath = (path: string): boolean =>
+  redirectToHomeWhenAuthenticated(path) || path === '/forgot-password';
 
 const isPublicPath = (path: string): boolean => publicRoutes.includes(path);
 
@@ -46,7 +55,7 @@ export function setupRouterGuard(router: Router) {
     const currentUser = getUser();
     const userRole = typeof currentUser?.role === 'string' ? currentUser.role : null;
     if (currentToken && currentUser && userRole) {
-      if (to.path === '/auth' || to.path === '/login' || to.path === '/register') {
+      if (redirectToHomeWhenAuthenticated(to.path)) {
         return { path: getDefaultHomePath(userRole) };
       }
 
@@ -65,7 +74,7 @@ export function setupRouterGuard(router: Router) {
         return { path: '/customer/search' };
       }
 
-      if (isPublicPath(to.path) || authRoutes.includes(to.path)) {
+      if (isPublicPath(to.path) || isAnonymousAuthRelatedPath(to.path)) {
         return true;
       }
 
@@ -80,7 +89,10 @@ export function setupRouterGuard(router: Router) {
           type: 'warning'
         });
 
-        return { path: '/auth', query: { redirect: to.fullPath } };
+        return {
+          path: loginPathForProtectedRouteRole(to.meta?.role as string | undefined),
+          query: { redirect: to.fullPath }
+        };
       } catch {
         return { path: '/customer/search' };
       }

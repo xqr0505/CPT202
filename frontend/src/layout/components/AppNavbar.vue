@@ -78,6 +78,7 @@ import {
 } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { USER_ROLES } from '@/constants/roles'
+import { loginPathForProtectedRouteRole, loginPathForStoredRole } from '@/constants/authPortal'
 import { useAiChatStore } from '@/stores/aiChat'
 import { AI_NAV_MENU_KEY, AI_NAV_MENU_LABEL } from '@/constants/ai'
 import { ElMessageBox } from 'element-plus'
@@ -213,7 +214,9 @@ const navigateToProfile = async (): Promise<void> => {
 }
 
 const handleLogin = (): void => {
-  router.push({ path: '/auth', query: { redirect: route.fullPath } }).catch(() => null)
+  const matchedWithRole = [...route.matched].reverse().find(record => record.meta?.role)
+  const path = loginPathForProtectedRouteRole(matchedWithRole?.meta?.role as string | undefined)
+  router.push({ path, query: { redirect: route.fullPath } }).catch(() => null)
 }
 
 const handleLogout = async (): Promise<void> => {
@@ -232,8 +235,9 @@ const handleLogout = async (): Promise<void> => {
       }
     )
 
+    const postLogoutPath = loginPathForStoredRole(userStore.userRole)
     await userStore.logout()
-    await router.push('/auth')
+    await router.push(postLogoutPath)
   } catch (e: unknown) {
     if (e === 'cancel' || e?.toString?.() === 'cancel') {
       await userStore.logout()

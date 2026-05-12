@@ -186,7 +186,8 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (!role.equalsIgnoreCase(user.getRole())) {
-            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(), "role not match");
+            throw new BusinessException(ResultCodeEnum.BAD_REQUEST.getCode(),
+                    "This account does not have access to this portal.");
         }
 
         if (AccountStatusEnum.LOCKED.name().equals(user.getStatus())) {

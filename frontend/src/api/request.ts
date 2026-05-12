@@ -3,6 +3,7 @@ import type { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import router from '@/router';
 import { apiBaseUrl } from '@/config/api';
+import { loginPathForStoredRole } from '@/constants/authPortal';
 
 /**
  * Default API response structure
@@ -163,6 +164,9 @@ export const dispatchSessionActivityEvent = () => {
 };
 
 export const logout = (options?: { redirectTo?: string | null }) => {
+  const storedUser = getUser();
+  const defaultAuthPortalPath = loginPathForStoredRole(storedUser?.role as string | undefined);
+
   clearAuthData();
   triggerLogoutEvent();
 
@@ -176,7 +180,7 @@ export const logout = (options?: { redirectTo?: string | null }) => {
     return;
   }
 
-  router.push({ path: '/auth' }).catch(() => null);
+  router.push({ path: defaultAuthPortalPath }).catch(() => null);
 };
 
 const createAuthFailureError = (message: string): AuthFailureError => {

@@ -548,7 +548,7 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> authService.login(request));
         assertEquals(ResultCodeEnum.BAD_REQUEST.getCode(), ex.getCode());
-        assertEquals("role not match", ex.getMessage());
+        assertEquals("This account does not have access to this portal.", ex.getMessage());
     }
     // ==================== Additional tests for first_fail_time and lock_time ====================
 

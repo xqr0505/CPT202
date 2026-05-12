@@ -1,9 +1,12 @@
 <template>
   <div class="auth-card-wrapper">
     <div class="auth-container" :class="{ active: isSignUp }">
+      <!-- 移动端顶部切换栏（保留绿色渐变与眼球，支持上下切换动画） -->
+
       <div v-if="isMobile" class="mobile-toggle-bar">
         <div class="mobile-toggle-bg">
           <button
+            v-if="showGuest"
             type="button"
             class="guest-eye mobile-guest-eye"
             :class="[eyeDirectionClass, { blinking: isEyeBlinking }]"
@@ -15,7 +18,7 @@
               <span class="eye"><span class="pupil" /></span>
             </span>
           </button>
-          <div class="switch-tabs">
+          <div v-if="allowRegister" class="switch-tabs">
             <button
               type="button"
               class="switch-tab"
@@ -29,30 +32,22 @@
               @click="switchToSignUp"
             >Sign Up</button>
           </div>
+          <p v-else class="mobile-portal-label">{{ loginHeading }}</p>
         </div>
       </div>
 
+      <!-- 登录表单：桌面端始终显示（有动画控制），移动端仅在登录模式下显示 -->
       <div
         v-if="!isMobile || !isSignUp"
         class="form-container sign-in"
         :class="{ 'mobile-only': isMobile }"
       >
         <form @submit.prevent="handleLogin">
-          <h1 class="login-title">Appointment Platform Login</h1>
-          <div class="form-group">
-            <label>Select Role</label>
-            <div class="role-selector">
-              <button
-                v-for="roleOption in roles"
-                :key="roleOption.value"
-                :class="['role-btn', { active: loginForm.role === roleOption.value }]"
-                type="button"
-                @click="loginForm.role = roleOption.value"
-              >
-                {{ roleOption.label }}
-              </button>
-            </div>
-            <span v-if="loginErrors.role" class="error-text">{{ loginErrors.role }}</span>
+          <h1 class="login-title">{{ loginHeading }}</h1>
+          <div v-if="authMode === 'customer'" class="form-group specialist-portal-entry">
+            <button type="button" class="specialist-portal-btn" @click="goSpecialistPortal">
+              I want to login as Specialist
+            </button>
           </div>
 
           <div class="form-group">
@@ -81,14 +76,26 @@
           </button>
 
           <div class="footer-links">
-            <a href="#" @click.prevent="switchToSignUp">No account? Register now</a>
-            <router-link to="/forgot-password">Forgot Password?</router-link>
+            <a v-if="allowRegister" href="#" @click.prevent="switchToSignUp">No account? Register now</a>
+            <span v-else class="footer-links-spacer" aria-hidden="true" />
+            <router-link :to="{ path: '/forgot-password', query: forgotPasswordQuery }">Forgot Password?</router-link>
+          </div>
+
+          <div v-if="!allowRegister && authMode === 'specialist'" class="portal-mobile-hint">
+            <p class="portal-mobile-hint-title">Need a specialist account?</p>
+            <p class="portal-mobile-hint-text">Please contact the ExpertLink administrator.</p>
+            <router-link class="portal-back-link" to="/auth">← Back to Customer Login</router-link>
+          </div>
+          <div v-if="!allowRegister && authMode === 'admin'" class="portal-mobile-hint">
+            <p class="portal-mobile-hint-text">Administrator accounts are managed by the system.</p>
+            <router-link class="portal-back-link" to="/auth">← Back to Customer Login</router-link>
           </div>
         </form>
       </div>
 
+      <!-- 注册表单：桌面端始终显示（有动画控制），移动端仅在注册模式下显示 -->
       <div
-        v-if="!isMobile || isSignUp"
+        v-if="allowRegister && (!isMobile || isSignUp)"
         class="form-container sign-up"
         :class="{ 'mobile-only': isMobile }"
       >
@@ -163,10 +170,12 @@
         </form>
       </div>
 
+      <!-- 桌面端的左右切换面板（移动端通过 CSS 隐藏） -->
       <div class="toggle-container">
         <div class="toggle">
           <div class="toggle-panel toggle-left">
             <button
+              v-if="showGuest"
               type="button"
               class="guest-eye"
               :class="[eyeDirectionClass, { blinking: isEyeBlinking }]"
@@ -183,8 +192,9 @@
             <p>Enter your personal details to use all of site features</p>
             <button class="hidden" type="button" @click="switchToSignIn">Sign In</button>
           </div>
-          <div class="toggle-panel toggle-right">
+          <div v-if="allowRegister" class="toggle-panel toggle-right">
             <button
+              v-if="showGuest"
               type="button"
               class="guest-eye"
               :class="[eyeDirectionClass, { blinking: isEyeBlinking }]"
@@ -201,6 +211,30 @@
             <p>Register with your personal details to use all of site features</p>
             <button class="hidden" type="button" @click="switchToSignUp">Sign Up</button>
           </div>
+          <div v-else-if="authMode === 'specialist'" class="toggle-panel toggle-right toggle-portal-info">
+            <button
+              v-if="showGuest"
+              type="button"
+              class="guest-eye"
+              :class="[eyeDirectionClass, { blinking: isEyeBlinking }]"
+              aria-label="Continue browsing as guest"
+              @click="continueAsGuest"
+            >
+              <span class="eye-pair" aria-hidden="true">
+                <span class="eye"><span class="pupil" /></span>
+                <span class="eye"><span class="pupil" /></span>
+              </span>
+              <span v-if="showGuestHint && !isSignUp" class="guest-hint">Click me to browse as guest</span>
+            </button>
+            <h1>Need a specialist account?</h1>
+            <p>Please contact the ExpertLink administrator.</p>
+            <router-link class="portal-back-link desktop-back-link" to="/auth">← Back to Customer Login</router-link>
+          </div>
+          <div v-else class="toggle-panel toggle-right toggle-portal-info">
+            <h1>Administrator access</h1>
+            <p>Administrator accounts are managed by the system.</p>
+            <router-link class="portal-back-link desktop-back-link" to="/auth">← Back to Customer Login</router-link>
+          </div>
         </div>
       </div>
     </div>
@@ -209,11 +243,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { login, register, sendVerificationCode, type LoginPayload, type RegisterPayload } from '@/api/auth';
 import { saveAuthData, dispatchSessionActivityEvent } from '@/api/request';
 import { useUserStore } from '@/stores/user';
+import type { AuthPortalMode } from '@/constants/authPortal';
+import { AUTH_PORTAL_PATH } from '@/constants/authPortal';
 import {
   clearRememberedCredentials,
   isRememberCredentialsAllowed,
@@ -228,9 +264,45 @@ const BOOKING_FORM_DRAFT_STORAGE_KEY = 'customer.booking.form.draft';
 const AI_BOOKING_CONTEXT_STORAGE_KEY = 'ai.booking.context';
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
 const isMobile = ref(false);
-const isSignUp = ref(false); 
+const isSignUp = ref(false);
+
+const authMode = computed<AuthPortalMode>(() => {
+  const raw = route.meta.authPortal;
+  return raw === 'specialist' || raw === 'admin' ? raw : 'customer';
+});
+
+const allowRegister = computed(() => authMode.value === 'customer');
+const showGuest = computed(() => authMode.value !== 'admin');
+
+const portalLoginRole = computed(() => {
+  switch (authMode.value) {
+    case 'specialist':
+      return 'SPECIALIST';
+    case 'admin':
+      return 'ADMIN';
+    default:
+      return 'CUSTOMER';
+  }
+});
+
+const loginHeading = computed(() => {
+  if (authMode.value === 'specialist') return 'Specialist Login';
+  if (authMode.value === 'admin') return 'Administrator Login';
+  return 'ExpertLink Customer Login';
+});
+
+const forgotPasswordQuery = computed<LocationQueryRaw>(() =>
+  authMode.value === 'customer' ? {} : { portal: authMode.value }
+);
+
+watch(allowRegister, (ok) => {
+  if (!ok) {
+    isSignUp.value = false;
+  }
+});
 
 const checkIsMobile = () => {
   isMobile.value = window.innerWidth <= 768;
@@ -246,6 +318,9 @@ onBeforeUnmount(() => {
 });
 
 function switchToSignUp() {
+  if (!allowRegister.value) {
+    return;
+  }
   isSignUp.value = true;
 }
 
@@ -324,12 +399,6 @@ onBeforeUnmount(() => {
 const isLoginLoading = ref(false);
 const hasRememberedCredentials = ref(false);
 
-const roles = [
-  { label: 'CUSTOMER', value: 'CUSTOMER' },
-  { label: 'SPECIALIST', value: 'SPECIALIST' },
-  { label: 'ADMIN', value: 'ADMIN' }
-];
-
 const loginForm = reactive({
   email: '',
   password: '',
@@ -341,6 +410,18 @@ const loginErrors = reactive({
   password: '',
   role: ''
 });
+
+watch(
+  portalLoginRole,
+  (r) => {
+    loginForm.role = r;
+  },
+  { immediate: true }
+);
+
+function goSpecialistPortal() {
+  router.push(AUTH_PORTAL_PATH.specialist).catch(() => null);
+}
 
 function validateLoginEmail() {
   if (!loginForm.email) {
@@ -406,11 +487,12 @@ const askRememberCredentialsChoice = async (): Promise<boolean> => {
 
 async function handleLogin() {
   try {
-    loginErrors.role = loginForm.role ? '' : 'Please select a role first.';
+    loginErrors.role = '';
     const emailValid = validateLoginEmail();
     loginErrors.password = loginForm.password ? '' : 'Password is required';
 
-    if (!loginForm.role || !emailValid || !loginForm.password) {
+    const roleForPortal = portalLoginRole.value as LoginPayload['role'];
+    if (!emailValid || !loginForm.password) {
       return;
     }
 
@@ -419,10 +501,16 @@ async function handleLogin() {
     const payload: LoginPayload = {
       email: loginForm.email,
       password: loginForm.password,
-      role: loginForm.role as 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
+      role: roleForPortal
     };
 
     const response = await login(payload);
+
+    const responseRole = String(response.role || '').toUpperCase();
+    if (responseRole !== roleForPortal) {
+      ElMessage.error('This account does not have access to this portal.');
+      return;
+    }
 
     const allowRememberCredentials = isRememberCredentialsAllowed();
     let rememberMe = false;
@@ -477,13 +565,24 @@ async function handleLogin() {
     clearBookingSessionState(response.userId);
     ElMessage.success('Login successful');
 
-    const targetRoute = loginForm.role === 'CUSTOMER' ? '/customer/search' :
-                        loginForm.role === 'SPECIALIST' ? '/specialist/schedule' :
-                        '/admin/specialists';
+    const targetRoute =
+      responseRole === 'CUSTOMER'
+        ? '/customer/search'
+        : responseRole === 'SPECIALIST'
+          ? '/specialist/schedule'
+          : '/admin/specialists';
     await router.push(targetRoute);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error);
-    ElMessage.error(error?.message || 'Login failed');
+    const raw = String((error as { message?: string })?.message || '');
+    if (
+      raw.includes('This account does not have access to this portal') ||
+      raw.toLowerCase().includes('role not match')
+    ) {
+      ElMessage.error('This account does not have access to this portal.');
+    } else {
+      ElMessage.error(raw || 'Login failed');
+    }
   } finally {
     isLoginLoading.value = false;
   }
@@ -958,6 +1057,95 @@ onMounted(() => {
 
 .footer-links a:hover {
   color: var(--color-primary-hover);
+}
+
+.specialist-portal-entry {
+  margin-bottom: 4px;
+}
+
+.specialist-portal-btn {
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.specialist-portal-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.footer-links-spacer {
+  min-width: 1px;
+}
+
+.mobile-portal-label {
+  margin: 0;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.portal-mobile-hint {
+  margin-top: 20px;
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-muted);
+}
+
+.portal-mobile-hint-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-size: 15px;
+}
+
+.portal-mobile-hint-text {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.portal-back-link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.portal-back-link:hover {
+  text-decoration: underline;
+}
+
+.toggle-portal-info h1 {
+  font-size: 22px;
+}
+
+.toggle-portal-info p {
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+.desktop-back-link {
+  margin-top: 14px;
+  display: inline-block;
+  color: white !important;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.desktop-back-link:hover {
+  opacity: 0.92;
 }
 
 .remember-me {

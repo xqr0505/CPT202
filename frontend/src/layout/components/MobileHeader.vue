@@ -26,6 +26,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
+import { loginPathForProtectedRouteRole, loginPathForStoredRole } from '@/constants/authPortal'
 import lightLogo from '@/assets/images/ELicon.png'
 import darkLogo from '@/assets/images/ELiconDark.png'
 import { getCurrentThemeMode, THEME_MODE_EVENT_NAME, type ThemeMode } from '@/utils/theme'
@@ -50,7 +51,9 @@ const navigateToProfile = () => {
 }
 
 const handleLogin = (): void => {
-  router.push({ path: '/auth', query: { redirect: route.fullPath } }).catch(() => null)
+  const matchedWithRole = [...route.matched].reverse().find(record => record.meta?.role)
+  const path = loginPathForProtectedRouteRole(matchedWithRole?.meta?.role as string | undefined)
+  router.push({ path, query: { redirect: route.fullPath } }).catch(() => null)
 }
 
 const handleLogout = async (): Promise<void> => {
@@ -69,8 +72,9 @@ const handleLogout = async (): Promise<void> => {
       }
     )
 
+    const postLogoutPath = loginPathForStoredRole(userStore.userRole)
     await userStore.logout()
-    await router.push('/auth')
+    await router.push(postLogoutPath)
   } catch (e: any) {
     if (e === 'cancel' || e?.toString?.() === 'cancel') {
       await userStore.logout()

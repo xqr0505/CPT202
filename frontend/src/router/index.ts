@@ -3,9 +3,22 @@ import { setupRouterGuard } from './permission'
 
 const routes = [
   {
+    path: '/auth/specialist',
+    name: 'AuthSpecialist',
+    component: () => import('../views/auth/AuthCard.vue'),
+    meta: { authPortal: 'specialist' as const }
+  },
+  {
+    path: '/auth/admin',
+    name: 'AuthAdmin',
+    component: () => import('../views/auth/AuthCard.vue'),
+    meta: { authPortal: 'admin' as const }
+  },
+  {
     path: '/auth',
     name: 'Auth',
-    component: () => import('../views/auth/AuthCard.vue') 
+    component: () => import('../views/auth/AuthCard.vue'),
+    meta: { authPortal: 'customer' as const }
   },
   {
     path: '/login',
@@ -97,10 +110,6 @@ const routes = [
   {
     path: '/dev',
     component: () => import('../views/dev/DevDemo.vue')
-  },
-  {
-    path: '/login',
-    redirect: '/auth'
   },
   {
     path: '/',

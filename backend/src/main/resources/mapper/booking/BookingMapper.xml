@@ -223,7 +223,8 @@
     <select id="selectDashboardConsultedExperts" resultType="edu.xjtlu.cpt202.backend.modules.booking.model.vo.DashboardStatisticsVO$ConsultedExpertVO">
         SELECT DISTINCT
             sp.id AS specialistId,
-            u.full_name AS specialistName
+            u.full_name AS specialistName,
+            COALESCE(u.avatar_url, '') AS specialistAvatar
         FROM bookings b
         JOIN time_slots ts ON b.slot_id = ts.id
         JOIN specialist_profiles sp ON b.specialist_id = sp.id

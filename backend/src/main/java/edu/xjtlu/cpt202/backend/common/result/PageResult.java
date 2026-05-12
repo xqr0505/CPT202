@@ -8,6 +8,7 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
+ * Generic pagination result wrapper.
  * @author QiranXiao
  * @date 2026/3/26
  */

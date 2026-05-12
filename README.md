@@ -100,3 +100,34 @@ See `README_DOCKER.md`.
 
 - Backend fails to start: check MySQL/Redis are reachable and your `.env` values are set.
 - Frontend cannot reach backend: ensure backend is on `http://localhost:8081` and `FRONTEND_VITE_API_BASE_URL_DEV` ends with `/api`.
+
+## Test Accounts
+### admin
+```
+test.admin@expertlink.com
+```
+
+```
+Admin@123456
+```
+
+### customer
+```
+test.customer@expertlink.com
+```
+
+```
+Test12345
+```
+
+### specialist
+>This account is a pre-configured test specialist user that exists only on the server environment. it is not automatically created when you run the source code locally or in your own deployment.
+
+```
+test.specialist@expertlink.com
+```
+
+```
+12345Expertlink
+```
+

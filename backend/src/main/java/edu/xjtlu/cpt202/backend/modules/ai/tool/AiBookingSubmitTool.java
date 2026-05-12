@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- *
+ * AI tool for preparing booking confirmation drafts based on user input and current availability.
  * @author QiranXiao
  * @since 2026/4/18
  */

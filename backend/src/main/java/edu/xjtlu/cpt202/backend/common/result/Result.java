@@ -5,6 +5,7 @@ import edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum;
 import java.time.LocalDateTime;
 
 /**
+ * Generic API response wrapper.
  * @author QiranXiao
  * @date 2026/3/26
  */

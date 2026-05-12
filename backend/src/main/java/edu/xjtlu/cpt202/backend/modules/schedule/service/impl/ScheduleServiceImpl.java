@@ -26,11 +26,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static edu.xjtlu.cpt202.backend.common.enums.ResultCodeEnum.*;
-
-/**
- * Implementation of ScheduleService for time slot management.
- * @author Schedule Module Team
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor

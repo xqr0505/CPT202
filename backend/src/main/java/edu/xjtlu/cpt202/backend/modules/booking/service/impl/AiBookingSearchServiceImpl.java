@@ -19,7 +19,7 @@ import java.util.List;
 
 
 /**
- *
+ * booking search service for AI
  * @author QiranXiao
  * @since 2026/4/17
  */
@@ -42,6 +42,13 @@ public class AiBookingSearchServiceImpl implements AiBookingSearchService {
         this.bookingMapper = bookingMapper;
     }
 
+    /**
+     *
+     * @param customerId the ID of the customer
+     * @param queryDTO   the search criteria
+     * @return search results with total matched count and list of items
+     * @throws BusinessException if the user is unauthorized or if parameters are invalid
+     */
     @Override
     public AiBookingSearchResultVO searchCustomerBookings(Long customerId, AiBookingSearchDTO queryDTO) {
         if (customerId == null) {
@@ -78,7 +85,16 @@ public class AiBookingSearchServiceImpl implements AiBookingSearchService {
                 .items(items == null ? List.of() : items)
                 .build();
     }
-
+    
+    /**
+     * Normalize and validate the search query parameters.
+     * - Trim string fields and convert empty strings to null.
+     * - Convert status and timeRangeType to upper case for consistent processing.
+     * - If timeRangeType is not provided but status matches a time range value, treat it as timeRangeType.
+     *
+     * @param queryDTO the original search query DTO
+     * @return a normalized search query DTO
+     */
     private AiBookingSearchDTO normalizeQuery(AiBookingSearchDTO queryDTO) {
         AiBookingSearchDTO normalized = new AiBookingSearchDTO();
         if (queryDTO == null) {
@@ -99,6 +115,17 @@ public class AiBookingSearchServiceImpl implements AiBookingSearchService {
         return normalized;
     }
 
+    /**
+     * Resolve the time filter based on the provided start/end dates or timeRangeType.
+     * - If startDate or endDate is provided, use them directly (after validation).
+     * - If timeRangeType is provided, calculate the corresponding date range.
+     * - If neither is provided, return a filter with no date constraints.
+     *
+     * @param queryDTO    the normalized search query DTO
+     * @param currentTime the current time for calculating relative date ranges
+     * @return a ResolvedTimeFilter containing the resolved date range and flags for upcoming/history filters
+     * @throws BusinessException if the date range is invalid or if timeRangeType is unsupported
+     */
     private ResolvedTimeFilter resolveTimeFilter(AiBookingSearchDTO queryDTO, LocalDateTime currentTime) {
         LocalDate startDate = queryDTO.getStartDate();
         LocalDate endDate = queryDTO.getEndDate();

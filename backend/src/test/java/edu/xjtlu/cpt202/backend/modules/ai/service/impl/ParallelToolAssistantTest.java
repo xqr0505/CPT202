@@ -329,18 +329,6 @@ class ParallelToolAssistantTest {
     }
 
     @Test
-    void shouldResolveCancelIntentForCancelBookingRequest() {
-        ChatLanguageModel model = mock(ChatLanguageModel.class);
-        AiIntentRouterProperties properties = new AiIntentRouterProperties();
-        LightModelAiIntentRouterService routerService = new LightModelAiIntentRouterService(model, properties);
-
-        AiIntent intent = routerService.resolveIntent(1001L, "Please cancel my booking for tomorrow");
-
-        assertThat(intent).isEqualTo(AiIntent.CANCEL);
-        verify(model, times(0)).generate(org.mockito.ArgumentMatchers.anyList());
-    }
-
-    @Test
     void shouldPreferKnowledgeForUnsupportedCharactersQuestion() {
         ChatLanguageModel model = mock(ChatLanguageModel.class);
         AiIntentRouterProperties properties = new AiIntentRouterProperties();

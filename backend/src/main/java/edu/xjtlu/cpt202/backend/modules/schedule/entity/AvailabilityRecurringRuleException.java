@@ -9,12 +9,6 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
-/**
- * Stores per-occurrence overrides for recurring rules.
- * When a specialist manually changes or deletes one generated slot,
- * the original rule should not recreate that same occurrence later.
- */
 @Data
 @TableName("availability_recurring_rule_exceptions")
 public class AvailabilityRecurringRuleException {

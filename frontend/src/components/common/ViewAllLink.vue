@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-// This component is a reusable "View All" link.
+
 </script>
 
 <style scoped lang="scss">

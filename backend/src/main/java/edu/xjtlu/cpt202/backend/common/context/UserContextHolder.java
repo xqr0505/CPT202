@@ -1,6 +1,7 @@
 package edu.xjtlu.cpt202.backend.common.context;
 
 /**
+ * Thread-local storage for user context information（user ID and role）.
  * @author QiranXiao
  * @date 2026/3/26
  */

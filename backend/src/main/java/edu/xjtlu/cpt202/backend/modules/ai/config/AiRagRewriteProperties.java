@@ -18,9 +18,6 @@ public class AiRagRewriteProperties {
 
     private boolean enabled = true;
 
-    /**
-     * Supported values: light_model, rule, off.
-     */
     private String mode = "light_model";
 
     @Min(100)
@@ -30,7 +27,7 @@ public class AiRagRewriteProperties {
     private Integer maxQueries = 2;
 
     /**
-     * Optional dedicated lightweight model for rewrite requests.
+     * lightweight model for rewrite requests.
      * Falls back to main chat model when blank.
      */
     private String lightModelName = "qwen-turbo";

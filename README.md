@@ -59,6 +59,14 @@ Default endpoints:
 - Backend (Spring Boot dev): `http://localhost:8081`
 - Swagger UI: `http://localhost:8081/swagger-ui/index.html`
 
+### Authentication / Login routes
+
+The authentication page has been refactored to dedicated routes:
+
+- `/auth` — customer login
+- `/auth/specialist` — specialist login
+- `/auth/admin` — admin login
+
 This dev flow uses Docker services by default:
 
 - MySQL: `127.0.0.1:9001`

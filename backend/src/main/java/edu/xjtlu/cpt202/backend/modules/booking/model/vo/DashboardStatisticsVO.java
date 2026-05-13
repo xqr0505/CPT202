@@ -47,6 +47,9 @@ public class DashboardStatisticsVO {
 
         @Schema(description = "Specialist full name", example = "Dr. Emily Chen")
         private String specialistName;
+
+        @Schema(description = "Specialist avatar URL", example = "https://cdn.example.com/avatars/specialist-1001.jpg")
+        private String specialistAvatar;
     }
 
     @Data

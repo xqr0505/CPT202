@@ -21,7 +21,7 @@ This repository contains the source code, database migrations, and local setup c
 
 ## Table of Contents
 1. [Project Overview](#1-project-overview)
-2. [Core Feature Modules](#2-core-feature-modules)
+2. [Feature Modules](#2-feature-modules)
 3. [System Architecture](#3-system-architecture)
 4. [Local Development Prerequisites](#4-local-development-prerequisites)
 5. [Local Installation and Startup](#5-local-installation-and-startup)
@@ -36,7 +36,7 @@ ExpertLink is a full-stack medical specialist booking platform designed for pati
 
 ---
 
-## 2. Core Feature Modules
+## 2. Feature Modules
 This section details the functional modules implemented across our three main development increments.
 
 ### Customer (C-End) 
@@ -48,11 +48,12 @@ This section details the functional modules implemented across our three main de
 - **Approval Queue:** Booking request handling, specialist review actions, and status progression.
 
 ### Administrator (B-End)
-- **Medical Resource Control:** Management of expert directories, consultation fees, and categories.
+- **Medical Resource Control:** Management of expert, consultation fees, and categories.
 
 ### AI Assistant (Agentic Layer)
-- **Semantic Search & FAQ (RAG):** Processing platform guidelines through structured Markdown splitting and vector database indexing.
-- **Conversational Booking Agent:** Parameter extraction (slot filling) and AI-to-UI handoff for secure transactions.
+- **Platform QA:** Answers platform-related questions and usage guidance.
+- **Doctor Recommendation:** Recommends suitable specialists.
+- **Booking Support:** Assists with booking, cancellation, and rescheduling.
 
 ---
 
@@ -184,3 +185,4 @@ This account is pre-configured on server environments and is **not automatically
 If needed, log in as admin to add a specialist.
 - Email: `test.specialist@expertlink.com`
 - Password: `12345Expertlink`
+

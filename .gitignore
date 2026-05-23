@@ -1,44 +1,19 @@
-target/
-.idea/
-.settings/
-.vscode/
-bin/
-out/
+### Build outputs ###
+**/target/
+**/bin/
+**/out/
+**/build/
 
+### IDE / editors ###
+.idea/
+.vscode/
+.settings/
 .classpath
 .project
-.settings
-.idea
-
-# filter databfile、sln file
-*.mdb
-*.ldb
-*.sln
-
-# class file
-*.com
-*.class
-*.dll
-*.exe
-*.o
-*.so
-
-# compression file
-*.7z
-*.dmg
-*.gz
-*.iso
-*.jar
-*.rar
-*.tar
-*.zip
-*.via
-*.tmp
-*.err
-*.log
+.factorypath
 *.iml
 
-# OS generated files
+### OS files ###
 .DS_Store
 .DS_Store?
 ._*
@@ -47,14 +22,45 @@ out/
 Icon?
 ehthumbs.db
 Thumbs.db
-.factorypath
-.mvn/
-.m2/
-mvnw.cmd
-mvnw
 
-.env
+### Databases / misc ###
+*.mdb
+*.ldb
+*.sln
+
+### Compiled artifacts (binaries) ###
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+### Archives / temp / logs ###
+*.7z
+*.dmg
+*.gz
+*.iso
+*.rar
+*.tar
+*.zip
+*.tmp
+*.err
+*.log
+jmeter.log
+
+### Java / Node tooling ###
+.m2/
 node_modules/
 
+### Env files ###
+.env
+
+### JMeter perf artifacts ###
+backend/perf/jmeter/results/
+backend/perf/jmeter/reports/
+
+### Local test data artifacts ###
 backend/ragas_data.json
 backend/results.json
+

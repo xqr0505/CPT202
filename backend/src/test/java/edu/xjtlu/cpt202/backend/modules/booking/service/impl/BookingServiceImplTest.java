@@ -591,6 +591,32 @@ public class BookingServiceImplTest {
     }
 
     @Test
+    void testGetBookingList_WhenListCacheDisabled_SkipsRedis() {
+        ReflectionTestUtils.setField(bookingService, "bookingListCacheEnabled", false);
+
+        BookingPageQueryDTO dto = new BookingPageQueryDTO();
+        dto.setPageNo(1);
+        dto.setPageSize(10);
+        dto.setTab("UPCOMING");
+        dto.setStatus(null);
+
+        List<BookingItemVO> mockList = List.of(new BookingItemVO());
+        when(bookingMapper.selectBookingList(eq(1L), eq("UPCOMING"), eq(null), any(LocalDateTime.class), eq(0L), eq(10)))
+                .thenReturn(mockList);
+        when(bookingMapper.selectBookingListCount(eq(1L), eq("UPCOMING"), eq(null), any(LocalDateTime.class)))
+                .thenReturn(1L);
+
+        PageResult<BookingItemVO> result = bookingService.getBookingList(1L, dto);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        assertEquals(1, result.getList().size());
+        verify(jsonRedisTemplate, never()).opsForValue();
+        verify(bookingMapper, times(1)).selectBookingList(eq(1L), eq("UPCOMING"), eq(null), any(LocalDateTime.class), eq(0L), eq(10));
+        verify(bookingMapper, times(1)).selectBookingListCount(eq(1L), eq("UPCOMING"), eq(null), any(LocalDateTime.class));
+    }
+
+    @Test
     void testGetBookingList_History_Empty() {
         BookingPageQueryDTO dto = new BookingPageQueryDTO();
         dto.setPageNo(2);

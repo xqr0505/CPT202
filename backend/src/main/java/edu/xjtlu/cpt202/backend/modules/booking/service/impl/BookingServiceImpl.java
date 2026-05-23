@@ -198,6 +198,8 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
     private String mailFromAddress;
     @Value("${booking.specialist-approval.timeout-minutes:1440}")
     private long specialistApprovalTimeoutMinutes;
+    @Value("${booking.cache.list-enabled:true}")
+    private boolean bookingListCacheEnabled;
 
     public BookingServiceImpl(
             BookingMapper bookingMapper,
@@ -428,18 +430,21 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
 
     @Override
     public PageResult<BookingItemVO> getBookingList(Long customerId, BookingPageQueryDTO dto) {
-        String cacheKey = RedisKeyUtils.buildCustomerBookingListKey(
-                customerId,
-                dto.getPageNo(),
-                dto.getPageSize(),
-                dto.getTab(),
-                dto.getStatus()
-        );
+        String cacheKey = null;
+        if (bookingListCacheEnabled) {
+            cacheKey = RedisKeyUtils.buildCustomerBookingListKey(
+                    customerId,
+                    dto.getPageNo(),
+                    dto.getPageSize(),
+                    dto.getTab(),
+                    dto.getStatus()
+            );
 
-        Optional<PageResult> cachedPageResult = readCache(cacheKey, PageResult.class);
-        if (cachedPageResult.isPresent()) {
-            //noinspection unchecked
-            return (PageResult<BookingItemVO>) cachedPageResult.get();
+            Optional<PageResult> cachedPageResult = readCache(cacheKey, PageResult.class);
+            if (cachedPageResult.isPresent()) {
+                //noinspection unchecked
+                return (PageResult<BookingItemVO>) cachedPageResult.get();
+            }
         }
 
         LocalDateTime currentTime = LocalDateTime.now();
@@ -454,7 +459,9 @@ public class BookingServiceImpl extends ServiceImpl<BookingMapper, Booking> impl
         );
         Long total = bookingMapper.selectBookingListCount(customerId, dto.getTab(), dto.getStatus(), currentTime);
         PageResult<BookingItemVO> pageResult = new PageResult<>(total, list);
-        writeCache(cacheKey, pageResult, RedisCacheConstant.BOOKING_LIST_CACHE_TTL_SECONDS);
+        if (bookingListCacheEnabled) {
+            writeCache(cacheKey, pageResult, RedisCacheConstant.BOOKING_LIST_CACHE_TTL_SECONDS);
+        }
         return pageResult;
     }
 
